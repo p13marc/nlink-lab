@@ -79,6 +79,25 @@ under both (#233). Its waves land one by one below.
   `schema_version`. `snapshot ls --json` is `{schema_version, lab,
   snapshots}`. `destroy` without a name no longer picks the only lab:
   name it, or `-L`/`NLINK_LAB`/`use`.
+- **Nodes and processes** (#250):
+
+  | Was | Now |
+  |---|---|
+  | `wait LAB` | `wait -L LAB` |
+  | `wait-for LAB NODE --tcp 8080` | `wait NODE --tcp 8080` (also `--listening`, `--log`, `--fd-stable` with `--pid`) |
+  | `proc-stat LAB NODE PID`, `--all` | `stats NODE --pid PID`, `stats NODE --procs` |
+  | `restart LAB NODE` | `node restart NODE` |
+  | `edit --add-node N`, `--remove-node N` | `node add N`, `node rm N` |
+  | `edit --add-link a:e--b:e=A--B`, `--remove-link EP` | `link add a:e b:e A B`, `link rm EP` |
+  | `edit --set-mtu EP=N`, `--set-qdisc EP=SPEC`, `--clear-qdisc EP` | `link set EP --mtu N`, `--qdisc SPEC`, `--clear-qdisc` |
+  | `edit --set-impair EP=K=V,…`, `--clear-impair EP` | `impair EP …`, `impair EP --clear` |
+
+  `stats --json` is `{schema_version, lab, nodes}` (containers read
+  from their cgroup, as limited namespace nodes are), and with process
+  flags `{schema_version, lab, node, processes}`; the `proc-stat`
+  schemas are `stats-procs.schema.json` now. `kill --json` lists
+  `{pid, action, signal}`; `exec --json` carries `schema_version`, `lab`
+  and `node`.
 - **The lab is `-L LAB`, not the first argument** (#243), on every
   command that acts on a running lab (`exec`, `shell`, `spawn`,
   `wait-for`, `ps`, `kill`, `logs`, `stats`, `proc-stat`, `restart`,
@@ -603,6 +622,8 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **`ps NODE`, `kill PID…`** (#250): one node's processes, several PIDs
+  at once. `node` and `link` edit a running lab with live progress.
 - **Live progress** (#249) for `deploy`, `apply`, `destroy`, `snapshot
   restore`, `test`, `scenario`, the waits of `spawn`/`wait-for` and
   `pull`: one live line on a terminal (stage, op, wait, elapsed) with a

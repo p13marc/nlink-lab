@@ -24,16 +24,16 @@ first. This guide assumes familiarity with `deploy`, `spawn`,
 >   root, so they're root.
 > - `/proc/<pid>/{stat,status,cmdline,comm}` is world-readable from
 >   the host. `/proc/<pid>/fd/` is mode 0700 owned by root — readable
->   only as root or via `nlink-lab proc-stat`.
+>   only as root or via `nlink-lab stats NODE --pid PID`.
 
 For sampling resource usage of a spawned process, **prefer
-`nlink-lab proc-stat`** (Plan 157 PR C) over hand-rolled `/proc`
+`nlink-lab stats NODE --pid PID`** (Plan 157 PR C) over hand-rolled `/proc`
 parsing. It routes through nlink-lab's root context, so the
 `/proc/<pid>/fd/` permission gymnastics go away:
 
 ```bash
-nlink-lab proc-stat -L des-3m site_a 292086 --json
-nlink-lab proc-stat -L des-3m site_a 292086 --json --watch 5s  # NDJSON, every 5s
+nlink-lab stats -L des-3m site_a --pid 292086 --json
+nlink-lab stats -L des-3m site_a --pid 292086 --json --watch 5s  # NDJSON, every 5s
 ```
 
 To sample more than one process, take them in a single call rather than
@@ -42,9 +42,9 @@ container nodes too, so a sample costs no exec into the node at all
 (#157):
 
 ```bash
-nlink-lab proc-stat -L des-3m site_a --all --json       # whole namespace
-nlink-lab proc-stat -L des-3m site_a --pid 292086 --pid 292090 --json
-nlink-lab proc-stat -L des-3m site_a --pidfile-glob '/run/*.pid' --json
+nlink-lab stats -L des-3m site_a --procs --json       # whole namespace
+nlink-lab stats -L des-3m site_a --pid 292086 --pid 292090 --json
+nlink-lab stats -L des-3m site_a --pidfile-glob '/run/*.pid' --json
 ```
 
 A PID you name is the node's: the host PID on a namespace node, the
@@ -203,7 +203,7 @@ When a scenario fails:
 3. **`nlink-lab ps --json -L $LAB`** — every spawned PID with
    `alive: bool` and log paths. Pass `--alive-only` for liveness
    polling.
-4. **`nlink-lab proc-stat -L $LAB <node> <pid>`** — resource snapshot
+4. **`nlink-lab stats -L $LAB <node> --pid <pid>`** — resource snapshot
    of the suspected-stuck process. `--watch 1` while you reproduce
    for an NDJSON timeline.
 5. **`nlink-lab logs -L $LAB --pid <pid> [--stderr] [--follow]`** —
@@ -344,7 +344,7 @@ For honesty about scope:
   the engine itself.
 - [`docs/json-schemas/`](json-schemas/) — JSON Schemas for
   high-traffic shapes (`deploy`, `status`, `spawn`, `ps`,
-  `proc-stat`, `impair --show`).
+  `stats`, `impair --show`).
 - [`docs/cookbook/`](cookbook/) — copy-paste recipes per use case.
 - [`CHANGELOG.md`](../CHANGELOG.md) — per-release notes.
 

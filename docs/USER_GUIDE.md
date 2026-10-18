@@ -318,8 +318,8 @@ node site-b-server {
 sudo nlink-lab spawn -L wan site-b-server -- \
     python3 -m http.server 80 --bind 0.0.0.0
 
-# A wait-for: block until the port accepts connections
-sudo nlink-lab wait-for -L wan site-b-server --tcp 0.0.0.0:80 --timeout 5s
+# Block until the port accepts connections
+sudo nlink-lab wait -L wan site-b-server --tcp 0.0.0.0:80 --timeout 5s
 
 # From site-a-client: HTTP works (port 80 accept)
 sudo nlink-lab exec -L wan site-a-client -- curl -fsS site-b-server/
@@ -980,7 +980,7 @@ has no queue and drops everything; optional `peakrate`, `mtu`),
 `fq_codel` (`target`, `interval`, `limit`, `flows`, `quantum`, `ecn`),
 `sfq` (`perturb`, `limit`, `quantum`), `prio` (`bands`). One root qdisc
 per interface — a `qdisc` endpoint cannot also carry `impair` or
-`rate`. At runtime: `nlink-lab edit -L mylab --set-qdisc hub:eth0=sfq,perturb=10s`
+`rate`. At runtime: `nlink-lab link set -L mylab hub:eth0 --qdisc sfq,perturb=10s`
 and `nlink-lab impair -L mylab --show` to see what tc installed.
 
 ### 20. Container Management
@@ -989,7 +989,7 @@ and `nlink-lab impair -L mylab --show` to see what tc installed.
 nlink-lab status mylab            # list container nodes
 nlink-lab logs -L mylab web --follow     # stream logs
 nlink-lab stats -L mylab                 # live CPU/memory
-sudo nlink-lab restart -L mylab web      # restart one container
+sudo nlink-lab node restart -L mylab web      # restart one container
 nlink-lab pull topology.nll              # pre-pull all images
 ```
 
@@ -1100,7 +1100,8 @@ lab: `$NLINK_LAB`, then `nlink-lab use`, then the only lab running.
 | `logs` | Show container logs (`--follow`, `--tail`) |
 | `pull` | Pre-pull all container images from a topology |
 | `stats` | Show live container CPU/memory usage |
-| `restart` | Restart a single container node |
+| `node` | Add, remove or restart a node (`node restart` for a container) |
+| `link` | Add, remove or change a link (MTU, qdisc) |
 | `completions` | Generate shell completions |
 
 ### deploy
@@ -1255,16 +1256,16 @@ Start services after deployment and wait for readiness:
 sudo nlink-lab spawn -L mylab server -- /usr/bin/my-service --port 8080
 
 # Wait for TCP port to accept connections
-sudo nlink-lab wait-for -L mylab server --tcp 127.0.0.1:8080 --timeout 30s
+sudo nlink-lab wait -L mylab server --tcp 127.0.0.1:8080 --timeout 30s
 # Port-only shorthand resolves to 127.0.0.1 inside the namespace
 # Use the full IP if the service binds to a specific interface address
-sudo nlink-lab wait-for -L mylab server --tcp 8080 --timeout 30s
+sudo nlink-lab wait -L mylab server --tcp 8080 --timeout 30s
 
 # Wait for a command to succeed
-sudo nlink-lab wait-for -L mylab server --exec "curl -sf http://localhost:8080/health"
+sudo nlink-lab wait -L mylab server --exec "curl -sf http://localhost:8080/health"
 
 # Wait for a file to exist
-sudo nlink-lab wait-for -L mylab server --file /var/run/service.pid
+sudo nlink-lab wait -L mylab server --file /var/run/service.pid
 ```
 
 All background processes (both `run background` in NLL and `nlink-lab spawn`)

@@ -7,8 +7,9 @@ pub struct Args {
     #[command(flatten)]
     pub lab: crate::ctx::LabArg,
 
-    /// Process ID to kill.
-    pub pid: u32,
+    /// The tracked processes to stop (PIDs `spawn` printed).
+    #[arg(required = true)]
+    pub pids: Vec<u32>,
 
     /// Send this signal instead of the TERM-then-KILL sequence: TERM, KILL,
     /// STOP, CONT, HUP, INT, USR1, USR2 (with or without the SIG prefix).
@@ -19,36 +20,44 @@ pub struct Args {
 }
 
 pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
-    let Args { lab, pid, signal } = args;
+    let Args { lab, pids, signal } = args;
     let lab = lab.resolve()?;
     require_root()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
-    match signal {
-        None => {
-            let killed = running.kill_process(pid)?;
-            let action = if killed { "killed" } else { "already-exited" };
-            if ctx.json {
-                println!(
-                    "{}",
-                    serde_json::json!({ "lab": lab, "pid": pid, "action": action })
-                );
-            } else if killed {
-                println!("Killed process {pid}");
-            } else {
-                println!("Process {pid} had already exited");
+    let mut results = Vec::new();
+    for pid in pids {
+        let action = match signal {
+            None => {
+                if running.kill_process(pid)? {
+                    "killed"
+                } else {
+                    "already-exited"
+                }
+            }
+            Some(signal) => {
+                running.signal_process(pid, signal)?;
+                "signalled"
+            }
+        };
+        if !ctx.json && !ctx.quiet {
+            match (action, signal) {
+                ("killed", _) => println!("Killed process {pid}"),
+                ("already-exited", _) => println!("Process {pid} had already exited"),
+                (_, Some(s)) => println!("Sent SIG{} to process {pid}", s.name()),
+                _ => {}
             }
         }
-        Some(signal) => {
-            running.signal_process(pid, signal)?;
-            if ctx.json {
-                println!(
-                    "{}",
-                    serde_json::json!({ "lab": lab, "pid": pid, "action": "signalled", "signal": signal.name() })
-                );
-            } else {
-                println!("Sent SIG{} to process {pid}", signal.name());
-            }
-        }
+        results.push(serde_json::json!({
+            "pid": pid,
+            "action": action,
+            "signal": signal.map(|s| s.name()),
+        }));
+    }
+    if ctx.json {
+        println!(
+            "{}",
+            serde_json::json!({ "schema_version": 1, "lab": lab, "processes": results })
+        );
     }
     Ok(())
 }

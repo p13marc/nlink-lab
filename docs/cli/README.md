@@ -16,7 +16,6 @@ The day-to-day commands.
 | [`destroy`](destroy.md) | Tear a topology down |
 | [`use`](use.md) | Select the current lab that lab-scoped commands act on |
 | [`validate`](validate.md) | Parse + validate without deploying |
-| [`edit`](edit.md) | Edit a running lab in place (nodes, links, impairments) |
 | [`snapshot`](snapshot.md) | Checkpoints of a running lab: `save`, `ls`, `rm`, `restore` |
 | [`apply`](apply.md) | Reconcile a running lab to an edited NLL (default: its recorded source) |
 | [`ls`](ls.md) | List the labs on this host (`--scan`: orphans and stale labs) |
@@ -32,12 +31,13 @@ Run things inside a lab.
 | [`exec`](exec.md) | Run a one-shot command in a node |
 | [`spawn`](spawn.md) | Run a long-lived background process |
 | [`shell`](shell.md) | Open an interactive shell in a node |
-| [`wait-for`](wait-for.md) | Block until a TCP port / file / exec passes |
+| [`wait`](wait.md) | Block until a lab is deployed, or a TCP port / file / exec / log line in a node |
 | [`logs`](logs.md) | Tail logs of spawned processes or container nodes |
 | [`ps`](ps.md) | List spawned processes |
 | [`kill`](kill.md) | Kill a spawned process |
 | [`stats`](stats.md) | Live CPU/memory for container nodes |
-| [`restart`](restart.md) | Restart a container node |
+| [`node`](node.md) | Add, remove or restart a node |
+| [`link`](link.md) | Add, remove or change a link (MTU, qdisc) |
 
 ## Inspection
 
@@ -82,7 +82,6 @@ Things you'd reach for in a chaos test.
 | [`watch`](watch.md) | Print RTNETLINK + nftables drift events for a lab |
 | [`scenario`](scenario.md) | Run a `scenario` block from a deployed lab's topology |
 | [`benchmark`](benchmark.md) | Run a `benchmark` block from a deployed lab's topology |
-| [`proc-stat`](proc-stat.md) | Resource snapshot of a spawned process |
 | [`wait`](wait.md) | Block until a lab's state file exists (deploy finished) |
 
 ## Global flags
@@ -116,7 +115,7 @@ and `nlink` (what nlink says about a failed netlink call).
 ## Progress
 
 Long operations — `deploy`, `apply`, `destroy`, `snapshot restore`,
-`test`, `scenario`, the waits of `spawn` and `wait-for`, `pull` — show
+`test`, `scenario`, the waits of `spawn` and `wait`, `pull` — show
 what they are doing, on stderr:
 
 - on a terminal, one live line (the stage, the op being done, what is
@@ -159,6 +158,6 @@ same value in `exit_code`):
 | 1 | Error (lab not found, kernel/netlink failure, lock held by another process) |
 | 2 | A negative result: validation, assertion or drift failure — `validate`/`deploy` with topology errors, `deploy --strict`, `test`, `scenario`, `benchmark`, `verify` |
 | 64 | Usage error: a command line that does not parse, or a removed command (which says what replaced it) |
-| 124 | Timeout (`exec --timeout`, `wait-for`) |
+| 124 | Timeout (`exec --timeout`, `wait`) |
 | 130 | Interrupted or cancelled |
 | child's code | `exec` and `shell` pass the command's exit status through |

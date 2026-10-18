@@ -96,7 +96,7 @@ nlink-lab logs -L lab --pid 12345 --follow
 
 - [`exec`](exec.md) — one-shot commands
 - [`ps`](ps.md), [`kill`](kill.md), [`logs`](logs.md)
-- [`wait-for`](wait-for.md) — block on a condition without spawning
+- [`wait`](wait.md) — block on a condition without spawning
 
 ## Reference
 

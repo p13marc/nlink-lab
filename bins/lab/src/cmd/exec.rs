@@ -71,6 +71,9 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             let output = running.exec_with_opts(&node, &cmd[0], &args, opts)?;
             let duration_ms = start.elapsed().as_millis() as u64;
             Ok(serde_json::json!({
+                "schema_version": 1,
+                "lab": lab,
+                "node": node,
                 "exit_code": output.exit_code,
                 "stdout": output.stdout,
                 "stderr": output.stderr,
@@ -95,6 +98,9 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 println!(
                     "{}",
                     serde_json::json!({
+                        "schema_version": 1,
+                        "lab": lab,
+                        "node": node,
                         "error": format!("timed out after {d:?}"),
                         "exit_code": 124,
                         "stdout": "",
@@ -112,6 +118,9 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 println!(
                     "{}",
                     serde_json::json!({
+                        "schema_version": 1,
+                        "lab": lab,
+                        "node": node,
                         "error": e.to_string(),
                         "exit_code": null,
                         "stdout": "",

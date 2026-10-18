@@ -41,7 +41,7 @@ mod tests {
             ))),
             EXIT_TIMEOUT
         );
-        // A wait that gives up (`wait`, `wait-for`) is a timeout too.
+        // A wait that gives up (`wait`) is a timeout too.
         assert_eq!(
             exit_code_for(&nlink_lab::Error::TimedOut("timeout waiting".into())),
             EXIT_TIMEOUT

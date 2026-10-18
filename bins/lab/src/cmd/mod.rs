@@ -25,16 +25,16 @@ pub mod impair;
 pub mod init;
 pub mod ip;
 pub mod kill;
+pub mod link;
 pub mod lint;
 pub mod logs;
 pub mod ls;
 pub mod lsp;
 pub mod metrics;
-pub mod proc_stat;
+pub mod node;
 pub mod ps;
 pub mod pull;
 pub mod render;
-pub mod restart;
 pub mod restore;
 pub mod scenario;
 pub mod shell;
@@ -48,7 +48,6 @@ pub mod use_lab;
 pub mod validate;
 pub mod verify;
 pub mod wait;
-pub mod wait_for;
 pub mod watch;
 
 use crate::cli::Commands;
@@ -70,7 +69,6 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
         Commands::Lint(args) => lint::run(ctx, args),
         Commands::Lsp(args) => lsp::run(ctx, args).await,
         Commands::Fmt(args) => fmt::run(ctx, args),
-        Commands::Edit(args) => edit::run(ctx, args).await,
         Commands::Events(args) => events::run(ctx, args).await,
         Commands::Doctor(args) => doctor::run(ctx, args).await,
         Commands::Test(args) => test::run(ctx, args).await,
@@ -84,20 +82,19 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
         Commands::Shell(args) => shell::run(ctx, args),
         Commands::Ps(args) => ps::run(ctx, args),
         Commands::Kill(args) => kill::run(ctx, args),
-        Commands::ProcStat(args) => proc_stat::run(ctx, args).await,
         Commands::Diagnose(args) => diagnose::run(ctx, args).await,
         Commands::Capture(args) => capture::run(ctx, args),
         Commands::Wait(args) => wait::run(ctx, args).await,
         Commands::Watch(args) => watch::run(ctx, args).await,
-        Commands::WaitFor(args) => wait_for::run(ctx, args).await,
         Commands::Ip(args) => ip::run(ctx, args),
         Commands::Diff(args) => diff::run(ctx, args),
         Commands::Export(args) => export::run(ctx, args),
         Commands::Archive(args) => archive::run(ctx, args),
         Commands::Logs(args) => logs::run(ctx, args),
         Commands::Pull(args) => pull::run(ctx, args).await,
-        Commands::Stats(args) => stats::run(ctx, args),
-        Commands::Restart(args) => restart::run(ctx, args).await,
+        Commands::Stats(args) => stats::run(ctx, args).await,
+        Commands::Node(args) => node::run(ctx, args).await,
+        Commands::Link(args) => link::run(ctx, args).await,
         Commands::Snapshot(args) => snapshot::run(ctx, args).await,
         Commands::Completions { .. } => {
             // Already handled before async runtime

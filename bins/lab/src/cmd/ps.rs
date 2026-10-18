@@ -8,6 +8,10 @@ pub struct Args {
     #[command(flatten)]
     pub lab: crate::ctx::LabArg,
 
+    /// Only this node's processes.
+    #[arg(add = crate::ctx::node_completer())]
+    pub node: Option<String>,
+
     /// Hide processes whose tracked PID has exited (alive == false).
     /// Useful for "is X still running?" polling loops where exited
     /// post-mortem entries would otherwise be misread as alive.
@@ -52,13 +56,21 @@ impl Report for PsReport {
 }
 
 pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
-    let Args { lab, alive_only } = args;
+    let Args {
+        lab,
+        node,
+        alive_only,
+    } = args;
     let lab = lab.resolve()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
-    let processes = if alive_only {
+    if let Some(node) = &node {
+        crate::cmd::common::require_node(&running, node)?;
+    }
+    let mut processes = if alive_only {
         running.process_status_alive_only()
     } else {
         running.process_status()
     };
+    processes.retain(|p| node.as_ref().is_none_or(|n| *n == p.node));
     emit(ctx, &PsReport { lab, processes })
 }

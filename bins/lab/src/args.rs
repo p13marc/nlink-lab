@@ -70,45 +70,9 @@ pub fn byte_size(s: &str) -> Result<u64, String> {
         .ok_or_else(|| format!("byte size {s:?} is too large"))
 }
 
-/// `NODE:IFACE=VALUE`, the value read by `value`.
-fn endpoint_and<T>(
-    s: &str,
-    value: impl Fn(&str) -> Result<T, String>,
-) -> Result<(String, T), String> {
-    let (ep, v) = s
-        .split_once('=')
-        .ok_or_else(|| format!("`{s}` is not NODE:IFACE=VALUE"))?;
-    Ok((endpoint(ep.trim())?, value(v.trim())?))
-}
-
-/// `NODE:IFACE=SPEC`, an impairment (`--set-impair`).
-pub fn endpoint_impairment(s: &str) -> Result<(String, nlink_lab::Impairment), String> {
-    endpoint_and(s, impairment)
-}
-
-/// `NODE:IFACE=KIND[,K=V…]`, a root qdisc (`--set-qdisc`).
-pub fn endpoint_qdisc(s: &str) -> Result<(String, nlink_lab::types::QdiscKind), String> {
-    endpoint_and(s, qdisc)
-}
-
-/// `NODE:IFACE=MTU` (`--set-mtu`), 68 to 65535.
-pub fn endpoint_mtu(s: &str) -> Result<(String, u32), String> {
-    endpoint_and(s, |v| {
-        v.parse::<u32>()
-            .ok()
-            .filter(|m| (68..=65535).contains(m))
-            .ok_or_else(|| format!("`{v}` is not an MTU (68 to 65535)"))
-    })
-}
-
 /// A regular expression (`--wait-log`).
 pub fn regex(s: &str) -> Result<regex::Regex, String> {
     nlink_lab::wait::log_pattern(s).map_err(|e| e.to_string())
-}
-
-/// An impairment: `delay 50ms loss 1%` or `delay=50ms,loss=1%`.
-pub fn impairment(s: &str) -> Result<nlink_lab::Impairment, String> {
-    nlink_lab::Impairment::parse_spec(s)
 }
 
 /// A root qdisc: `tbf,rate=10mbit,burst=32kb,limit=100kb`, `fq_codel`, ….
@@ -144,16 +108,6 @@ mod tests {
         assert_eq!(tcp_target("8080"), Ok(("127.0.0.1".into(), 8080)));
         assert_eq!(byte_size("64K"), Ok(64_000));
         assert!(byte_size("99999999999G").is_err());
-        assert_eq!(
-            impairment("delay=5ms,loss=1%").unwrap().delay.as_deref(),
-            Some("5ms")
-        );
         assert!(qdisc("tbf,rate=1mbit").is_err());
-        assert_eq!(endpoint_mtu("a:eth0=1280"), Ok(("a:eth0".into(), 1280)));
-        assert!(endpoint_mtu("a:eth0=40").is_err() && endpoint_mtu("a=1280").is_err());
-        let (ep, imp) = endpoint_impairment("c:eth0=delay=20ms,loss=1%").unwrap();
-        assert_eq!((ep.as_str(), imp.loss.as_deref()), ("c:eth0", Some("1%")));
-        assert!(endpoint_impairment("c:eth0=bogus=1").is_err());
-        assert!(endpoint_qdisc("a:eth0=sfq,perturb=10s").is_ok());
     }
 }

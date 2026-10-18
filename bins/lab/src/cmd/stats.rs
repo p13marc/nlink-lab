@@ -1,116 +1,237 @@
-//! `nlink-lab stats`.
+//! `nlink-lab stats`: what nodes use (cgroup v2: CPU time, memory, PIDs),
+//! or with `--pid`/`--procs`/`--pidfile-glob` what a node's processes
+//! use (`/proc`: RSS, PSS, fds, CPU ticks).
 
-use crate::ctx::Ctx;
+use std::time::Duration;
+
+use crate::ctx::{Ctx, require_root};
+use crate::output::{Report, Table, emit, table::terminal_width};
 
 #[derive(clap::Args)]
 pub struct Args {
     #[command(flatten)]
     pub lab: crate::ctx::LabArg,
+
+    /// One node (default: every node with a cgroup: containers and
+    /// cpu/memory-limited namespace nodes).
+    #[arg(add = crate::ctx::node_completer())]
+    pub node: Option<String>,
+
+    /// Sample this process of NODE, by the PID the node sees (the host's
+    /// on a namespace node, the container's own on a container node;
+    /// repeatable).
+    #[arg(long = "pid", value_name = "PID", requires = "node")]
+    pub pids: Vec<u32>,
+
+    /// Sample every process in NODE's network namespace.
+    #[arg(long, requires = "node", conflicts_with = "pids")]
+    pub procs: bool,
+
+    /// Sample the processes NODE's pidfiles name: every file matching
+    /// this absolute path, whose file name may hold `*` and `?`
+    /// (`'/run/*.pid'`). Each record's `name` is the pidfile's stem; a
+    /// stale pidfile is skipped.
+    #[arg(
+        long,
+        value_name = "PATTERN",
+        requires = "node",
+        conflicts_with_all = ["pids", "procs"]
+    )]
+    pub pidfile_glob: Option<String>,
+
+    /// Sample again at this interval until Ctrl-C (`--format ndjson`:
+    /// one document per sample).
+    #[arg(long, value_name = "DURATION", value_parser = crate::args::interval)]
+    pub watch: Option<Duration>,
 }
 
-/// One row of `stats --json`: a node's cgroup v2 usage, for namespace and
-/// container nodes alike. Container rows were the runtime's own objects
-/// (no `node`, sizes as strings) next to these (#223).
+/// One node's cgroup usage.
 #[derive(serde::Serialize, schemars::JsonSchema)]
-pub struct NodeStats<'a> {
-    pub node: &'a str,
+pub struct NodeStats {
+    pub node: String,
+    /// `namespace` or `container`.
     pub kind: &'static str,
     #[serde(flatten)]
     pub usage: nlink_lab::cgroup::Usage,
 }
 
-pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
-    let Args { lab } = args;
-    let lab = lab.resolve()?;
-    let running = nlink_lab::RunningLab::load(&lab)?;
+/// `stats`'s result without process flags.
+#[derive(serde::Serialize, schemars::JsonSchema)]
+pub struct StatsReport {
+    pub lab: String,
+    pub nodes: Vec<NodeStats>,
+}
 
+impl Report for StatsReport {
+    fn text(&self) -> String {
+        if self.nodes.is_empty() {
+            return format!(
+                "No container nodes or cpu/memory-limited namespace nodes in lab '{}'.\n",
+                self.lab
+            );
+        }
+        let mut t = Table::new(&["NODE", "KIND", "CPU(s)", "MEM", "MEM MAX", "PIDS"])
+            .right(2)
+            .right(3)
+            .right(4)
+            .right(5);
+        for n in &self.nodes {
+            t.row([
+                n.node.clone(),
+                n.kind.to_string(),
+                format!("{:.2}", n.usage.cpu_usec as f64 / 1_000_000.0),
+                mib(n.usage.memory_bytes),
+                n.usage.memory_max.map(mib).unwrap_or_else(|| "max".into()),
+                n.usage.pids.to_string(),
+            ]);
+        }
+        t.render(terminal_width())
+    }
+}
+
+fn mib(bytes: u64) -> String {
+    format!("{:.1}M", bytes as f64 / 1_048_576.0)
+}
+
+/// `stats NODE --pid/--procs/--pidfile-glob`'s result.
+#[derive(serde::Serialize, schemars::JsonSchema)]
+pub struct ProcsReport {
+    pub lab: String,
+    pub node: String,
+    pub processes: Vec<nlink_lab::proc_stat::ProcStat>,
+}
+
+impl Report for ProcsReport {
+    fn text(&self) -> String {
+        if self.processes.is_empty() {
+            return format!("No matching process in node '{}'.\n", self.node);
+        }
+        let opt = |v: Option<u64>| v.map(|n| n.to_string()).unwrap_or_else(|| "?".into());
+        let mut t = Table::new(&[
+            "PID", "STATE", "RSS kB", "PSS kB", "FDS", "USER", "SYS", "COMMAND",
+        ])
+        .right(0)
+        .right(2)
+        .right(3)
+        .right(4)
+        .right(5)
+        .right(6);
+        for p in &self.processes {
+            // the node's own PID; the host's too where it differs (a
+            // container node), and the pidfile's name where known
+            let mut command = p.command.clone();
+            if p.host_pid != p.ns_pid {
+                command = format!("{command} (host pid {})", p.host_pid);
+            }
+            if let Some(name) = &p.name {
+                command = format!("[{name}] {command}");
+            }
+            t.row([
+                p.ns_pid.to_string(),
+                p.state.clone(),
+                opt(p.rss_kb),
+                opt(p.pss_kb),
+                p.fd_count.to_string(),
+                p.cpu_user_ticks.to_string(),
+                p.cpu_kernel_ticks.to_string(),
+                command,
+            ]);
+        }
+        t.render(terminal_width())
+    }
+
+    fn quiet(&self) -> Option<String> {
+        Some(
+            self.processes
+                .iter()
+                .map(|p| format!("{}\n", p.ns_pid))
+                .collect(),
+        )
+    }
+}
+
+fn node_stats(running: &nlink_lab::RunningLab, only: Option<&str>) -> Vec<NodeStats> {
+    let lab = running.name();
+    let wanted = |name: &str| only.is_none_or(|n| n == name);
     // Namespace nodes with cpu/memory limits: cgroup usage (#66).
-    let ns_rows: Vec<NodeStats> = running
+    let mut rows: Vec<NodeStats> = running
         .topology()
         .nodes
         .iter()
-        .filter(|(_, n)| n.image.is_none() && (n.cpu.is_some() || n.memory.is_some()))
+        .filter(|(name, n)| {
+            wanted(name) && n.image.is_none() && (n.cpu.is_some() || n.memory.is_some())
+        })
         .filter_map(|(name, _)| {
-            nlink_lab::cgroup::usage(&lab, name).map(|usage| NodeStats {
-                node: name,
+            nlink_lab::cgroup::usage(lab, name).map(|usage| NodeStats {
+                node: name.clone(),
                 kind: "namespace",
                 usage,
             })
         })
         .collect();
+    for (name, c) in running.containers() {
+        if !wanted(name) {
+            continue;
+        }
+        match nlink_lab::cgroup::process_dir(c.pid)
+            .and_then(|dir| nlink_lab::cgroup::usage_of(&dir))
+        {
+            Some(usage) => rows.push(NodeStats {
+                node: name.clone(),
+                kind: "container",
+                usage,
+            }),
+            None => tracing::warn!("cannot read the cgroup of container node '{name}'"),
+        }
+    }
+    rows.sort_by(|a, b| a.node.cmp(&b.node));
+    rows
+}
 
-    let containers = running.containers();
-    if ctx.json {
-        let mut rows: Vec<serde_json::Value> = ns_rows
-            .iter()
-            .map(serde_json::to_value)
-            .collect::<std::result::Result<_, _>>()?;
-        for (name, c) in containers {
-            match nlink_lab::cgroup::process_dir(c.pid)
-                .and_then(|dir| nlink_lab::cgroup::usage_of(&dir))
-            {
-                Some(usage) => rows.push(serde_json::to_value(NodeStats {
-                    node: name,
-                    kind: "container",
-                    usage,
-                })?),
-                None => eprintln!("warning: cannot read the cgroup of container node '{name}'"),
-            }
+pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
+    let lab = args.lab.resolve()?;
+    let running = nlink_lab::RunningLab::load(&lab)?;
+    let procs = args.procs || !args.pids.is_empty() || args.pidfile_glob.is_some();
+    if let Some(node) = &args.node {
+        crate::cmd::common::require_node(&running, node)?;
+    }
+    if procs {
+        // /proc/<pid>/fd is mode 0700: root reads every process's
+        require_root()?;
+    }
+    loop {
+        if procs {
+            let node = args.node.clone().unwrap_or_default();
+            // `--procs` and `--pidfile-glob` are re-resolved every sample:
+            // a lab churns, and the point is to follow the node, not a list
+            // of PIDs frozen at the first one.
+            let processes = if args.procs {
+                running.proc_stat_all(&node)?
+            } else if let Some(pattern) = &args.pidfile_glob {
+                running.proc_stat_pidfiles(&node, pattern)?
+            } else {
+                running.proc_stat_many(&node, &args.pids)?
+            };
+            emit(
+                ctx,
+                &ProcsReport {
+                    lab: lab.clone(),
+                    node,
+                    processes,
+                },
+            )?;
+        } else {
+            emit(
+                ctx,
+                &StatsReport {
+                    lab: lab.clone(),
+                    nodes: node_stats(&running, args.node.as_deref()),
+                },
+            )?;
         }
-        println!("{}", serde_json::to_string_pretty(&rows)?);
-        return Ok(());
-    }
-    let mut container_table = String::new();
-    if !containers.is_empty() {
-        let runtime = running.runtime();
-        let rt = runtime.binary();
-        let ids: Vec<&str> = containers.values().map(|c| c.id.as_str()).collect();
-        let format = "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}";
-        let output = std::process::Command::new(rt)
-            .args(["stats", "--no-stream", "--format", format])
-            .args(&ids)
-            .output()
-            .map_err(|e| nlink_lab::Error::deploy_failed(format!("{rt} stats failed: {e}")))?;
-        if !output.status.success() {
-            return Err(nlink_lab::Error::deploy_failed(format!(
-                "{rt} stats exited with {}: {}",
-                output.status.code().unwrap_or(-1),
-                String::from_utf8_lossy(&output.stderr).trim()
-            )));
-        }
-        container_table = String::from_utf8_lossy(&output.stdout).into_owned();
-    }
-
-    if ns_rows.is_empty() && containers.is_empty() {
-        println!("No container nodes or cpu/memory-limited namespace nodes in lab '{lab}'.");
-        return Ok(());
-    }
-    if !ns_rows.is_empty() {
-        println!(
-            "{:<18} {:>10} {:>12} {:>12} {:>6}",
-            "NODE", "CPU(s)", "MEM", "MEM MAX", "PIDS"
-        );
-        for r in &ns_rows {
-            let mem_max = r
-                .usage
-                .memory_max
-                .map(|m| format!("{:.0}M", m as f64 / 1_048_576.0))
-                .unwrap_or_else(|| "max".into());
-            println!(
-                "{:<18} {:>10.2} {:>11.1}M {:>12} {:>6}",
-                r.node,
-                r.usage.cpu_usec as f64 / 1_000_000.0,
-                r.usage.memory_bytes as f64 / 1_048_576.0,
-                mem_max,
-                r.usage.pids
-            );
+        match args.watch {
+            Some(d) => tokio::time::sleep(d).await,
+            None => return Ok(()),
         }
     }
-    if !container_table.is_empty() {
-        if !ns_rows.is_empty() {
-            println!();
-        }
-        print!("{container_table}");
-    }
-    Ok(())
 }

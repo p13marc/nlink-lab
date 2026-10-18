@@ -113,7 +113,7 @@ sudo nlink-lab exec -L simple client -- curl http://$SERVER_IP:8080/
 
 - [`spawn`](spawn.md) — long-lived background processes
 - [`shell`](shell.md) — interactive shell in a node
-- [`wait-for`](wait-for.md) — block until a condition holds (TCP / file / exec)
+- [`wait`](wait.md) — block until a condition holds (TCP / file / exec)
 - [`ip`](ip.md) — resolve node addresses for use in `exec`
 
 ## Reference

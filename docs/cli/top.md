@@ -38,7 +38,7 @@ Flow rates need two samples (they are a delta), so the Flows pane says
 | `q`, `Esc`, `Ctrl-C` | quit |
 
 The `i` prompt takes `KEY VALUE` pairs (`KEY=VALUE` also works) using the
-same property names as [`edit --set-impair`](edit.md) and NLL: `delay`,
+same property names as [`impair`](impair.md) and NLL: `delay`,
 `jitter`, `loss`, `rate`, `corrupt`, `reorder`, `duplicate`,
 `delay-correlation`, `loss-correlation`, `limit`.
 

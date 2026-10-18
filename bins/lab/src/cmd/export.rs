@@ -1,5 +1,5 @@
 //! `nlink-lab export`: a running lab's topology, as it is now (after
-//! `apply` and `edit`), as NLL, TOML or JSON.
+//! `apply`, `node` and `link`), as NLL, TOML or JSON.
 
 use std::path::PathBuf;
 

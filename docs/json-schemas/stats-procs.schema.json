@@ -1,10 +1,33 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Array_of_ProcStat",
-  "type": "array",
-  "items": {
-    "$ref": "#/$defs/ProcStat"
+  "title": "Document",
+  "description": "What `--json` prints for a [`Report`]: its fields after a\n`schema_version`.",
+  "type": "object",
+  "properties": {
+    "lab": {
+      "type": "string"
+    },
+    "node": {
+      "type": "string"
+    },
+    "processes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ProcStat"
+      }
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
   },
+  "required": [
+    "schema_version",
+    "lab",
+    "node",
+    "processes"
+  ],
   "$defs": {
     "ProcStat": {
       "description": "Resource snapshot for a single process. Built from\n`/proc/<pid>/stat` (fields), `/proc/<pid>/status` (memory + UID),\nand a count of entries in `/proc/<pid>/fd/`.",

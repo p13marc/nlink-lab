@@ -297,11 +297,11 @@ If you need to read `fd/` or other UID-restricted paths from a
 non-root host shell, route the read through `nlink-lab` itself:
 
 ```bash
-sudo nlink-lab proc-stat -L <lab> <node> <pid> --json
+sudo nlink-lab stats -L <lab> <node> --pid <pid> --json
 sudo nlink-lab exec -L <lab> <node> -- ls /proc/<pid>/fd
 ```
 
-`proc-stat` (Plan 157 PR C) exists specifically to abstract over
+`stats --pid` (Plan 157 PR C) exists specifically to abstract over
 the permission gymnastics; prefer it over hand-rolled `/proc`
 parsing.
 
@@ -312,7 +312,7 @@ Equal on a **namespace node**: nlink-lab never uses `CLONE_NEWPID`.
 `nlink-lab spawn --json` returns `{ "pid": N, "host_pid": N, ... }`
 where `pid` and `host_pid` are aliases for the same value.
 
-A **container node** has its own PID namespace. `proc-stat` takes a PID
+A **container node** has its own PID namespace. `stats --pid` takes a PID
 as the node sees it, the container's, and reports both in every record:
 `host_pid`, and `ns_pid`, the last `NSpid:` field of the process's
 status (#157). It translates by walking the node's processes on the

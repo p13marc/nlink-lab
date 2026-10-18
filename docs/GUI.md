@@ -91,10 +91,11 @@ the full key map.
 
 `nlink-lab-gui` draws a topology from its file and keeps up with it —
 edit it in the app, or save it in your editor, and the drawing follows —
-and follows the labs running on the host through the daemon. Install it from
-[INSTALL.md](INSTALL.md#option-c--the-desktop-app-flatpak) — it ships
-as a flatpak bundle, or builds with
-`cargo build --release -p nlink-lab-gui`.
+and follows the labs running on the host through the daemon, to change
+them too. Install it from
+[INSTALL.md](INSTALL.md#option-c--the-desktop-app) — each release has
+it as a plain binary with an `install.sh` and as a flatpak bundle — or
+build it with `cargo build --release -p nlink-lab-gui`.
 
 ```bash
 nlink-lab-gui                                  # Home: the running labs, a file, a recent one, a template
@@ -293,10 +294,16 @@ put nodes, per file and per lab, under
 
 The bundle is confined:
 
-- Files picked in **Open…** and **Export** come through the desktop's
-  file dialog, from anywhere. A `.nll` given on the command line must
-  be under `~/Documents` (`--filesystem=xdg-documents:ro`), as must the
-  files it imports.
+- Files picked in **Open…**, **Save as…**, **Export** and **Capture…**
+  come through the desktop's file dialog, from anywhere, and an opened
+  file can be saved back. A `.nll` given on the command line must be
+  under `~/Documents` (`--filesystem=xdg-documents`, read-write so the
+  editor can save it), as must the files it imports — so must a file
+  opened through the dialog that imports others.
+- A shell on a node opens in the app (the embedded terminal); the
+  bundle cannot start the desktop's terminal emulator, and has no
+  `ssh` for `--daemon ssh://HOST` (use a Zenoh endpoint, or the plain
+  binary).
 - It has the daemon's sockets (`/run/nlink-lab/api` and
   `/run/nlink-lab/zenoh`), network access, Wayland/X11 and `/dev/dri`
   for GPU acceleration, and nothing else.
@@ -305,11 +312,9 @@ The bundle is confined:
 
 ### Why "experimental"
 
-- Its looks are still settling.
-- It is the only artifact with no plain-binary release; you get a
-  flatpak bundle or you build it.
-- Its looks and keys are free to change between releases without a
-  migration note, unlike NLL and the Rust API.
+- Its looks and keys are still settling, and free to change between
+  releases without a migration note, unlike NLL, the CLI, the daemon's
+  API and the Rust API.
 
 If the app is load-bearing for you, say so on the issue tracker —
 that is the signal that would move it onto the supported surface.

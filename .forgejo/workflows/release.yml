@@ -78,15 +78,28 @@ jobs:
             -o "dist/release/${name}-${RELEASE_TAG}.tar.gz" "${RELEASE_TAG}"
           # the product itself: the CLI and the daemon (with its systemd
           # units) as a plain x86_64 gnu binary tarball, with generated
-          # completions
-          cargo build --release -p nlink-lab-cli -p nlink-labd
+          # completions and an install.sh
+          cargo build --release -p nlink-lab-cli -p nlink-labd -p nlink-lab-gui
           stage="dist/stage/nlink-lab-${RELEASE_TAG}-x86_64-linux-gnu"
           mkdir -p "$stage/completions"
           cp target/release/nlink-lab target/release/nlink-labd "$stage/"
           cp -r dist/systemd dist/sysusers.d dist/tmpfiles.d "$stage/"
+          cp dist/install.sh "$stage/install.sh"
           for sh in bash zsh fish; do target/release/nlink-lab completions "$sh" > "$stage/completions/nlink-lab.$sh"; done
           cp README.md LICENSE-MIT LICENSE-APACHE CHANGELOG.md "$stage/"
           tar -C dist/stage -czf "dist/release/nlink-lab-${RELEASE_TAG}-x86_64-linux-gnu.tar.gz" "$(basename "$stage")"
+          # the desktop app, plain too (the flatpak bundle comes from the
+          # flatpak job): its binary, desktop entry, icon, metainfo, media
+          # type, and an install.sh (~/.local by default)
+          gui="dist/stage/nlink-lab-gui-${RELEASE_TAG}-x86_64-linux-gnu"
+          mkdir -p "$gui/share"
+          cp target/release/nlink-lab-gui "$gui/"
+          cp dist/install-gui.sh "$gui/install.sh"
+          cp flatpak/com.github.p13marc.NlinkLab.desktop flatpak/com.github.p13marc.NlinkLab.metainfo.xml \
+            flatpak/com.github.p13marc.NlinkLab.mime.xml \
+            flatpak/icons/hicolor/scalable/apps/com.github.p13marc.NlinkLab.svg "$gui/share/"
+          cp README.md LICENSE-MIT LICENSE-APACHE "$gui/"
+          tar -C dist/stage -czf "dist/release/nlink-lab-gui-${RELEASE_TAG}-x86_64-linux-gnu.tar.gz" "$(basename "$gui")"
       - name: Create release if missing
         # API-driven so a workflow_dispatch re-run of an existing tag is
         # idempotent: forgejo-release@v2 tries to create and 409s when the
@@ -137,6 +150,8 @@ jobs:
           echo "RELEASE_SHA=$(git rev-parse "$tag^{commit}")" >> "$GITHUB_ENV"
       - name: Record this release in the AppStream metainfo
         # The metainfo used to be pinned at 0.1.0 forever (issue #53).
+        # `just release-prep` records it in the tagged commit now, and the
+        # packaging test fails without it; this stays as a safety net.
         run: |
           f=$(ls flatpak/*.metainfo.xml | head -1)
           if ! grep -q "release version=\"${RELEASE_TAG}\"" "$f"; then

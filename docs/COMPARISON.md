@@ -63,7 +63,7 @@ because the comparison is honest about both wins and losses.
 | VXLAN | ⚠️ kind-specific | ✅ first-class |
 | Bridge VLAN filtering (802.1Q) | ⚠️ kind-specific | ✅ first-class |
 | Multi-host clustering | ✅ via `clab tools cert` + inventory | ❌ single-host |
-| Web UI / topology graph | ✅ `clab graph` web view | ⚠️ Dot/ASCII output only |
+| Web UI / topology graph | ✅ `clab graph` web view | ⚠️ DOT/Mermaid/ASCII output; an experimental desktop app (draw, edit, deploy, change live labs) |
 | Save / restore live state | ✅ `clab save` | ⚠️ via NLL re-deploy; lab archive in **Plan 153** |
 | Reconcile (apply config diff) | ⚠️ partial | ✅ `apply` (full coverage in **Plan 152**) |
 | Library API | Go (undocumented) | Rust (first-class, `#[lab_test]`) |

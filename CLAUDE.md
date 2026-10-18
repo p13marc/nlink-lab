@@ -160,7 +160,10 @@ bins/nlink-labd/src/           # the host daemon: config (/etc/nlink-lab/daemon.
                                #   shell), sessions (logs, capture, wait_for, export),
                                #   audit
 dist/                          # systemd units (socket-activated nlink-labd), sysusers,
-                               #   tmpfiles — `just install-daemon`
+                               #   tmpfiles — `just install-daemon`; install.sh and
+                               #   install-gui.sh, the release tarballs' installers
+flatpak/                       # the app's manifest, desktop entry, metainfo (releases:
+                               #   `just release-prep VERSION`), media type, icon
 crates/nlink-lab-shared/src/
   api/              # daemon API (docs/API.md): Request (+ meta roles), Response,
                     #   StreamItem/Notification, OpEvent progress, ApiError, DTOs,
@@ -239,6 +242,8 @@ bins/gui/src/       # nlink-lab-gui, the desktop app (iced 0.14, experimental):
                     #   dock), inspector, dock, modals (panel, confirm, palette)
   ui_tests.rs       #   headless frames (iced_test), every example drawn;
                     #   NLINK_LAB_GUI_SNAPSHOTS=DIR keeps them as PNGs
+  daemon_tests.rs   #   against an in-process nlink-labd (root ones deploy labs)
+bins/gui/tests/packaging.rs    # desktop entry / metainfo / manifest / release agree
 
 examples/
   *.nll             # NLL topology examples (46 top-level; 55 incl. cookbook/ and imports/)

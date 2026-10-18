@@ -590,6 +590,72 @@ When a new TC primitive is needed (e.g. per-pair impair before
 nlink-lab's deploy logic stays declarative; the netlink plumbing
 lives upstream where other consumers can also use it.
 
+## The daemon and its clients
+
+`nlink-labd` serves every lab on the host behind one API; the CLI does
+its own work (local first) and the desktop app and `top` use the
+daemon.
+
+- **One `Request` enum** (`crates/nlink-lab-shared/src/api/`, described
+  in [API.md](API.md)) is every call. `Request::meta()` says who may make
+  it (viewer or operator), whether it changes anything, whether it runs
+  long, and what a disconnect does to it. Answers are a `Response`, or a
+  stream of `StreamItem`s (an operation's `OpEvent` progress, a
+  session's bytes) ending in one; subscriptions bring `Notification`s.
+  The handshake checks `API_VERSION`.
+- **Two transports, the same frames.** The unix socket
+  (`/run/nlink-lab/api/api.sock`) multiplexes calls on one connection
+  and decides the role from `SO_PEERCRED`/`SO_PEERGROUPS`; `ssh HOST
+  nlink-labd dial-stdio` carries it elsewhere. Zenoh queryables
+  (`nlink-lab/@rpc/<host>/{viewer,operator}`) serve the same requests,
+  local-only unless `[zenoh.tls]` turns on mutual TLS and a generated
+  access-control list; sessions (exec, shell, logs, capture, subscribe,
+  export) stay on the socket.
+- **Reads** go to `nlink_lab::ops::read`; **changes** to
+  `nlink_lab::ops::mutate` — the functions the CLI calls — run as jobs:
+  one queue per lab, on a thread of its own with a `LocalSet` (nlink's
+  reconciles are not `Send`). A job outlives its caller: `list_ops`
+  shows it, `attach_op` replays its progress so far, `cancel_op` stops
+  it (a deploy or an apply rolls back). Interactive sessions end with
+  their connection.
+- **The hub** rescans the state root and tails each lab's
+  `events.ndjson`, so a lab the CLI deployed shows up within a second;
+  it collects each lab's metrics and publishes the telemetry (Zenoh
+  topics, HTTP `/metrics`).
+- **The client** (`crates/nlink-lab-client`): `Endpoint` (unix, ssh,
+  a command, Zenoh), `Client::call`, and `Client::start`, a `Call` with
+  its events, cancel, detach, stdin, resize and signals.
+
+Tests: `bins/nlink-labd/tests/serve.rs` (rootless) and `e2e.rs` (root:
+deploys, both transports, the roles), and the app's `daemon_tests.rs`.
+
+## The desktop app
+
+`bins/gui` (`nlink-lab-gui`, iced 0.14) keeps every behaviour testable
+without a window:
+
+- **State changes in one place**: `reduce(&mut App, Message) ->
+  Vec<Effect>` is pure; `effect::run(Effect) -> Task<Message>` does the
+  I/O — loads and layouts on the blocking pool, the desktop's file
+  dialogs, the daemon's calls and streams. The `Gui` host in `main.rs`
+  keeps what cannot be pure: the terminal widgets, each a pty running
+  this binary as a hidden `pty-bridge` to the daemon's `shell`.
+- **One backend interface**, `Backend::Daemon(Client)` or
+  `Backend::Fake` (`--demo` and the tests): calls, subscriptions
+  (`Feed`, polled over Zenoh, which streams nothing) and sessions
+  (`SessionItem`: data, progress, the end).
+- **What it draws** comes from `crates/nlink-lab-view` (graph, layouts,
+  scene, SVG — pure and golden-tested); `canvas.rs` only paints the
+  scene. The source editor's problems are `nlink_lab::analysis`'s, the
+  LSP's.
+- **Tests, in tiers**: `reduce` tests run the Fake and settle effects
+  synchronously; `ui_tests.rs` draws the screens headless (`iced_test`;
+  `NLINK_LAB_GUI_SNAPSHOTS=DIR` keeps them as PNGs, worth looking at
+  after a visual change); `daemon_tests.rs` runs an in-process
+  `nlink-labd` — rootless, and as root against real labs (sessions,
+  deploy and apply); `tests/packaging.rs` keeps the desktop entry,
+  metainfo and release in step.
+
 ## CI
 
 Forgejo Actions, in `.forgejo/workflows/`. Three files:
@@ -603,12 +669,15 @@ Forgejo Actions, in `.forgejo/workflows/`. Three files:
   `tree-sitter` (grammar conformance against every example) and
   `fuzz`.
 - **`integration.yml`** — the root-gated suite, on a self-hosted
-  runner with `CAP_NET_ADMIN` + `CAP_SYS_ADMIN`. These tests
+  runner with `CAP_NET_ADMIN` + `CAP_SYS_ADMIN`, then the daemon's
+  end-to-end test and the desktop app's against real labs. These tests
   really create namespaces.
 - **`release.yml`** — on a bare-semver tag. Asserts
   `Cargo.toml`'s version matches the tag, **refuses to release
-  unless CI is green for that commit**, builds the binary tarball
-  and the flatpak bundle, and attaches both plus `SHA256SUMS`.
+  unless CI is green for that commit**, builds the binary tarballs
+  (the CLI with the daemon, and the desktop app, each with an
+  `install.sh`) and the flatpak bundle, and attaches them plus
+  `SHA256SUMS`. `just release-prep VERSION` prepares the commit it tags.
 
 `just ci` mirrors the rootless half locally; `just test-integration`
 runs the privileged half.

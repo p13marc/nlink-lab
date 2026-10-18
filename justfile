@@ -8,6 +8,23 @@ build:
 release:
     cargo build --release --all-targets
 
+# Nothing is committed or tagged: review, commit, then tag VERSION.
+# Prepare release VERSION: workspace version, CHANGELOG section dated, app metainfo
+release-prep VERSION:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    v="{{VERSION}}"
+    [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "release-prep: $v is not X.Y.Z" >&2; exit 64; }
+    grep -q "^## \[$v\]" CHANGELOG.md && { echo "release-prep: CHANGELOG already has $v" >&2; exit 1; }
+    today=$(date -u +%F)
+    sed -i "0,/^version = \".*\"/s//version = \"$v\"/" Cargo.toml
+    sed -i "0,/^## \[Unreleased\]/s//## [Unreleased]\n\n## [$v] - $today/" CHANGELOG.md
+    f=flatpak/com.github.p13marc.NlinkLab.metainfo.xml
+    grep -q "release version=\"$v\"" "$f" || sed -i "s|<releases>|<releases>\n    <release version=\"$v\" date=\"$today\"/>|" "$f"
+    cargo update --workspace --quiet
+    git --no-pager diff --stat
+    echo "Prepared $v. Review, commit, then: git tag $v && git push origin $v"
+
 # Run unit tests (+ stress + the docs gate)
 test:
     cargo test -p nlink-lab --lib --test stress --test docs_examples

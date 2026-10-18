@@ -688,6 +688,15 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **The desktop app as a plain binary** (#288): each release attaches
+  `nlink-lab-gui-VERSION-x86_64-linux-gnu.tar.gz` beside the flatpak
+  bundle — the binary, its desktop entry, icon, metainfo and the
+  `text/x-nll` media type, with an `install.sh` (`~/.local` by default,
+  `--prefix`, `--uninstall`). The CLI's tarball gets an `install.sh`
+  too: the binaries, the completions where bash, zsh and fish look, and
+  the daemon's units, sysusers and tmpfiles (`--no-daemon` for the CLI
+  alone). `just release-prep VERSION` prepares a release commit: the
+  version, the CHANGELOG section dated, the app's metainfo release.
 - **The source in the desktop app** (#286): **Source** (`Ctrl+U`) edits
   a design's NLL beside its canvas — coloured, its problems marked where
   they are, analysed again as you pause so the canvas follows; **Format**
@@ -1065,6 +1074,12 @@ under both (#233). Its waves land one by one below.
 
 ### Fixed
 
+- **The app's metainfo lists every release** (#288): 0.12.0 and 0.13.0
+  were only ever added at build time, by the flatpak job; a test now
+  fails when the CHANGELOG's newest release is not listed. Its summary
+  and description say what the app does now, and the flatpak bundle can
+  save a `.nll` from `~/Documents` (`xdg-documents` read-write) and no
+  longer asks for `~/.config/nlink-lab`, which it never used.
 - **The daemon's `run_assertions` says each assertion** (#283): an
   `Assertion` progress event per result, as a deploy and an apply send
   them; the results came only in the final report, so a client following

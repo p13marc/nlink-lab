@@ -13,17 +13,17 @@ finish-args:
   - --share=ipc
   # GPU acceleration for Iced/wgpu
   - --device=dri
-  # Network access, for a --zenoh-connect elsewhere
+  # Network access: a daemon reached over Zenoh on another host
   - --share=network
-  # The nlink-lab daemon's sockets: its API (commands) and its Zenoh
-  # telemetry (the live view)
+  # The nlink-lab daemon's sockets: its API (labs, changes, sessions) and
+  # its Zenoh telemetry
   - --filesystem=/run/nlink-lab/api
   - --filesystem=/run/nlink-lab/zenoh
-  # Access to config directory
-  - --filesystem=xdg-config/nlink-lab:create
-  # Read a `.nll` passed on the command line: files picked in the open
-  # dialog come through the portal, these need a path the sandbox sees.
-  - --filesystem=xdg-documents:ro
+  # A `.nll` passed on the command line, read and saved by the editor:
+  # files picked in Open… and Save as… come through the portal, these
+  # need a path the sandbox sees. (Settings and node placements live in
+  # the app's own ~/.var/app directory and need no permission.)
+  - --filesystem=xdg-documents
 
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin

@@ -3,7 +3,7 @@
 use std::fmt::Write as _;
 
 use crate::graph::NodeKind;
-use crate::scene::{Scene, Tone};
+use crate::scene::{Anchor, Scene, Tone};
 
 /// Margin around the scene.
 const MARGIN: f32 = 40.0;
@@ -95,21 +95,27 @@ pub fn to_svg(scene: &Scene) -> String {
             e.width
         );
         for end in &e.ends {
+            let anchor = match end.anchor {
+                Anchor::Start => "start",
+                Anchor::Middle => "middle",
+                Anchor::End => "end",
+            };
+            // `y` is the baseline: a 10 px line's centre sits 3.5 above it
             if let Some(label) = &end.label {
                 let _ = writeln!(
                     out,
-                    r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#5c6677" text-anchor="middle">{}</text>"##,
-                    end.at.x,
-                    end.at.y - 4.0,
+                    r##"<text x="{:.1}" y="{:.1}" font-size="10" fill="#5c6677" text-anchor="{anchor}">{}</text>"##,
+                    end.label_at.x,
+                    end.label_at.y + 3.5,
                     esc(label)
                 );
             }
             if let Some(badge) = &end.badge {
                 let _ = writeln!(
                     out,
-                    r#"<text x="{:.1}" y="{:.1}" font-size="10" fill="{}" text-anchor="middle">{}</text>"#,
-                    end.at.x,
-                    end.at.y + 9.0,
+                    r#"<text x="{:.1}" y="{:.1}" font-size="10" fill="{}" text-anchor="{anchor}">{}</text>"#,
+                    end.badge_at.x,
+                    end.badge_at.y + 3.5,
                     colour(badge.tone),
                     esc(&badge.text)
                 );

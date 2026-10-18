@@ -1,9 +1,11 @@
 //! What the nlink-lab desktop app draws, without a renderer (#273): the
 //! topology as a graph, where its nodes go, the metrics and impairments it
-//! shows, the shapes of a view and their SVG. Pure: everything here is
-//! data in, data out, and tested as such; `top` shares its impairment
-//! logic.
+//! shows, the shapes of a view and their SVG, and the text diagrams (DOT,
+//! Mermaid, ASCII). Pure: everything here is data in, data out, and tested
+//! as such; `top` shares its impairment logic, `render --diagram` its
+//! diagrams.
 
+pub mod diagram;
 pub mod graph;
 pub mod impair;
 pub mod layout;

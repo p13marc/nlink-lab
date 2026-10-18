@@ -1,4 +1,4 @@
-//! Graphviz DOT rendering (`graph`, `render --dot`).
+//! Graphviz DOT (`render --diagram dot`, the desktop app's export).
 
 pub fn topology_to_dot(topo: &nlink_lab::Topology) -> String {
     use nlink_lab::EndpointRef;

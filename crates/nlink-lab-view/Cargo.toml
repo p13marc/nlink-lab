@@ -1,6 +1,6 @@
 [package]
 name = "nlink-lab-view"
-description = "What the nlink-lab desktop app draws, without a renderer: the topology graph, layouts, metrics, effective impairments, a scene and SVG"
+description = "What the nlink-lab desktop app draws, without a renderer: the topology graph, layouts, metrics, effective impairments, a scene, SVG and text diagrams"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

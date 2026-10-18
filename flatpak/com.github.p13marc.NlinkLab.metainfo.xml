@@ -3,13 +3,15 @@
   <id>com.github.p13marc.NlinkLab</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT OR Apache-2.0</project_license>
-  <name>Nlink Lab Topoviewer</name>
-  <summary>Visualize nlink-lab network topologies</summary>
+  <name>nlink-lab</name>
+  <summary>Draw and inspect nlink-lab network topologies</summary>
   <description>
     <p>
-      Topoviewer is the graphical companion to nlink-lab: it renders the
-      network namespaces, links, bridges, and routing topologies that
-      nlink-lab builds, live from the running lab backend.
+      The desktop app of nlink-lab: it draws a lab's topology from its
+      file (namespaces, containers, links, bridges, tunnels, sites), keeps
+      up as the file changes, shows what a node, a link or an interface
+      declares, lists the topology's problems, and exports the drawing as
+      SVG or PNG and the topology as Graphviz DOT or Mermaid.
     </p>
   </description>
   <launchable type="desktop-id">com.github.p13marc.NlinkLab.desktop</launchable>

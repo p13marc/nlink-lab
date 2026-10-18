@@ -16,7 +16,7 @@ ignore = [
     "RUSTSEC-2025-0141", # bincode 1.x unmaintained
     "RUSTSEC-2026-0041", # lz4_flex decompress leak — zenoh pins 0.10, fix is in a later minor
     "RUSTSEC-2024-0449", # unsafe-libyaml unmaintained — zenoh-config's serde_yaml 0.9 (deprecated)
-    # via iced 0.14 (topoviewer GUI)
+    # via iced 0.14 (nlink-lab-gui)
     "RUSTSEC-2026-0192", # ttf-parser unmaintained
     # zbus 5's crates, merged into zbus 6; iced 0.14 → mundy 0.2.3 → zbus 5,
     # all latest (#230, 2026-10-17)

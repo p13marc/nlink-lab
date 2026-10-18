@@ -1,7 +1,7 @@
 # Graphical and live-view surfaces
 
 nlink-lab is a CLI and a Rust library first. Everything here is
-optional, and one piece of it — the desktop viewer — is
+optional, and one piece of it — the desktop app — is
 explicitly experimental. Nothing below is required to build,
 deploy or test a lab.
 
@@ -9,10 +9,9 @@ deploy or test a lab.
 |---------|------------|--------|
 | `nlink-labd` | The host daemon: every lab behind one authenticated API, its telemetry over Zenoh, HTTP | supported |
 | `nlink-lab top` | Terminal dashboard (ratatui) over a running lab | supported |
-| `nlink-lab-topoviewer` | Desktop topology viewer (iced) | **experimental** |
+| `nlink-lab-gui` | Desktop app (iced): topologies drawn from their files | **experimental** |
 
-`top` without root reads the daemon's metrics, and the viewer follows
-its Zenoh telemetry and runs commands through it.
+`top` without root reads the daemon's metrics.
 
 ---
 
@@ -87,51 +86,88 @@ the full key map.
 
 ---
 
-## The desktop viewer (experimental)
+## The desktop app (experimental)
 
-`nlink-lab-topoviewer` renders the topology as a node-link diagram
-on an iced canvas. Install it from
-[INSTALL.md](INSTALL.md#option-c--the-desktop-viewer-flatpak) — it
-ships as a flatpak bundle, or builds with
-`cargo build --release -p nlink-lab-topoviewer`.
-
-### Three modes
+`nlink-lab-gui` draws a topology from its file and keeps up with it:
+save the file in your editor and the drawing follows. Install it from
+[INSTALL.md](INSTALL.md#option-c--the-desktop-app-flatpak) — it ships
+as a flatpak bundle, or builds with
+`cargo build --release -p nlink-lab-gui`.
 
 ```bash
-nlink-lab-topoviewer topology.nll       # static — parse a file, lay it out
-nlink-lab-topoviewer --lab simple       # live — follow a running lab
-nlink-lab-topoviewer                    # discovery — list labs on the bus
+nlink-lab-gui                                  # Home: open a file, a recent one, a template
+nlink-lab-gui spine-leaf.nll wan.nll           # one tab each
+nlink-lab-gui wan.nll --set wan_delay=80ms     # params, as `deploy --set`
 ```
 
-Static mode needs nothing else running. Live and discovery mode
-follow the daemon's telemetry (above): the viewer connects to its
-socket, `/run/nlink-lab/zenoh/zenoh.sock`, which needs the
-`nlink-lab-viewer` group. `--zenoh-connect` names another endpoint.
+### The window
 
-A malformed `--zenoh-connect` is reported and exits non-zero. It
-is ignored, with a warning, when you pass a topology file without
-`--lab`.
+Home lists the recent files and the built-in templates (`nlink-lab
+init`'s); a template opens unsaved, and **Save as…** makes it a file.
+Each topology is a tab: the canvas, the inspector on the right, and
+the dock under the canvas with the topology's **Problems** and its
+**Source**. The panes resize by their borders.
 
-### What it does
+- **The drawing**: routers (rounded), hosts, containers (dashed),
+  networks (ellipses, their members around them), the host interfaces
+  of macvlan/ipvlan nodes; WireGuard and VXLAN tunnels dashed; sites as
+  regions; the management network with **Management**. An interface's
+  name and address sit beside its end of the edge, and a declared
+  impairment under it. A label that would cover another is left out —
+  the selected node's never are, and the inspector has them all.
+- **Layouts**: **Auto** draws a ring or a few densely joined nodes on a
+  circle, a tree or a fabric in layers (a Clos fabric spines first), and
+  anything else force-directed; **Layered**, **Force** and **Circle**
+  force one. Drag a node and it stays where you put it, in this file's
+  drawing, next time too; `Shift+L` forgets. A node the file gains is
+  placed beside its neighbours, and the others do not move.
+- **The inspector**: what the selection declares — a node's kind,
+  interfaces with their addresses and peers, routes, firewall and NAT
+  rules, sysctls, processes, container settings; a link's ends; an
+  interface's address, peer, impairment, rate limit and qdisc. With
+  nothing selected, the lab, its params (Enter applies; `*` marks a
+  value set over its default) and the placed nodes.
+- **Problems**: what `nlink-lab validate` reports, and a parse error
+  with its place. Clicking one selects what it is about, or shows its
+  line in Source. A file that stops parsing keeps its last drawing,
+  said so above the canvas.
+- **Export**: the drawing as SVG or PNG (the graph alone, not the
+  window), the topology as Graphviz DOT or Mermaid (what `nlink-lab
+  render --diagram` prints).
 
-- Drag nodes; pan, zoom, and fit-to-screen.
-- Toggle interface addresses and live per-interface metrics.
-- Click a node for its detail sidebar.
-- Run a command in the selected node from the sidebar, through the
-  daemon (its socket, or the endpoint `NLINK_LAB_DAEMON` names), as an
-  operator; it is stopped after 30 s.
-- Export the canvas to PNG, written to `$XDG_PICTURES_DIR`
-  (falling back to `~/Pictures`, then the working directory) with
-  a millisecond-stamped filename.
+### Keys
+
+`F1` (or `?`) shows them. They never fire while you type in a field.
+
+| Keys | What they do |
+|------|--------------|
+| `Ctrl+O` | Open a topology |
+| `Ctrl+R`, `F5` | Reload |
+| `Ctrl+W` | Close the tab |
+| `Ctrl+Tab`, `Ctrl+Shift+Tab` | Next, previous tab |
+| `Ctrl+H` | Home |
+| `F`, `0` | Fit the topology |
+| `+`, `-` | Zoom in, out (the wheel zooms where the pointer is) |
+| `L`, `Shift+L` | Next layout; forget placed nodes |
+| `A`, `M` | Addresses, management network on and off |
+| `Ctrl+E`, `Ctrl+Shift+E` | Export SVG, PNG |
+| `Esc` | Clear the selection |
+| `Ctrl+Q` | Quit |
+
+### What it remembers
+
+The theme (system, light or dark), the layout, the toggles and the
+recent files are in `$XDG_CONFIG_HOME/nlink-lab/gui.toml`; where you
+put nodes, per file, under `$XDG_STATE_HOME/nlink-lab/gui/pins/`.
 
 ### Flatpak sandbox limits
 
-The bundle is confined, which surprises people:
+The bundle is confined:
 
-- It can read `~/Documents` only (`--filesystem=xdg-documents:ro`).
-  A `.nll` anywhere else will not open — copy it there, or run a
-  locally-built binary instead.
-- PNG export goes to `~/Pictures` (`--filesystem=xdg-pictures:create`).
+- Files picked in **Open…** and **Export** come through the desktop's
+  file dialog, from anywhere. A `.nll` given on the command line must
+  be under `~/Documents` (`--filesystem=xdg-documents:ro`), as must the
+  files it imports.
 - It has the daemon's sockets (`/run/nlink-lab/api` and
   `/run/nlink-lab/zenoh`), network access, Wayland/X11 and `/dev/dri`
   for GPU acceleration, and nothing else.
@@ -140,16 +176,12 @@ The bundle is confined, which surprises people:
 
 ### Why "experimental"
 
-- No integration tests. Unit coverage is limited to layout, zenoh
-  config parsing and the PNG-directory choice.
-- The topology is rendered from what the daemon publishes; it is
-  a viewer, not an editor — nothing you do in it changes the lab
-  except the exec box.
+- It draws topologies from their files; it does not deploy or change
+  labs.
 - It is the only artifact with no plain-binary release; you get a
   flatpak bundle or you build it.
-- API and layout are free to change between releases without a
+- Its looks and keys are free to change between releases without a
   migration note, unlike NLL and the Rust API.
 
-If the viewer is load-bearing for you, say so on the issue tracker
-— that is the signal that would move it onto the supported
-surface.
+If the app is load-bearing for you, say so on the issue tracker —
+that is the signal that would move it onto the supported surface.

@@ -38,7 +38,7 @@ sudo ./target/release/nlink-lab destroy simple
 ```
 
 Prebuilt binaries, a system-wide install, capabilities instead of
-`sudo`, shell completions and the desktop viewer are all in
+`sudo`, shell completions and the desktop app are all in
 [docs/INSTALL.md](docs/INSTALL.md).
 
 Or use the `#[lab_test]` macro from a `cargo test` integration
@@ -81,7 +81,7 @@ async fn test_connectivity(lab: RunningLab) {
 - A multi-host orchestrator. Single-host only.
 - A GUI-first tool. The CLI and the Rust library are the supported
   surface. There is a terminal dashboard (`nlink-lab top`) and an
-  experimental desktop viewer — see [docs/GUI.md](docs/GUI.md).
+  experimental desktop app — see [docs/GUI.md](docs/GUI.md).
 
 ## How it compares to containerlab
 
@@ -98,7 +98,7 @@ a CI environment without a Docker daemon.
 | TC depth (HTB / flower / u32) | ⚠️ raw `exec:` | ✅ first-class |
 | VRF + WireGuard composition | ⚠️ raw `exec:` | ✅ first-class |
 | Multi-host | ✅ | ❌ |
-| Web UI | ✅ | ⚠️ experimental desktop viewer |
+| Web UI | ✅ | ⚠️ experimental desktop app |
 | Deploy speed | seconds | sub-second |
 | CI footprint | Docker daemon | namespace + caps |
 | Library API | Go (undocumented) | Rust (first-class) |
@@ -112,7 +112,7 @@ side-by-side examples, and migration notes — lives at
 
 **Start here**
 
-- [Install](docs/INSTALL.md) — binaries, source, capabilities, the daemon, completions, the flatpak viewer.
+- [Install](docs/INSTALL.md) — binaries, source, capabilities, the daemon, completions, the flatpak app.
 - [User guide](docs/USER_GUIDE.md) — a 60-minute walkthrough that grows one topology into a WAN with WireGuard, firewall, chaos injection and a `cargo test` integration.
 - [NLL language spec](docs/NLL_DSL_DESIGN.md) — every keyword, with examples.
 - [CLI reference](docs/cli/) — one page per subcommand, generated from the clap definitions.
@@ -122,7 +122,7 @@ side-by-side examples, and migration notes — lives at
 - [Cookbook](docs/cookbook/) — 14 task-shaped recipes: satellite mesh, CI matrix sweeps, macvlan host bridges, Rust integration tests.
 - [Testing guide](docs/TESTING_GUIDE.md) — the `#[lab_test]` macro and integration-test patterns.
 - [Harness guide](docs/HARNESS_GUIDE.md) — building Rust test harnesses: spawn ordering, capture endpoint selection, failure-mode debugging, parallel-lab concurrency.
-- [Live views and the GUI](docs/GUI.md) — `nlink-lab top`, the zenoh backend, the experimental desktop viewer.
+- [Live views and the GUI](docs/GUI.md) — the daemon, `nlink-lab top`, the experimental desktop app.
 - [Examples](examples/) — 49 NLL files (40 top-level, 3 cookbook, 6 import modules), every one parse-tested in CI.
 
 **When something breaks, or you want to change it**

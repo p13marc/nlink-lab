@@ -159,7 +159,7 @@ jobs:
             --repo=export-repo builddir flatpak/com.github.p13marc.NlinkLab.yml
           mkdir -p "$GITHUB_WORKSPACE/dist/release"
           flatpak build-bundle export-repo \
-            "$GITHUB_WORKSPACE/dist/release/nlink-lab-topoviewer-${RELEASE_TAG}.flatpak" com.github.p13marc.NlinkLab
+            "$GITHUB_WORKSPACE/dist/release/nlink-lab-gui-${RELEASE_TAG}.flatpak" com.github.p13marc.NlinkLab
       - name: Publish export branch for vm-edge
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}

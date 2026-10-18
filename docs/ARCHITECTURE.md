@@ -55,14 +55,15 @@ nlink-lab/                        ← workspace root
 │   │   └── tests/                Integration tests (root-gated)
 │   ├── nlink-lab-macros/         #[lab_test] proc macro
 │   ├── nlink-lab-shared/         The daemon API (docs/API.md), Zenoh topics, metrics types
-│   └── nlink-lab-client/         Client of the daemon API (unix socket, ssh dial-stdio)
+│   ├── nlink-lab-client/         Client of the daemon API (unix socket, ssh dial-stdio)
+│   └── nlink-lab-view/           What the desktop app draws, renderer-free: graph, layouts, scene, SVG, diagrams
 ├── bins/
 │   ├── lab/                      `nlink-lab` CLI (clap; cmd/<name>.rs each)
 │   ├── nlink-labd/               The host daemon: every lab behind one authenticated API, its telemetry (Zenoh, HTTP)
-│   └── topoviewer/               Experimental desktop viewer (iced)
+│   └── gui/                      `nlink-lab-gui`, the experimental desktop app (iced)
 ├── dist/                         systemd units, sysusers, tmpfiles for nlink-labd
 ├── examples/                     49 .nll files, all parse-tested
-├── flatpak/                      Viewer packaging (manifest, metainfo, icon)
+├── flatpak/                      Desktop app packaging (manifest, metainfo, icon)
 ├── docs/                         User-facing docs (this dir)
 └── editors/                      VS Code / Neovim / Helix / Zed
 ```
@@ -671,16 +672,16 @@ Before opening a PR for a non-trivial change:
   you're adding a new topology feature, it follows. A view both the CLI
   and the daemon show belongs in `nlink_lab::ops::view`, an operation
   both run in `nlink_lab::ops::mutate`.
-- The topoviewer GUI (`bins/topoviewer/`) is an experimental
-  iced-based viewer, not on the supported-surface list — see
-  [GUI.md](GUI.md). It has no integration tests, so treat a change
-  there as unverified until someone runs it on a display.
+- The desktop app (`bins/gui/`) is experimental, not on the
+  supported-surface list — see [GUI.md](GUI.md). Its state changes
+  only in `reduce` (plain tests), and its screens are drawn headless in
+  `ui_tests.rs`; what it draws comes from `crates/nlink-lab-view`.
 
 ## See also
 
 - [INSTALL.md](INSTALL.md) — getting a build onto a host
 - [USER_GUIDE.md](USER_GUIDE.md) — for end users
 - [NLL_DSL_DESIGN.md](NLL_DSL_DESIGN.md) — the language itself
-- [GUI.md](GUI.md) — backend, `top`, and the desktop viewer
+- [GUI.md](GUI.md) — the daemon, `top`, and the desktop app
 - [COMPARISON.md](COMPARISON.md) — vs containerlab
 - [plans/](plans/) — design proposals (active and historical)

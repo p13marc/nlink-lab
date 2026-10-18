@@ -81,6 +81,31 @@ pub(crate) async fn dispatch(ctx: &mut CallCtx, request: Request) -> Result<Resp
             )
             .await
         }
+        Request::Shell {
+            lab,
+            node,
+            shell,
+            rows,
+            cols,
+        } => crate::exec::shell(ctx, lab, node, shell, rows, cols).await,
+        Request::Logs {
+            lab,
+            pid,
+            stream,
+            tail,
+            follow,
+        } => crate::sessions::logs(ctx, &lab, pid, stream, tail, follow).await,
+        Request::Capture {
+            lab,
+            endpoint,
+            filter,
+            count,
+            duration_ms,
+        } => crate::sessions::capture(ctx, &lab, &endpoint, &filter, count, duration_ms).await,
+        Request::WaitFor { lab, node, cond } => {
+            crate::sessions::wait_for(ctx, &lab, &node, &cond).await
+        }
+        Request::Export { lab } => crate::sessions::export(ctx, &lab).await,
         Request::ListOps => Ok(Response::Ops {
             ops: ctx.shared.jobs.list(),
         }),

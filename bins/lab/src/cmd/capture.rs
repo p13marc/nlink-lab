@@ -305,139 +305,45 @@ fn build_filter(args: &Args) -> nlink_lab::Result<Option<netring::BpfFilter>> {
         ));
     }
 
-    Ok(if let Some(expr) = filter {
-        Some(compile_legacy_bpf_filter(expr)?)
-    } else if any_typed_filter {
-        let net = filter_net
-            .as_deref()
-            .map(|s| parse_filter_cidr("--filter-net", s))
-            .transpose()?;
-        let src_net = filter_src_net
-            .as_deref()
-            .map(|s| parse_filter_cidr("--filter-src-net", s))
-            .transpose()?;
-        let dst_net = filter_dst_net
-            .as_deref()
-            .map(|s| parse_filter_cidr("--filter-dst-net", s))
-            .transpose()?;
-        // An IPv6 address needs the IPv6 ethertype check: without a family
-        // flag the builder checks for IPv4, then reads IPv6 address
-        // offsets, and the filter matched nothing (#209).
-        let v6 = [filter_host, filter_src_host, filter_dst_host]
-            .iter()
-            .flatten()
-            .any(|a| a.is_ipv6())
-            || [net, src_net, dst_net]
-                .iter()
-                .flatten()
-                .any(|n| n.is_ipv6());
-        // Everything but the port lists, for each branch below.
-        let base = |mut b: netring::BpfFilterBuilder| {
-            if filter_ipv4 {
-                b = b.ipv4();
-            }
-            if filter_ipv6 || (v6 && !filter_ipv4 && !filter_arp) {
-                b = b.ipv6();
-            }
-            if filter_arp {
-                b = b.arp();
-            }
-            // `--filter-vlan-id` implies `--filter-vlan` so the
-            // ethertype check + offset shift get emitted before
-            // the ID match.
-            if filter_vlan || filter_vlan_id.is_some() {
-                b = b.vlan();
-            }
-            if let Some(vid) = filter_vlan_id {
-                b = b.vlan_id(vid);
-            }
-            if filter_tcp {
-                b = b.tcp();
-            }
-            if filter_udp {
-                b = b.udp();
-            }
-            if filter_icmp {
-                b = b.icmp();
-            }
-            if let Some(proto) = filter_ip_proto {
-                b = b.ip_proto(proto);
-            }
-            if let Some(addr) = filter_host {
-                b = b.host(addr);
-            }
-            if let Some(addr) = filter_src_host {
-                b = b.src_host(addr);
-            }
-            if let Some(addr) = filter_dst_host {
-                b = b.dst_host(addr);
-            }
-            if let Some(n) = net {
-                b = b.net(n);
-            }
-            if let Some(n) = src_net {
-                b = b.src_net(n);
-            }
-            if let Some(n) = dst_net {
-                b = b.dst_net(n);
-            }
-            if let Some(p) = filter_port {
-                b = b.port(p);
-            }
-            if let Some(p) = filter_src_port {
-                b = b.src_port(p);
-            }
-            if let Some(p) = filter_dst_port {
-                b = b.dst_port(p);
-            }
-            b
-        };
-        // One OR branch per combination of the port lists, each with the
-        // whole chain. netring 0.30's `ports()` copies only the fragments
-        // before it into its extra branches, so `--filter-src-ports 1,2
-        // --filter-dst-ports 3,4` also matched source port 2 to any port
-        // (#209; fixed in netring after 0.31.1).
-        let each = |ports: &[u16]| -> Vec<Option<u16>> {
-            if ports.is_empty() {
-                vec![None]
-            } else {
-                ports.iter().copied().map(Some).collect()
-            }
-        };
-        let mut combos = Vec::new();
-        for p in each(filter_ports) {
-            for sp in each(filter_src_ports) {
-                for dp in each(filter_dst_ports) {
-                    combos.push((p, sp, dp));
-                }
-            }
+    if let Some(expr) = filter {
+        return compile_legacy_bpf_filter(expr).map(Some);
+    }
+    if !any_typed_filter {
+        return Ok(None);
+    }
+    for (flag, value) in [
+        ("--filter-net", filter_net),
+        ("--filter-src-net", filter_src_net),
+        ("--filter-dst-net", filter_dst_net),
+    ] {
+        if let Some(s) = value {
+            parse_filter_cidr(flag, s)?;
         }
-        let with_ports =
-            |mut b: netring::BpfFilterBuilder,
-             (p, sp, dp): (Option<u16>, Option<u16>, Option<u16>)| {
-                if let Some(p) = p {
-                    b = b.port(p);
-                }
-                if let Some(p) = sp {
-                    b = b.src_port(p);
-                }
-                if let Some(p) = dp {
-                    b = b.dst_port(p);
-                }
-                b
-            };
-        let mut b = with_ports(base(netring::BpfFilter::builder()), combos[0]);
-        for &combo in &combos[1..] {
-            b = b.or(|branch| with_ports(base(branch), combo));
-        }
-        if filter_not {
-            b = b.negate();
-        }
-        Some(b.build().map_err(|e| {
-            nlink_lab::Error::invalid_argument(format!("BPF filter build failed: {e}"))
-        })?)
-    } else {
-        None
+    }
+    nlink_lab::capture::build_filter(&nlink_lab::api::CaptureFilter {
+        tcp: filter_tcp,
+        udp: filter_udp,
+        icmp: filter_icmp,
+        ip_proto: filter_ip_proto,
+        ipv4: filter_ipv4,
+        ipv6: filter_ipv6,
+        arp: filter_arp,
+        vlan: filter_vlan,
+        vlan_id: filter_vlan_id,
+        host: filter_host,
+        src_host: filter_src_host,
+        dst_host: filter_dst_host,
+        net: filter_net.clone(),
+        src_net: filter_src_net.clone(),
+        dst_net: filter_dst_net.clone(),
+        port: filter_port,
+        src_port: filter_src_port,
+        dst_port: filter_dst_port,
+        ports: filter_ports.clone(),
+        src_ports: filter_src_ports.clone(),
+        dst_ports: filter_dst_ports.clone(),
+        not: filter_not,
+        expression: None,
     })
 }
 

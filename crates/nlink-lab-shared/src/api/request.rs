@@ -3,8 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    ApplyOptions, DeployOptions, Direction, ImpairmentSpec, LogStream, SourceBundle, Topic,
-    WaitSpec,
+    ApplyOptions, CaptureFilter, DeployOptions, Direction, ImpairmentSpec, LogStream, SourceBundle,
+    Topic, WaitSpec,
 };
 
 /// A request: `{"method": "...", "params": {...}}`.
@@ -250,8 +250,8 @@ pub enum Request {
     Capture {
         lab: String,
         endpoint: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        filter: Option<String>,
+        #[serde(default, skip_serializing_if = "CaptureFilter::is_empty")]
+        filter: CaptureFilter,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         count: Option<u64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]

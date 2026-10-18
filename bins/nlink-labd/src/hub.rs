@@ -60,11 +60,18 @@ impl Collector {
     }
 }
 
+/// A lab's drift watch and who wants it.
+struct DriftWatch {
+    wants: std::collections::HashSet<u64>,
+    stop: Arc<AtomicBool>,
+}
+
 pub(crate) struct Hub {
     tx: broadcast::Sender<Arc<Note>>,
     labs: Mutex<BTreeMap<String, LabSummary>>,
     latest: Arc<Mutex<HashMap<String, MetricsSnapshot>>>,
     collectors: Mutex<HashMap<String, Collector>>,
+    drift: Mutex<HashMap<String, DriftWatch>>,
     next_want: AtomicU64,
     metrics_interval: Duration,
     rescan: Duration,
@@ -77,6 +84,7 @@ impl Hub {
             labs: Mutex::default(),
             latest: Arc::default(),
             collectors: Mutex::default(),
+            drift: Mutex::default(),
             next_want: AtomicU64::new(1),
             metrics_interval: config.metrics_interval(),
             rescan: config.rescan(),
@@ -224,10 +232,10 @@ impl Hub {
                 "subscribe to one topic at least",
             ));
         }
-        if let Some(t) = topics.iter().find(|t| matches!(t, Topic::Drift)) {
+        if lab.is_none() && topics.contains(&Topic::Drift) {
             return Err(ApiError::new(
-                ErrorCode::Unsupported,
-                format!("`{t:?}` notifications are not served by this daemon yet"),
+                ErrorCode::InvalidArgument,
+                "drift notifications are a lab's: give `lab`",
             ));
         }
         if let Some(lab) = &lab {
@@ -251,6 +259,10 @@ impl Hub {
         let mut rx = self.tx.subscribe();
         let _want = match (&lab, collect) {
             (Some(lab), true) => Some(self.want_metrics(lab, every)),
+            _ => None,
+        };
+        let _drift = match &lab {
+            Some(lab) if topics.contains(&Topic::Drift) => Some(self.want_drift(lab)),
             _ => None,
         };
         let notify = async |notification| ctx.item(StreamItem::Notification { notification }).await;
@@ -361,6 +373,32 @@ impl Hub {
         }
     }
 
+    /// Someone wants `lab`'s drift: its watch runs while the guard lives.
+    fn want_drift(self: &Arc<Self>, lab: &str) -> DriftWant {
+        let id = self.next_want.fetch_add(1, Ordering::Relaxed);
+        let mut drift = self.drift.lock().unwrap();
+        let watch = drift.entry(lab.to_string()).or_insert_with(|| {
+            let stop = Arc::new(AtomicBool::new(false));
+            let (tx, thread_stop, name) = (self.tx.clone(), stop.clone(), lab.to_string());
+            let spawned = std::thread::Builder::new()
+                .name(format!("drift {lab}"))
+                .spawn(move || watch_drift(name, tx, thread_stop));
+            if let Err(e) = spawned {
+                tracing::warn!("cannot watch the drift of '{lab}': {e}");
+            }
+            DriftWatch {
+                wants: Default::default(),
+                stop,
+            }
+        });
+        watch.wants.insert(id);
+        DriftWant {
+            hub: self.clone(),
+            lab: lab.to_string(),
+            id,
+        }
+    }
+
     fn start_collector(&self, lab: &str, every: Duration) -> Collector {
         let interval = Arc::new(Mutex::new(every));
         let stop = Arc::new(AtomicBool::new(false));
@@ -403,6 +441,78 @@ impl Drop for Want {
             }
         }
     }
+}
+
+/// A subscriber's want of a lab's drift.
+struct DriftWant {
+    hub: Arc<Hub>,
+    lab: String,
+    id: u64,
+}
+
+impl Drop for DriftWant {
+    fn drop(&mut self) {
+        let mut drift = self.hub.drift.lock().unwrap();
+        if let Some(w) = drift.get_mut(&self.lab) {
+            w.wants.remove(&self.id);
+            if w.wants.is_empty() {
+                w.stop.store(true, Ordering::Relaxed);
+                drift.remove(&self.lab);
+            }
+        }
+    }
+}
+
+/// A lab's drift: every node's RTNETLINK and nftables changes, as
+/// notifications, until stopped or the lab is gone.
+fn watch_drift(lab: String, tx: broadcast::Sender<Arc<Note>>, stop: Arc<AtomicBool>) {
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            tracing::warn!("the drift watch of '{lab}': {e}");
+            return;
+        }
+    };
+    rt.block_on(async {
+        let Ok(running) = nlink_lab::RunningLab::load(&lab) else {
+            return;
+        };
+        let opts = nlink_lab::WatchOpts::default();
+        let (mut rx, tasks) = match nlink_lab::watch_stream(&running, &opts) {
+            Ok(Some(stream)) => stream,
+            Ok(None) => return,
+            Err(e) => {
+                tracing::warn!("the drift watch of '{lab}': {e}");
+                return;
+            }
+        };
+        while !stop.load(Ordering::Relaxed) {
+            tokio::select! {
+                event = rx.recv() => {
+                    let Some(event) = event else { break };
+                    let Ok(detail) = serde_json::to_value(&event) else {
+                        continue;
+                    };
+                    let _ = tx.send(Arc::new(Note {
+                        lab: Some(lab.clone()),
+                        topic: Topic::Drift,
+                        notification: Notification::Drift {
+                            lab: lab.clone(),
+                            node: event.node.clone(),
+                            detail,
+                        },
+                    }));
+                }
+                _ = tokio::time::sleep(Duration::from_millis(200)) => {}
+            }
+        }
+        for task in tasks {
+            task.abort();
+        }
+    });
 }
 
 /// A lab's metrics collector: a snapshot every interval until stopped or

@@ -35,7 +35,14 @@ pub(crate) fn server_name() -> String {
 }
 
 /// What the daemon serves beyond the API's version.
-const FEATURES: &[&str] = &["read", "subscribe", "exec", "operations", "jobs"];
+const FEATURES: &[&str] = &[
+    "read",
+    "subscribe",
+    "exec",
+    "operations",
+    "jobs",
+    "sessions",
+];
 
 /// What a running call receives from its client.
 #[derive(Debug)]
@@ -119,6 +126,58 @@ impl DataSender {
             })
             .await
             .is_ok()
+    }
+
+    /// [`send`](Self::send) from a thread that may block (not the event
+    /// loop's).
+    pub fn blocking_send(&self, stream: DataStream, bytes: Vec<u8>) -> bool {
+        self.out
+            .blocking_send(Frame::Data {
+                call: self.call,
+                stream,
+                bytes,
+            })
+            .is_ok()
+    }
+
+    /// A writer of `stream`, for a blocking producer (a log follower, a
+    /// capture): a write fails once the client is gone, which ends it.
+    pub fn writer(&self, stream: DataStream) -> DataWriter {
+        DataWriter {
+            sender: self.clone(),
+            stream,
+        }
+    }
+}
+
+impl Clone for DataSender {
+    fn clone(&self) -> Self {
+        Self {
+            call: self.call,
+            out: self.out.clone(),
+        }
+    }
+}
+
+/// A call's byte stream as a `std::io::Write`.
+pub(crate) struct DataWriter {
+    sender: DataSender,
+    stream: DataStream,
+}
+
+impl std::io::Write for DataWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        // frames well under the limit
+        let n = buf.len().min(256 * 1024);
+        if self.sender.blocking_send(self.stream, buf[..n].to_vec()) {
+            Ok(n)
+        } else {
+            Err(std::io::ErrorKind::BrokenPipe.into())
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 

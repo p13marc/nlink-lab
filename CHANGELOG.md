@@ -659,6 +659,15 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **The daemon's sessions** (#267): terminals (`exec` with `tty`, and
+  `shell`, with `resize` and signals to the process group), a tracked
+  process's `logs` (tail, then follow), `capture` streaming a pcap,
+  `wait_for` with progress, `export` streaming the lab's archive, and
+  `drift` notifications. A drift is watched per lab while someone
+  subscribes. In the library: `nlink_lab::pty`, `CaptureOutput::Stream`,
+  `CaptureConfig::on`, and `capture::build_filter`, the typed BPF
+  builder the CLI's `--filter-*` flags and the API's `CaptureFilter`
+  share.
 - **The daemon changes labs** (#266): every change of the API — deploy
   (a topology, or a source bundle: the file, its imports and params,
   kept with the lab), apply, check, verify, destroy, snapshot, restore,

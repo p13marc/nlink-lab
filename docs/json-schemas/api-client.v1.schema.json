@@ -1429,10 +1429,7 @@
                   "type": "string"
                 },
                 "filter": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
+                  "$ref": "#/$defs/CaptureFilter"
                 },
                 "lab": {
                   "type": "string"
@@ -1623,6 +1620,157 @@
         "reset_impairments",
         "strict"
       ]
+    },
+    "CaptureFilter": {
+      "description": "What a capture keeps (`capture`): every condition set must hold, the\nport lists match any of theirs, and `not` keeps the rest instead. The\nCLI's `--filter-*` flags say the same.",
+      "type": "object",
+      "properties": {
+        "arp": {
+          "type": "boolean"
+        },
+        "dst_host": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "ip"
+        },
+        "dst_net": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dst_port": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "dst_ports": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0
+          }
+        },
+        "expression": {
+          "description": "A tcpdump expression instead of the conditions above: only a\ndaemon built with `legacy-tcpdump-filter` (and `tcpdump`) compiles\none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "host": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "ip"
+        },
+        "icmp": {
+          "type": "boolean"
+        },
+        "ip_proto": {
+          "description": "An IP protocol number.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "ipv4": {
+          "type": "boolean"
+        },
+        "ipv6": {
+          "type": "boolean"
+        },
+        "net": {
+          "description": "A CIDR.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "not": {
+          "description": "Keep what does not match.",
+          "type": "boolean"
+        },
+        "port": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "ports": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0
+          }
+        },
+        "src_host": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "ip"
+        },
+        "src_net": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "src_port": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "src_ports": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0
+          }
+        },
+        "tcp": {
+          "type": "boolean"
+        },
+        "udp": {
+          "type": "boolean"
+        },
+        "vlan": {
+          "type": "boolean"
+        },
+        "vlan_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      }
     },
     "DeployOptions": {
       "description": "Options of a deploy.",

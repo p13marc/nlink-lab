@@ -112,17 +112,17 @@ let lab = topology.deploy_with(&ctx).await?; // cancel.cancel() rolls it back
 
 ## Served today
 
-The daemon answers every request; what it does not serve yet ends with
-`unsupported`. Served:
+The daemon serves every request:
 
 - `ping`, `who_am_i`, `daemon_status`;
 - the reads: `list_labs`, `get_lab` (the lab's summary and what `status
   --json` prints), `get_topology`, `list_processes`, `get_impairments`,
   `list_snapshots`, `read_events`, `get_metrics`, `diagnose`,
   `node_addresses`, `proc_stat`, `stats`, `scan_host`;
-- `subscribe` to `labs`, `lifecycle`, `topology`, `metrics`, `runtime`
-  and `ops`;
-- `exec`, without a terminal (`tty: false`);
+- `subscribe` to `labs`, `lifecycle`, `topology`, `metrics`, `runtime`,
+  `ops` and `drift`;
+- the sessions: `exec` (on pipes, or on a terminal with `tty: true`),
+  `shell`, `logs`, `capture`, `wait_for`, `export`;
 - every change: `deploy` (a `topology`, or a `source` bundle: the entry
   file's text, its imports by relative path, its params), `apply`,
   `destroy`, `restart`, `snapshot`, `delete_snapshot`, `restore`,
@@ -170,6 +170,26 @@ and ends with `exited`. The command starts from a minimal environment
 (`PATH`, `HOME`, `LANG`) plus the `env` it is given. A cancel, a
 `timeout_ms` or a client that goes away stops it: SIGTERM, then
 SIGKILL a second later.
+
+On a terminal (`exec` with `tty: true`, 24 × 80; `shell`, of the size
+asked, running `shell` or the node's bash, else sh), the output and what
+the client sends are both the `pty` stream, `eof` is a ^D, `resize`
+sets the terminal's size, a `signal` goes to the command's process
+group, and a cancel or a client that leaves hangs it up (SIGHUP, then
+SIGKILL). `TERM` is `xterm-256color` unless the client sends one.
+
+`logs` streams a tracked process's stdout and/or stderr (the last
+`tail` lines, else all of it), and with `follow` what it writes next,
+until the call ends. `capture` streams a pcap (nanosecond, Ethernet) of
+an endpoint as `pcap` data, until `count` packets, `duration_ms` or the
+call's end, and reports the packets captured and dropped; its `filter`
+is the typed conditions of the CLI's `--filter-*` flags (`tcp`,
+`dst_port`, `host`, `src_net`, `ports`, `not`, …). `wait_for` waits for
+all of its conditions within `timeout_ms` (30 s by default), streaming
+the wait's progress; `export` streams the lab's `.nlz` archive as
+`archive` data. A `drift` subscription watches the lab's nodes
+(RTNETLINK and nftables) while someone subscribes: a change nobody made
+through nlink-lab is a `drift` notification.
 
 ## The unix socket
 

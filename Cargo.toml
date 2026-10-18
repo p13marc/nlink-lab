@@ -4,6 +4,7 @@ members = [
     "crates/nlink-lab",
     "crates/nlink-lab-macros",
     "crates/nlink-lab-shared",
+    "crates/nlink-lab-client",
     "bins/lab",
     "bins/nlink-lab-backend",
     "bins/topoviewer",
@@ -57,3 +58,4 @@ netring = "0.30"
 nlink-lab = { path = "crates/nlink-lab" }
 nlink-lab-macros = { path = "crates/nlink-lab-macros" }
 nlink-lab-shared = { path = "crates/nlink-lab-shared" }
+nlink-lab-client = { path = "crates/nlink-lab-client" }

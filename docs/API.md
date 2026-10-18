@@ -130,3 +130,31 @@ Then each call gets an id, chosen by the client:
 
 The client can also send `cancel`, `detach`, `eof` (end of stdin),
 `resize` (a pty's rows and cols), `signal` and `ping` for a call.
+
+## The Rust client
+
+`nlink-lab-client` speaks the unix-socket transport (and, through
+`ssh HOST nlink-labd dial-stdio`, reaches a remote daemon). One
+connection carries any number of calls; a `Call` yields the events
+and the end of one, and sends stdin, resizes, signals, a cancel or a
+detach.
+
+```rust
+use nlink_lab_client::{CallEvent, Client, Endpoint};
+use nlink_lab_shared::api::Request;
+
+// NLINK_LAB_DAEMON, else /run/nlink-lab/api/api.sock
+let client = Client::connect(&Endpoint::from_env(), "my-tool/0.1").await?;
+let mut call = client.start(Request::Destroy { lab: "wan".into() }).await?;
+while let Some(event) = call.next().await {
+    match event {
+        CallEvent::Item(item) => println!("{item:?}"),
+        CallEvent::Data(stream, bytes) => { /* stdout, a pty, a pcap */ }
+        CallEvent::End(result) => println!("{result:?}"),
+    }
+}
+```
+
+An endpoint is `unix:PATH` (or an absolute path), `ssh://[USER@]HOST[:PORT]`
+or `cmd:COMMAND`.
+

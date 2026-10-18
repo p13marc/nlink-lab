@@ -81,7 +81,8 @@ async fn test_connectivity(lab: RunningLab) {
 - A multi-host orchestrator. Single-host only.
 - A GUI-first tool. The CLI and the Rust library are the supported
   surface. There is a terminal dashboard (`nlink-lab top`) and an
-  experimental desktop app — see [docs/GUI.md](docs/GUI.md).
+  experimental desktop app that edits, deploys and changes labs
+  through the host daemon — see [docs/GUI.md](docs/GUI.md).
 
 ## How it compares to containerlab
 
@@ -98,7 +99,7 @@ a CI environment without a Docker daemon.
 | TC depth (HTB / flower / u32) | ⚠️ raw `exec:` | ✅ first-class |
 | VRF + WireGuard composition | ⚠️ raw `exec:` | ✅ first-class |
 | Multi-host | ✅ | ❌ |
-| Web UI | ✅ | ⚠️ experimental desktop app |
+| GUI | ✅ web UI | ⚠️ experimental desktop app (edit, deploy, change live labs) |
 | Deploy speed | seconds | sub-second |
 | CI footprint | Docker daemon | namespace + caps |
 | Library API | Go (undocumented) | Rust (first-class) |

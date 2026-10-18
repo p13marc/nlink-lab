@@ -53,7 +53,8 @@ wireguard-tools` for the optional surface.
 
 Each release attaches `nlink-lab-<version>-x86_64-linux-gnu.tar.gz`
 containing the CLI, the daemon and its systemd units, shell
-completions and the licence/changelog. It does **not** contain the GUI.
+completions, the licence/changelog and an `install.sh`. The desktop
+app has its own tarball ([Option C](#option-c--the-desktop-app)).
 
 ```bash
 VER=0.13.0   # check the releases page for the newest
@@ -65,20 +66,17 @@ sha256sum --check --ignore-missing SHA256SUMS
 
 tar xzf nlink-lab-$VER-x86_64-linux-gnu.tar.gz
 cd nlink-lab-$VER-x86_64-linux-gnu
-sudo install -m 755 nlink-lab nlink-labd /usr/local/bin/
+sudo ./install.sh                   # under /usr/local; --prefix DIR elsewhere
+sudo systemctl enable --now nlink-labd.socket
 ```
 
-That gives you a plain install you run under `sudo`. To run it as an
-unprivileged user instead, see [Privileges](#privileges). The daemon
-is optional; to run it:
-
-```bash
-sudo install -m 644 systemd/nlink-labd.* /etc/systemd/system/
-sudo install -D -m 644 sysusers.d/nlink-lab.conf /etc/sysusers.d/nlink-lab.conf
-sudo install -D -m 644 tmpfiles.d/nlink-lab.conf /etc/tmpfiles.d/nlink-lab.conf
-sudo systemd-sysusers && sudo systemd-tmpfiles --create
-sudo systemctl daemon-reload && sudo systemctl enable --now nlink-labd.socket
-```
+`install.sh` puts `nlink-lab` and `nlink-labd` in `/usr/local/bin`, the
+completions where bash, zsh and fish look for them, and the daemon's
+systemd units, sysusers and tmpfiles under `/etc` (creating the
+`nlink-lab` groups) — what `just install-daemon` does from a checkout.
+`--no-daemon` installs the CLI alone. That gives you a plain install
+you run under `sudo`; to run it as an unprivileged user instead, see
+[Privileges](#privileges).
 
 ## Option B — from source
 
@@ -100,11 +98,27 @@ A man page is a separate step (it needs `help2man`):
 just man            # installs /usr/local/share/man/man1/nlink-lab.1
 ```
 
-## Option C — the desktop app (flatpak)
+## Option C — the desktop app
 
-`nlink-lab-gui` is **experimental** — see
-[GUI.md](GUI.md) for what it can and cannot do. It ships only as a
-flatpak bundle attached to each release:
+`nlink-lab-gui` is **experimental** — see [GUI.md](GUI.md) for what it
+does. It designs and draws topologies on its own; for running labs it
+talks to the daemon (Option A or B, then `systemctl enable --now
+nlink-labd.socket`, and join the `nlink-lab` group to change labs or
+`nlink-lab-viewer` to watch them). Each release attaches it two ways.
+
+As a plain binary, `nlink-lab-gui-<version>-x86_64-linux-gnu.tar.gz`,
+with its desktop entry, icon and the `text/x-nll` media type:
+
+```bash
+VER=0.13.0
+curl -LO https://git.marcpardo.eu/marcpardo/nlink-lab/releases/download/$VER/nlink-lab-gui-$VER-x86_64-linux-gnu.tar.gz
+tar xzf nlink-lab-gui-$VER-x86_64-linux-gnu.tar.gz
+nlink-lab-gui-$VER-x86_64-linux-gnu/install.sh      # for you, under ~/.local
+# sudo …/install.sh --prefix /usr/local             # for everyone
+```
+
+As a flatpak bundle, confined (see
+[GUI.md](GUI.md#flatpak-sandbox-limits) for what it can reach):
 
 ```bash
 sudo apt install flatpak     # or dnf/pacman equivalent
@@ -291,14 +305,16 @@ breaking changes always carry a Migration note.
 
 ```bash
 sudo nlink-lab destroy --all          # tear down running labs first
-just uninstall                        # the CLI, the daemon and its units
+sudo ./install.sh --uninstall         # from the release tarball, or: just uninstall
 sudo rm -f /usr/local/share/man/man1/nlink-lab.1
 sudo rm -rf /var/lib/nlink-lab        # state, logs, snapshots, events
+./install.sh --uninstall              # from the app's tarball
 flatpak uninstall --user com.github.p13marc.NlinkLab
 ```
 
-`just uninstall` removes the binaries and the units; the man page and
-the state directory are the two lines after it.
+`install.sh --uninstall` (or `just uninstall`) removes the binaries,
+the completions and the units; the man page and the state directory
+are the lines after it.
 
 ---
 

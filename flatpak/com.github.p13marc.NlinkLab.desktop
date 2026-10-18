@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=nlink-lab
-Comment=Draw and inspect nlink-lab network topologies
+Comment=Design, run and change nlink-lab network labs
 Exec=nlink-lab-gui %F
 Icon=com.github.p13marc.NlinkLab
 Terminal=false

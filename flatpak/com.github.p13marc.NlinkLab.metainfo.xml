@@ -4,14 +4,20 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT OR Apache-2.0</project_license>
   <name>nlink-lab</name>
-  <summary>Draw and inspect nlink-lab network topologies</summary>
+  <summary>Design, run and change nlink-lab network labs</summary>
   <description>
     <p>
-      The desktop app of nlink-lab: it draws a lab's topology from its
-      file (namespaces, containers, links, bridges, tunnels, sites), keeps
-      up as the file changes, shows what a node, a link or an interface
-      declares, lists the topology's problems, and exports the drawing as
-      SVG or PNG and the topology as Graphviz DOT or Mermaid.
+      The desktop app of nlink-lab. It draws a topology from its NLL file
+      (namespaces, containers, links, bridges, tunnels, sites) and edits
+      it, with its problems where they are; it deploys and applies it
+      through the nlink-lab daemon, with the plan or the changes first and
+      the progress as it goes.
+    </p>
+    <p>
+      A running lab shows its traffic live on the drawing. Impair or cut a
+      link, restore a snapshot, start and stop processes, run a command,
+      follow a log, capture packets into a pcap file, open a shell on a
+      node, and run the lab's scenarios, benchmarks and assertions.
     </p>
   </description>
   <launchable type="desktop-id">com.github.p13marc.NlinkLab.desktop</launchable>
@@ -25,6 +31,8 @@
   </developer>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.13.0" date="2026-10-02"/>
+    <release version="0.12.0" date="2026-09-18"/>
     <release version="0.11.1" date="2026-09-17"/>
     <release version="0.11.0" date="2026-09-15"/>
     <release version="0.10.2" date="2026-09-14"/>

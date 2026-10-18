@@ -1520,17 +1520,20 @@ Table output shows per-interface rx/tx rates, packet counts, errors, and drops.
 
 ### Desktop app
 
-`nlink-lab-gui` is an experimental iced app that draws a topology from
-its file and keeps up as you edit it: every kind of node, networks,
-tunnels and sites, layouts you can rearrange, an inspector for what a
-node, link or interface declares, the topology's problems, and SVG,
-PNG, DOT and Mermaid exports.
+`nlink-lab-gui` is an experimental iced app. It draws a topology from
+its file and edits it — every kind of node, networks, tunnels and
+sites, layouts you can rearrange, an inspector for what a node, link or
+interface declares, the topology's problems where they are in the
+source, and SVG, PNG, DOT and Mermaid exports. Through the daemon it
+deploys and applies a design, shows running labs with their traffic,
+and changes them: impairments, partitions, snapshots, processes,
+commands, logs, captures, shells, scenarios and benchmarks.
 
 ```bash
 nlink-lab-gui topology.nll --set wan_delay=80ms
 ```
 
-It ships as a flatpak bundle —
-[INSTALL.md](INSTALL.md#option-c--the-desktop-app-flatpak) — and
+It ships as a plain binary and as a flatpak bundle —
+[INSTALL.md](INSTALL.md#option-c--the-desktop-app) — and
 [GUI.md](GUI.md) covers what it does, its keys, the sandbox limits and
 what "experimental" means here.

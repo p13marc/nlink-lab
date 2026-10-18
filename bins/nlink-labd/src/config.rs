@@ -40,11 +40,28 @@ pub struct ZenohConfig {
     pub enabled: bool,
     /// `router` (clients connect to the daemon), `peer` or `client`.
     pub mode: String,
-    /// Endpoints it listens on. Only this host's: a unix socket, or
-    /// loopback.
+    /// Endpoints it listens on: this host's (a unix socket, loopback),
+    /// or with `tls`, `tls/…` and `quic/…` anywhere.
     pub listen: Vec<String>,
-    /// Endpoints it connects to. Only this host's.
+    /// Endpoints it connects to, likewise.
     pub connect: Vec<String>,
+    /// Mutual TLS: what lets the daemon listen off this host.
+    pub tls: Option<TlsConfig>,
+    /// The common names of the client certificates that operate through
+    /// Zenoh (the operator key: changes, commands).
+    pub operators: Vec<String>,
+    /// Those that read (the telemetry and the viewer key).
+    pub viewers: Vec<String>,
+}
+
+/// The daemon's TLS material (`[zenoh.tls]`), PEM files.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TlsConfig {
+    /// The CA that signs the clients' certificates (and the daemon's).
+    pub ca: PathBuf,
+    pub cert: PathBuf,
+    pub key: PathBuf,
 }
 
 /// The daemon's socket for Zenoh: its group is the viewer group.
@@ -57,6 +74,9 @@ impl Default for ZenohConfig {
             mode: "router".into(),
             listen: vec![format!("unixsock-stream/{ZENOH_SOCKET}")],
             connect: Vec::new(),
+            tls: None,
+            operators: Vec::new(),
+            viewers: Vec::new(),
         }
     }
 }
@@ -125,13 +145,21 @@ impl Config {
             ));
         }
         for endpoint in config.zenoh.listen.iter().chain(&config.zenoh.connect) {
-            if !is_local_endpoint(endpoint) {
+            let secured = config.zenoh.tls.is_some()
+                && (endpoint.starts_with("tls/") || endpoint.starts_with("quic/"));
+            if !is_local_endpoint(endpoint) && !secured {
                 return Err(format!(
-                    "zenoh endpoint {endpoint:?} is not this host's: only a unix socket \
-                     (unixsock-stream/PATH) or loopback, until a remote one can require \
-                     mutual TLS"
+                    "zenoh endpoint {endpoint:?} is not this host's: off this host, the \
+                     daemon only listens on tls/ or quic/ with mutual TLS ([zenoh.tls])"
                 ));
             }
+        }
+        if config.zenoh.tls.is_none()
+            && !(config.zenoh.operators.is_empty() && config.zenoh.viewers.is_empty())
+        {
+            return Err(
+                "zenoh.operators and zenoh.viewers name certificates: they need [zenoh.tls]".into(),
+            );
         }
         Ok(config)
     }
@@ -207,6 +235,13 @@ mod tests {
         assert!(!is_local_endpoint("serial//dev/ttyS0"));
         let err = Config::parse("[zenoh]\nlisten = [\"tcp/0.0.0.0:7447\"]\n").unwrap_err();
         assert!(err.contains("not this host's"), "{err}");
+        // off this host: mutual TLS, over tls/ or quic/
+        let tls = "[zenoh]\nlisten = [\"tls/0.0.0.0:7447\"]\noperators = [\"ops\"]\n\
+                   [zenoh.tls]\nca = \"/ca.pem\"\ncert = \"/d.pem\"\nkey = \"/d.key\"\n";
+        let c = Config::parse(tls).unwrap();
+        assert_eq!(c.zenoh.operators, vec!["ops".to_string()]);
+        assert!(Config::parse(&tls.replace("tls/0.0.0.0", "tcp/0.0.0.0")).is_err());
+        assert!(Config::parse("[zenoh]\nviewers = [\"v\"]\n").is_err());
         let c = Config::parse("[zenoh]\nenabled = false\n[http]\nlisten = \"127.0.0.1:9464\"\n")
             .unwrap();
         assert!(!c.zenoh.enabled);

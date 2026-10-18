@@ -255,8 +255,16 @@ audit_log = "/var/lib/nlink-lab/audit.ndjson"
 [zenoh]
 enabled = true
 mode = "router"
-# this host's only: a unix socket (the viewer group's) or loopback
+# this host's (a unix socket, the viewer group's; loopback), or with
+# [zenoh.tls] tls/ and quic/ endpoints anywhere, mutual TLS required
 listen = ["unixsock-stream//run/nlink-lab/zenoh/zenoh.sock"]
+operators = []               # client certificates' common names
+viewers = []
+
+# [zenoh.tls]
+# ca = "/etc/nlink-lab/tls/ca.pem"
+# cert = "/etc/nlink-lab/tls/daemon.pem"
+# key = "/etc/nlink-lab/tls/daemon.key"
 
 [http]
 listen = "127.0.0.1:9464"    # /metrics and /api/v2; off without it

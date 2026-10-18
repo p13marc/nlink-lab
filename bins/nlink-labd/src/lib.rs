@@ -79,10 +79,9 @@ pub async fn serve(
     if config.zenoh.enabled {
         #[cfg(feature = "zenoh")]
         {
-            let (zconfig, hub, stop) = (config.zenoh.clone(), hub.clone(), shutdown.clone());
-            let viewer = shared.groups.viewer;
+            let (zconfig, shared, stop) = (config.zenoh.clone(), shared.clone(), shutdown.clone());
             tokio::spawn(async move {
-                if let Err(e) = zenoh::run(zconfig, hub, viewer, stop).await {
+                if let Err(e) = zenoh::run(zconfig, shared, stop).await {
                     tracing::warn!("zenoh telemetry: {e}");
                 }
             });

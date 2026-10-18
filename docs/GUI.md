@@ -47,12 +47,14 @@ exists:
 | `metrics/<node>/<iface>` | one interface |
 | `events`, `lifecycle` | interfaces and processes; the lifecycle event log |
 
-It stays on this host: by default it listens on the unix socket
+By default it listens on the unix socket
 `/run/nlink-lab/zenoh/zenoh.sock`, open to the `nlink-lab-viewer`
 group only, with multicast scouting off. `[zenoh]` in
-`/etc/nlink-lab/daemon.toml` changes the endpoints (a unix socket or
-loopback; one off this host is refused until it can require mutual
-TLS) or turns it off (`enabled = false`).
+`/etc/nlink-lab/daemon.toml` changes the endpoints or turns it off
+(`enabled = false`); off this host it listens only with mutual TLS,
+behind an access control that names which certificates read and which
+operate (see [API.md](API.md#zenoh)). The daemon's API answers over
+Zenoh too.
 
 ### HTTP
 

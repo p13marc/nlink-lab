@@ -13,7 +13,8 @@ transports with the same messages:
 - a **unix socket**, `/run/nlink-lab/api/api.sock`, with the framing
   below. Anyone may connect; what a connection may do is decided by the
   caller's uid (`SO_PEERCRED`) and groups (`SO_PEERGROUPS`);
-- **Zenoh**, for remote clients and for tools that already speak it.
+- **Zenoh**, for remote clients and for tools that already speak it:
+  the requests and their answers, not the sessions (see below).
 
 The JSON schemas are generated from the types:
 [`api-client.v1`](json-schemas/api-client.v1.schema.json) (what a client
@@ -225,6 +226,39 @@ Over ssh, `nlink-labd dial-stdio` relays its stdin and stdout to the
 socket: `ssh HOST nlink-labd dial-stdio` is a connection to that host's
 daemon, as the ssh user.
 
+## Zenoh
+
+The daemon answers requests on two queryables, one per role:
+`nlink-lab/@rpc/<host>/viewer` and `nlink-lab/@rpc/<host>/operator`. A
+query carries a `Request` as JSON; its replies are the call's messages
+(`event`s, then its `end`), the same JSON as on the unix socket. A
+request needs the key of its role. The sessions — `exec`, `shell`,
+`logs`, `capture`, `export`, `subscribe` — stream bytes or take input:
+over Zenoh they end with `unsupported`, and a subscriber reads the
+telemetry topics (`nlink-lab/<lab>/…`) instead. A job goes on when its
+querier gives up; `cancel_op` stops it.
+
+Without TLS the daemon listens on this host only (its unix socket,
+loopback) and serves only the viewer key. With `[zenoh.tls]` it may also
+listen on `tls/` and `quic/` endpoints anywhere, with mutual TLS: every
+client presents a certificate the CA signed. Its access control, which
+it generates (deny by default), gives the clients of its unix socket,
+and the certificates whose common names `viewers` lists, the telemetry
+and the viewer key; the certificates `operators` lists, the operator key
+too. A certificate in neither list gets nothing.
+
+```toml
+[zenoh]
+listen = ["unixsock-stream//run/nlink-lab/zenoh/zenoh.sock", "tls/0.0.0.0:7447"]
+operators = ["alice", "ci"]   # client certificates' common names
+viewers = ["grafana"]
+
+[zenoh.tls]
+ca = "/etc/nlink-lab/tls/ca.pem"
+cert = "/etc/nlink-lab/tls/daemon.pem"
+key = "/etc/nlink-lab/tls/daemon.key"
+```
+
 ## The Rust client
 
 `nlink-lab-client` speaks the unix-socket transport (and, through
@@ -249,6 +283,10 @@ while let Some(event) = call.next().await {
 }
 ```
 
-An endpoint is `unix:PATH` (or an absolute path), `ssh://[USER@]HOST[:PORT]`
-or `cmd:COMMAND`.
+An endpoint is `unix:PATH` (or an absolute path), `ssh://[USER@]HOST[:PORT]`,
+`cmd:COMMAND`, or — with the client's `zenoh` feature — `zenoh:ENDPOINT`
+(`zenoh:tls/lab1:7447`, its certificate from `NLINK_LAB_TLS_CA`,
+`NLINK_LAB_TLS_CERT` and `NLINK_LAB_TLS_KEY`). Over Zenoh the client is
+an operator when the operator key answers it, and a call takes no
+input: `cancel` cancels its job, `detach` stops following it.
 

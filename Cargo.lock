@@ -3558,6 +3558,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "tokio",
+ "zenoh",
 ]
 
 [[package]]
@@ -3604,6 +3605,7 @@ dependencies = [
  "nlink-lab",
  "nlink-lab-client",
  "nlink-lab-shared",
+ "rcgen",
  "serde",
  "serde_json",
  "tempfile",

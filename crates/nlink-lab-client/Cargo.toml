@@ -10,11 +10,16 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[features]
+# `Endpoint::Zenoh`: the daemon's API over Zenoh
+zenoh = ["dep:zenoh"]
+
 [dependencies]
 nlink-lab-shared = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+zenoh = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = "3"

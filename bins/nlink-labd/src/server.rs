@@ -92,6 +92,35 @@ pub(crate) struct CallCtx {
 }
 
 impl CallCtx {
+    /// A call that comes from no connection (a Zenoh query): its frames go
+    /// to the returned receiver, and no input ever comes.
+    #[cfg_attr(not(feature = "zenoh"), allow(dead_code))]
+    pub fn standalone(
+        shared: Arc<Shared>,
+        peer: Arc<Peer>,
+        role: Role,
+    ) -> (Self, mpsc::Receiver<Frame>) {
+        let (out, frames) = mpsc::channel(256);
+        let (_, input) = mpsc::unbounded_channel();
+        let ctx = Self {
+            id: 1,
+            out,
+            cancel: CancelToken::new(),
+            detached: CancelToken::new(),
+            input,
+            peer,
+            role,
+            shared,
+        };
+        (ctx, frames)
+    }
+
+    /// End the call with `result`.
+    #[cfg_attr(not(feature = "zenoh"), allow(dead_code))]
+    pub async fn end(&self, result: Result<Response, ApiError>) {
+        let _ = self.out.send(end_frame(self.id, result)).await;
+    }
+
     /// Stream an item; `false` once the client is gone.
     pub async fn item(&self, item: StreamItem) -> bool {
         self.out

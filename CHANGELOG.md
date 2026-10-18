@@ -675,6 +675,15 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **The daemon's API over Zenoh** (#271): requests on
+  `nlink-lab/@rpc/<host>/viewer` and `…/operator`, the call's messages
+  as replies (sessions stay on the unix socket and ssh). With
+  `[zenoh.tls]` the daemon may listen off this host on `tls/`/`quic/`,
+  mutual TLS required, behind an access control it generates: the
+  unix socket's clients and `viewers` certificates read, `operators`
+  certificates operate, anyone else gets nothing. The client's
+  `Endpoint::Zenoh` (`zenoh:ENDPOINT`, feature `zenoh`) bridges it to
+  the same `Client` and `Call`.
 - **The daemon's telemetry** (#270): every lab's Zenoh topics
   (`topology`, `health` with a liveliness token, `metrics`, `events`,
   `lifecycle`), from a collector that runs while the lab exists; HTTP

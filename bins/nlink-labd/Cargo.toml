@@ -39,6 +39,7 @@ time = { workspace = true, features = ["parsing"] }
 zenoh = { workspace = true, optional = true }
 
 [dev-dependencies]
-nlink-lab-client = { workspace = true }
+nlink-lab-client = { workspace = true, features = ["zenoh"] }
+rcgen = "0.14"
 tempfile = "3"
 zenoh = { workspace = true }

@@ -22,10 +22,12 @@
 mod call;
 mod conn;
 mod endpoint;
+#[cfg(feature = "zenoh")]
+mod zenoh_bridge;
 
 pub use call::{Call, CallEvent};
 pub use conn::{Client, Welcome};
-pub use endpoint::{DEFAULT_SOCKET, Endpoint};
+pub use endpoint::{DEFAULT_SOCKET, Endpoint, TlsFiles};
 
 use nlink_lab_shared::api::{ApiError, FrameError};
 

@@ -144,7 +144,10 @@ bins/nlink-labd/src/           # the host daemon: config (/etc/nlink-lab/daemon.
                                #   authz (SO_PEERCRED/SO_PEERGROUPS -> Operator/Viewer),
                                #   server (handshake, per-call tasks, cancel), calls
                                #   (dispatch), hub (state-root scan, events tail,
-                               #   subscriptions, per-lab metrics threads), jobs (one
+                               #   subscriptions, per-lab metrics threads; collect_all for
+                               #   telemetry), zenoh (every lab's topics on the old layout,
+                               #   unixsock 0660 viewer group, scouting off; feature
+                               #   `zenoh`), http (/metrics, /api/v2), jobs (one
                                #   queue per lab on its own thread, detachable jobs:
                                #   attach_op/list_ops/cancel_op), exec (pipes or a pty,
                                #   shell), sessions (logs, capture, wait_for, export),

@@ -7,15 +7,12 @@ deploy or test a lab.
 
 | Surface | What it is | Status |
 |---------|------------|--------|
-| `nlink-labd` | The host daemon: every lab behind one authenticated API | supported |
+| `nlink-labd` | The host daemon: every lab behind one authenticated API, its telemetry over Zenoh, HTTP | supported |
 | `nlink-lab top` | Terminal dashboard (ratatui) over a running lab | supported |
-| `nlink-lab-backend --http` | OpenMetrics + JSON HTTP endpoints for one lab | supported |
 | `nlink-lab-topoviewer` | Desktop topology viewer (iced) | **experimental** |
 
-`top` without root reads the daemon's metrics, and the viewer runs its
-commands through it. The viewer's live topology and metrics still come
-from the per-lab Zenoh backend, as does `--http` for Prometheus and
-friends, until the daemon serves Zenoh and HTTP itself.
+`top` without root reads the daemon's metrics, and the viewer follows
+its Zenoh telemetry and runs commands through it.
 
 ---
 
@@ -37,34 +34,33 @@ client runs `ssh HOST nlink-labd dial-stdio` (the `ssh://HOST`
 endpoint) and is the ssh user there. Every call an operator makes is
 recorded in `/var/lib/nlink-lab/audit.ndjson`.
 
-## The Zenoh backend
+### Telemetry over Zenoh
 
-The viewer's live mode follows a lab's Zenoh topics, which
-`nlink-lab-backend`, a per-lab process, publishes. It attaches to a
-deployed lab and needs root:
-
-```bash
-sudo nlink-lab deploy examples/simple.nll
-sudo nlink-lab-backend simple --interval 2
-```
-
-It publishes on `nlink-lab/<lab>/…`:
+The daemon publishes every lab on `nlink-lab/<lab>/…`, while the lab
+exists:
 
 | Topic | Carries |
 |-------|---------|
-| `topology` | the resolved topology, without its secrets (also a queryable, so late subscribers get it) |
-| `health` | lab health summary — this is what discovery lists |
-| `metrics/snapshot` | all per-node, per-interface counters in one message |
+| `topology` | the resolved topology, without its secrets (also answered to a query, so a late subscriber gets it) |
+| `health` | a lab summary every 10 s, and a liveliness token — what discovery lists |
+| `metrics/snapshot` | all per-node, per-interface counters in one message, every interval |
 | `metrics/<node>/<iface>` | one interface |
-| `events`, `lifecycle` | the lifecycle event log |
-| `rpc/status` | a lab summary, on request |
+| `events`, `lifecycle` | interfaces and processes; the lifecycle event log |
 
-It runs nothing and changes nothing: its `rpc/exec` and
-`rpc/impairment`, which anyone on the network could call, are gone;
-the daemon does both, for callers it knows. Add `--http
-127.0.0.1:9464` for `/metrics` (OpenMetrics) plus
-`/api/v1/{snapshot,health,topology}` if you would rather scrape than
-subscribe.
+It stays on this host: by default it listens on the unix socket
+`/run/nlink-lab/zenoh/zenoh.sock`, open to the `nlink-lab-viewer`
+group only, with multicast scouting off. `[zenoh]` in
+`/etc/nlink-lab/daemon.toml` changes the endpoints (a unix socket or
+loopback; one off this host is refused until it can require mutual
+TLS) or turns it off (`enabled = false`).
+
+### HTTP
+
+With `[http] listen = "127.0.0.1:9464"` the daemon serves `/metrics`
+(OpenMetrics for every lab, labelled `lab`, `node`, `iface`) for
+Prometheus and friends, and `/api/v2/labs`, `/api/v2/labs/<lab>` and
+its `topology`, `metrics`, `events` and `events/stream` (SSE) as JSON.
+It authenticates no one: everything it serves is what a viewer reads.
 
 ---
 
@@ -106,13 +102,9 @@ nlink-lab-topoviewer                    # discovery — list labs on the bus
 ```
 
 Static mode needs nothing else running. Live and discovery mode
-need the Zenoh backend (above); on one host zenoh peer scouting finds it
-with no flags. Across machines:
-
-```bash
-sudo nlink-lab-backend simple --zenoh-listen tcp/0.0.0.0:7447
-nlink-lab-topoviewer --lab simple --zenoh-connect tcp/<host>:7447
-```
+follow the daemon's telemetry (above): the viewer connects to its
+socket, `/run/nlink-lab/zenoh/zenoh.sock`, which needs the
+`nlink-lab-viewer` group. `--zenoh-connect` names another endpoint.
 
 A malformed `--zenoh-connect` is reported and exits non-zero. It
 is ignored, with a warning, when you pass a topology file without
@@ -138,8 +130,9 @@ The bundle is confined, which surprises people:
   A `.nll` anywhere else will not open — copy it there, or run a
   locally-built binary instead.
 - PNG export goes to `~/Pictures` (`--filesystem=xdg-pictures:create`).
-- It has network access, Wayland/X11 and `/dev/dri` for GPU
-  acceleration, and nothing else.
+- It has the daemon's sockets (`/run/nlink-lab/api` and
+  `/run/nlink-lab/zenoh`), network access, Wayland/X11 and `/dev/dri`
+  for GPU acceleration, and nothing else.
 - It registers the `text/x-nll` media type, so a file manager can
   hand it a `.nll` directly.
 
@@ -147,7 +140,7 @@ The bundle is confined, which surprises people:
 
 - No integration tests. Unit coverage is limited to layout, zenoh
   config parsing and the PNG-directory choice.
-- The topology is rendered from what the backend publishes; it is
+- The topology is rendered from what the daemon publishes; it is
   a viewer, not an editor — nothing you do in it changes the lab
   except the exec box.
 - It is the only artifact with no plain-binary release; you get a

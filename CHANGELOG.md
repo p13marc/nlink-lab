@@ -79,11 +79,27 @@ under both (#233). Its waves land one by one below.
   `schema_version`. `snapshot ls --json` is `{schema_version, lab,
   snapshots}`. `destroy` without a name no longer picks the only lab:
   name it, or `-L`/`NLINK_LAB`/`use`.
+- **`nlink-lab-backend` is gone** (#270): `nlink-labd` publishes every
+  lab's telemetry on the same Zenoh topics and serves the HTTP.
+
+  | Was | Now |
+  |---|---|
+  | `nlink-lab-backend LAB` | nothing to run: the daemon publishes every lab while it exists |
+  | `--zenoh-listen`/`--zenoh-connect`/`--zenoh-mode` | `[zenoh] listen`/`connect`/`mode` in `/etc/nlink-lab/daemon.toml` (this host only) |
+  | `--http ADDR`, `/api/v1/{snapshot,health,topology,events}` | `[http] listen = "ADDR"`, `/api/v2/labs/<lab>/{metrics,topology,events}` and `/api/v2/labs/<lab>` |
+  | `nlink_lab_backend_uptime_seconds`, `nlink_lab_namespaces` | `nlink_lab_uptime_seconds` (since the lab's deploy); `nlink_lab_nodes` − `nlink_lab_containers` |
+
+  Zenoh telemetry listens on the unix socket
+  `/run/nlink-lab/zenoh/zenoh.sock` (the `nlink-lab-viewer` group's) with
+  multicast scouting off: a viewer finds it there, not by peer
+  scouting, and the viewer connects to it by default. The `rpc/status`
+  queryable and `nlink-lab-shared`'s `messages::StatusResponse` and
+  `topics::rpc_status` are gone.
 - **The host daemon replaces `nlink-lab daemon`** (#260):
 
   | Was | Now |
   |---|---|
-  | `nlink-lab daemon LAB`, `deploy --daemon` | `nlink-labd`, one daemon for every lab (`just install-daemon`, then `systemctl enable --now nlink-labd.socket`); one lab's Zenoh and HTTP telemetry: `nlink-lab-backend LAB` |
+  | `nlink-lab daemon LAB`, `deploy --daemon` | `nlink-labd`, one daemon for every lab (`just install-daemon`, then `systemctl enable --now nlink-labd.socket`), its telemetry included (#270) |
   | `top --zenoh`, `top --zenoh-connect` | `top` without root, or `top --daemon` (`NLINK_LAB_DAEMON=ssh://HOST` for another host) |
   | `just install` (SUID root) | `just install` (0755, run with sudo), or `just install-caps` |
 
@@ -659,6 +675,14 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **The daemon's telemetry** (#270): every lab's Zenoh topics
+  (`topology`, `health` with a liveliness token, `metrics`, `events`,
+  `lifecycle`), from a collector that runs while the lab exists; HTTP
+  `/metrics` (OpenMetrics for every lab: each family once, every lab's
+  samples) and `/api/v2` (labs, a lab's status, topology, metrics,
+  events, an SSE stream). The Zenoh socket's directory is closed to
+  everyone but the viewer group before Zenoh binds. The daemon builds
+  without Zenoh (`--no-default-features`).
 - **The daemon's sessions** (#267): terminals (`exec` with `tty`, and
   `shell`, with `resize` and signals to the process group), a tracked
   process's `logs` (tail, then follow), `capture` streaming a pcap,

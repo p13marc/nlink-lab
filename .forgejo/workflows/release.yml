@@ -76,13 +76,13 @@ jobs:
           name="${GITHUB_REPOSITORY#*/}"
           git archive --format=tar.gz --prefix="${name}-${RELEASE_TAG}/" \
             -o "dist/release/${name}-${RELEASE_TAG}.tar.gz" "${RELEASE_TAG}"
-          # the product itself: the CLI, the daemon (with its systemd
-          # units) and the backend as a plain x86_64 gnu binary tarball,
-          # with generated completions
-          cargo build --release -p nlink-lab-cli -p nlink-labd -p nlink-lab-backend
+          # the product itself: the CLI and the daemon (with its systemd
+          # units) as a plain x86_64 gnu binary tarball, with generated
+          # completions
+          cargo build --release -p nlink-lab-cli -p nlink-labd
           stage="dist/stage/nlink-lab-${RELEASE_TAG}-x86_64-linux-gnu"
           mkdir -p "$stage/completions"
-          cp target/release/nlink-lab target/release/nlink-labd target/release/nlink-lab-backend "$stage/"
+          cp target/release/nlink-lab target/release/nlink-labd "$stage/"
           cp -r dist/systemd dist/sysusers.d dist/tmpfiles.d "$stage/"
           for sh in bash zsh fish; do target/release/nlink-lab completions "$sh" > "$stage/completions/nlink-lab.$sh"; done
           cp README.md LICENSE-MIT LICENSE-APACHE CHANGELOG.md "$stage/"

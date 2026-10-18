@@ -6,7 +6,6 @@ members = [
     "crates/nlink-lab-shared",
     "crates/nlink-lab-client",
     "bins/lab",
-    "bins/nlink-lab-backend",
     "bins/nlink-labd",
     "bins/topoviewer",
 ]

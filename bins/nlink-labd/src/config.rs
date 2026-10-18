@@ -27,6 +27,45 @@ pub struct Config {
     /// Where calls of operators are recorded (default
     /// `<state root>/audit.ndjson`).
     pub audit_log: Option<PathBuf>,
+    /// Every lab's telemetry over Zenoh.
+    pub zenoh: ZenohConfig,
+    /// Read-only HTTP: OpenMetrics and JSON.
+    pub http: HttpConfig,
+}
+
+/// Where the daemon publishes the labs' telemetry over Zenoh (`[zenoh]`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ZenohConfig {
+    pub enabled: bool,
+    /// `router` (clients connect to the daemon), `peer` or `client`.
+    pub mode: String,
+    /// Endpoints it listens on. Only this host's: a unix socket, or
+    /// loopback.
+    pub listen: Vec<String>,
+    /// Endpoints it connects to. Only this host's.
+    pub connect: Vec<String>,
+}
+
+/// The daemon's socket for Zenoh: its group is the viewer group.
+pub const ZENOH_SOCKET: &str = "/run/nlink-lab/zenoh/zenoh.sock";
+
+impl Default for ZenohConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            mode: "router".into(),
+            listen: vec![format!("unixsock-stream/{ZENOH_SOCKET}")],
+            connect: Vec::new(),
+        }
+    }
+}
+
+/// Where the daemon serves HTTP (`[http]`); nowhere without `listen`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct HttpConfig {
+    pub listen: Option<std::net::SocketAddr>,
 }
 
 impl Default for Config {
@@ -38,6 +77,8 @@ impl Default for Config {
             rescan_ms: 1000,
             metrics_interval_ms: 2000,
             audit_log: None,
+            zenoh: ZenohConfig::default(),
+            http: HttpConfig::default(),
         }
     }
 }
@@ -77,6 +118,21 @@ impl Config {
         if config.rescan_ms == 0 || config.metrics_interval_ms == 0 {
             return Err("rescan_ms and metrics_interval_ms must be greater than zero".into());
         }
+        if !["router", "peer", "client"].contains(&config.zenoh.mode.as_str()) {
+            return Err(format!(
+                "zenoh.mode {:?} is none of router, peer, client",
+                config.zenoh.mode
+            ));
+        }
+        for endpoint in config.zenoh.listen.iter().chain(&config.zenoh.connect) {
+            if !is_local_endpoint(endpoint) {
+                return Err(format!(
+                    "zenoh endpoint {endpoint:?} is not this host's: only a unix socket \
+                     (unixsock-stream/PATH) or loopback, until a remote one can require \
+                     mutual TLS"
+                ));
+            }
+        }
         Ok(config)
     }
 
@@ -94,6 +150,30 @@ impl Config {
             .clone()
             .unwrap_or_else(|| nlink_lab::state::root_dir().join("audit.ndjson"))
     }
+}
+
+/// Whether a Zenoh endpoint stays on this host: a unix socket, or a
+/// loopback address.
+pub fn is_local_endpoint(endpoint: &str) -> bool {
+    let Some((proto, rest)) = endpoint.split_once('/') else {
+        return false;
+    };
+    if proto == "unixsock-stream" {
+        return true;
+    }
+    if !["tcp", "udp", "quic", "tls", "ws"].contains(&proto) {
+        return false;
+    }
+    // `HOST:PORT`, maybe followed by `#…` or `?…` options
+    let addr = rest.split(['#', '?']).next().unwrap_or("");
+    let host = match addr.rsplit_once(':') {
+        Some((host, _)) => host.trim_start_matches('[').trim_end_matches(']'),
+        None => return false,
+    };
+    host == "localhost"
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
 }
 
 #[cfg(test)]
@@ -114,6 +194,24 @@ mod tests {
         let err = Config::parse("sokcet = \"/tmp/x.sock\"").unwrap_err();
         assert!(err.contains("unknown field"), "{err}");
         assert!(Config::parse("rescan_ms = 0").is_err());
+    }
+
+    #[test]
+    fn zenoh_stays_on_this_host() {
+        assert!(is_local_endpoint("unixsock-stream//run/x.sock"));
+        assert!(is_local_endpoint("tcp/127.0.0.1:7447"));
+        assert!(is_local_endpoint("tcp/[::1]:7447"));
+        assert!(is_local_endpoint("tcp/localhost:7447"));
+        assert!(!is_local_endpoint("tcp/0.0.0.0:7447"));
+        assert!(!is_local_endpoint("tcp/192.168.1.2:7447"));
+        assert!(!is_local_endpoint("serial//dev/ttyS0"));
+        let err = Config::parse("[zenoh]\nlisten = [\"tcp/0.0.0.0:7447\"]\n").unwrap_err();
+        assert!(err.contains("not this host's"), "{err}");
+        let c = Config::parse("[zenoh]\nenabled = false\n[http]\nlisten = \"127.0.0.1:9464\"\n")
+            .unwrap();
+        assert!(!c.zenoh.enabled);
+        assert_eq!(c.http.listen, Some("127.0.0.1:9464".parse().unwrap()));
+        assert!(Config::parse("[zenoh]\nmode = \"bogus\"\n").is_err());
     }
 
     #[test]

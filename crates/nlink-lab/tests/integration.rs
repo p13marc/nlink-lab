@@ -448,12 +448,20 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
             .map(|b| String::from_utf8_lossy(&b).replace('\0', " "))
             .unwrap_or_default()
     };
-    let strays: Vec<u32> = lab
-        .node_pids("a")
-        .unwrap()
-        .into_iter()
-        .filter(|&p| cmdline(p).starts_with("sleep 730"))
-        .collect();
+    // the subshell may not have exec'd its sleep yet
+    let mut strays: Vec<u32> = Vec::new();
+    for _ in 0..40 {
+        strays = lab
+            .node_pids("a")
+            .unwrap()
+            .into_iter()
+            .filter(|&p| cmdline(p).starts_with("sleep 730"))
+            .collect();
+        if strays.len() == 2 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
     assert_eq!(strays.len(), 2, "both sleeps run in a: {strays:?}");
     assert!(lab.process_status().is_empty(), "neither is tracked");
 

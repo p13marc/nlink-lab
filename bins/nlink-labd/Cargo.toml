@@ -18,6 +18,11 @@ path = "src/lib.rs"
 name = "nlink-labd"
 path = "src/main.rs"
 
+[features]
+default = ["zenoh"]
+# every lab's telemetry over Zenoh (`[zenoh]` in daemon.toml)
+zenoh = ["dep:zenoh"]
+
 [dependencies]
 nlink-lab = { workspace = true }
 nlink-lab-shared = { workspace = true }
@@ -30,7 +35,10 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 libc = { workspace = true }
 thiserror = { workspace = true }
+time = { workspace = true, features = ["parsing"] }
+zenoh = { workspace = true, optional = true }
 
 [dev-dependencies]
 nlink-lab-client = { workspace = true }
 tempfile = "3"
+zenoh = { workspace = true }

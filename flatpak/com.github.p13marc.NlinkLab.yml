@@ -13,8 +13,12 @@ finish-args:
   - --share=ipc
   # GPU acceleration for Iced/wgpu
   - --device=dri
-  # Network access to reach the nlink-lab backend
+  # Network access, for a --zenoh-connect elsewhere
   - --share=network
+  # The nlink-lab daemon's sockets: its API (commands) and its Zenoh
+  # telemetry (the live view)
+  - --filesystem=/run/nlink-lab/api
+  - --filesystem=/run/nlink-lab/zenoh
   # Access to config directory
   - --filesystem=xdg-config/nlink-lab:create
   # Read a `.nll` passed as the positional argument (static mode): with no

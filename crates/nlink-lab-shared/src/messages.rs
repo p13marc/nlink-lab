@@ -173,35 +173,6 @@ versioned_default!(ExecResponse {
     stderr,
 });
 
-/// Lab status response. The status RPC takes no request payload.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StatusResponse {
-    /// Wire-format version of the sender (`0` = pre-versioning backend).
-    #[serde(default)]
-    pub wire_version: u32,
-    #[serde(default)]
-    pub lab_name: String,
-    #[serde(default)]
-    pub node_count: usize,
-    #[serde(default)]
-    pub namespace_count: usize,
-    #[serde(default)]
-    pub container_count: usize,
-    #[serde(default)]
-    pub uptime_secs: u64,
-    #[serde(default)]
-    pub nodes: Vec<String>,
-}
-
-versioned_default!(StatusResponse {
-    lab_name,
-    node_count,
-    namespace_count,
-    container_count,
-    uptime_secs,
-    nodes,
-});
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,9 +193,6 @@ mod tests {
         let e: ExecResponse = serde_json::from_str("{}").unwrap();
         assert_eq!(e.wire_version, 0);
         assert!(!e.success);
-
-        let s: StatusResponse = serde_json::from_str("{}").unwrap();
-        assert!(s.nodes.is_empty());
     }
 
     /// `LabEvent` requires only `kind`; the variant payload fields default.
@@ -270,12 +238,12 @@ mod tests {
     /// `Default` stamps the current version; serialization carries it.
     #[test]
     fn defaults_stamp_current_wire_version() {
-        let s = StatusResponse {
+        let h = HealthStatus {
             lab_name: "lab".into(),
             ..Default::default()
         };
-        assert_eq!(s.wire_version, WIRE_VERSION);
-        let json = serde_json::to_string(&s).unwrap();
+        assert_eq!(h.wire_version, WIRE_VERSION);
+        let json = serde_json::to_string(&h).unwrap();
         assert!(json.contains(&format!("\"wire_version\":{WIRE_VERSION}")));
 
         let ev = LabEvent::new(

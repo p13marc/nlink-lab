@@ -457,8 +457,12 @@ async fn workflows_reach_a_real_daemon() {
     assert!(plan.contains("step(s)") && plan.contains("p-r1"), "{plan}");
 
     // the deploy: the file and its import, its progress, its end
-    let source =
-        crate::effect::bundle(&crate::doc::Source::File(main.clone()), Vec::new()).unwrap();
+    let source = crate::effect::bundle(
+        &crate::doc::Source::File(main.clone()),
+        std::fs::read_to_string(&main).unwrap(),
+        Vec::new(),
+    )
+    .unwrap();
     assert_eq!(source.imports.keys().collect::<Vec<_>>(), ["pair.nll"]);
     let items: Vec<SessionItem> = backend
         .clone()

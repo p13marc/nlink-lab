@@ -107,12 +107,6 @@ impl LineIndex {
             end: self.position(self.text.len()),
         }
     }
-
-    /// Range of the first line, used when a diagnostic has no span at all.
-    pub fn first_line(&self) -> Range {
-        let end = self.line_starts.get(1).map_or(self.text.len(), |&n| n - 1);
-        self.range(0..end)
-    }
 }
 
 #[cfg(test)]
@@ -208,11 +202,10 @@ mod tests {
     }
 
     #[test]
-    fn full_range_and_first_line_cover_what_they_say() {
+    fn the_full_range_covers_the_document() {
         let ix = LineIndex::new(SRC);
         assert_eq!(ix.full_range().start, Position::new(0, 0));
         assert_eq!(ix.full_range().end, ix.position(SRC.len()));
-        assert_eq!(ix.first_line().end, Position::new(0, 7));
     }
 
     #[test]
@@ -220,6 +213,5 @@ mod tests {
         let ix = LineIndex::new("");
         assert_eq!(ix.position(0), Position::new(0, 0));
         assert_eq!(ix.range(0..0).start, ix.range(0..0).end);
-        assert_eq!(ix.first_line().end, Position::new(0, 0));
     }
 }

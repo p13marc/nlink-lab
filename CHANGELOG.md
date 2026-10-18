@@ -688,6 +688,22 @@ under both (#233). Its waves land one by one below.
   `NO_COLOR`, `CLICOLOR` and `CLICOLOR_FORCE`, and clap's help and NLL
   diagnostics follow the choice too. `-vv` turns on debug logs. `ps`
   prints an aligned table, and only PIDs with `--quiet`.
+- **The source in the desktop app** (#286): **Source** (`Ctrl+U`) edits
+  a design's NLL beside its canvas — coloured, its problems marked where
+  they are, analysed again as you pause so the canvas follows; **Format**
+  (`nlink-lab fmt`'s), **Save** (`Ctrl+S`), a `*` on an edited tab, a
+  question before closing or quitting with edits, and one before a file
+  changed on disk replaces them. Problems are the LSP's, lints included,
+  with their line and column; clicking one opens the source there. A
+  deploy sends what the editor holds. `Ctrl+K` is a command palette
+  (actions, layouts, exports, nodes, tabs, recent files, templates), and
+  a minimap shows the whole topology when zoomed past the window.
+- **`nlink_lab::analysis`** (#286): one pass over NLL text — lex, parse
+  (with params), validate, lint — giving diagnostics as byte ranges,
+  with the validator's location and the parser's hint; `locate` and
+  `symbols` came with it. `nlink-lab lsp` and the desktop app both use
+  it. `parser::nll::import_closure_of(text, entry)`: the imports of an
+  unsaved buffer.
 - **Deploying and applying from the desktop app** (#283): a design
   tab's **Deploy…** (options, the plan first) sends the daemon the file,
   its imports and params; **Apply…** a topology onto its running lab

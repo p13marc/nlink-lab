@@ -96,10 +96,19 @@ pub fn declared_param_defs(input: &str) -> Result<Vec<(String, Option<String>)>>
 /// the entry (`SourceBundle::imports`), so the daemon never reads a
 /// client's files.
 pub fn import_closure(entry: &Path) -> Result<std::collections::BTreeMap<String, String>> {
+    import_closure_of(&std::fs::read_to_string(entry)?, entry)
+}
+
+/// [`import_closure`] of `text`, the entry's as an editor holds it (saved
+/// or not): its imports are read from beside `entry`.
+pub fn import_closure_of(
+    text: &str,
+    entry: &Path,
+) -> Result<std::collections::BTreeMap<String, String>> {
     let base = entry.parent().unwrap_or(Path::new("."));
     let mut out = std::collections::BTreeMap::new();
     // (the importing file's directory as a key prefix, its text)
-    let mut queue = vec![(String::new(), std::fs::read_to_string(entry)?)];
+    let mut queue = vec![(String::new(), text.to_string())];
     while let Some((dir, text)) = queue.pop() {
         let tokens = lexer::lex(&text)?;
         let ast = parser::parse_tokens(&tokens, &text)?;

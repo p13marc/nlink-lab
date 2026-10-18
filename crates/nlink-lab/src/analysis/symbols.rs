@@ -3,12 +3,12 @@
 //!
 //! The library keeps its AST `pub(crate)`, so everything structural here
 //! is derived from the lexer's token stream plus the lowered
-//! [`nlink_lab::Topology`]. That is enough for declarations, endpoints
+//! [`crate::Topology`]. That is enough for declarations, endpoints
 //! and profile references — the constructs users actually navigate — and
 //! it keeps working while the buffer does not parse, which is exactly
 //! when an editor needs it.
 
-use nlink_lab::parser::nll::lexer::{Spanned, Token};
+use crate::parser::nll::lexer::{Spanned, Token};
 
 /// What a declaration declares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -447,7 +447,7 @@ pub const CONTEXTUAL_KEYWORDS: &[&str] = &["qdisc", "bond", "vlan", "site", "if"
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nlink_lab::parser::nll::lexer::lex;
+    use crate::parser::nll::lexer::lex;
 
     const SRC: &str = concat!(
         "lab \"t\"\n",

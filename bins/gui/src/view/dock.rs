@@ -19,7 +19,6 @@ pub fn view<'a>(
 ) -> Element<'a, Message> {
     match (tab.dock, tab.design(), tab.live()) {
         (DockTab::Problems, Some(d), _) => problems(d),
-        (DockTab::Source, Some(d), _) => source(d),
         (DockTab::Processes, _, Some(l)) => processes(tab, l, app.operator()),
         (DockTab::Console, _, Some(l)) => console(tab, l, app.operator()),
         (DockTab::Terminal, _, Some(l)) => terminal(l, app.operator(), terminals),
@@ -48,8 +47,12 @@ fn problems(tab: &Design) -> Element<'_, Message> {
             let mark = text("●").size(12).style(super::tone_text(match severity {
                 Severity::Error => nlink_lab_view::scene::Tone::Bad,
                 Severity::Warning => nlink_lab_view::scene::Tone::Warn,
+                Severity::Hint => nlink_lab_view::scene::Tone::Muted,
             }));
             let mut detail = vec![format!("[{}]", p.rule)];
+            if let Some((line, col)) = p.place {
+                detail.push(format!("line {line}, column {col}"));
+            }
             if let Some(loc) = &p.location {
                 detail.push(loc.clone());
             }
@@ -60,7 +63,7 @@ fn problems(tab: &Design) -> Element<'_, Message> {
             let line = row![mark, body].spacing(8).align_y(Alignment::Start);
             // a disabled button dims its text: one that leads nowhere is
             // a plain row
-            let row: Element<'_, Message> = if p.target().is_some() || p.line().is_some() {
+            let row: Element<'_, Message> = if p.target().is_some() || p.span.is_some() {
                 button(line)
                     .style(button::text)
                     .width(Length::Fill)
@@ -72,43 +75,6 @@ fn problems(tab: &Design) -> Element<'_, Message> {
             col.push(row)
         });
     scrollable(container(list).padding(6)).into()
-}
-
-fn source(tab: &Design) -> Element<'_, Message> {
-    if tab.text.is_empty() {
-        return container(muted("Nothing read yet.")).padding(10).into();
-    }
-    // the lines parse errors point at, in a red that reads on both themes
-    const MARK: iced::Color = iced::Color::from_rgb(0.87, 0.28, 0.30);
-    let marked: Vec<usize> = tab.problems.iter().filter_map(|p| p.line()).collect();
-    let mut numbers = Vec::new();
-    let mut code = Vec::new();
-    for (i, line) in tab.text.lines().enumerate() {
-        let n = i + 1;
-        let mut num: text::Span<'_, ()> = span(format!("{n}\n"));
-        let mut src: text::Span<'_, ()> = span(format!("{line}\n"));
-        if marked.contains(&n) {
-            num = num.color(MARK).underline(true);
-            src = src.color(MARK).underline(true);
-        }
-        numbers.push(num);
-        code.push(src);
-    }
-    scrollable(
-        row![
-            rich_text(numbers).font(Font::MONOSPACE).size(12),
-            rich_text(code).font(Font::MONOSPACE).size(12),
-        ]
-        .spacing(12)
-        .padding(8),
-    )
-    .direction(scrollable::Direction::Both {
-        vertical: scrollable::Scrollbar::default(),
-        horizontal: scrollable::Scrollbar::default(),
-    })
-    .width(Length::Fill)
-    .height(Length::Fill)
-    .into()
 }
 
 /// The lab's events, newest first.

@@ -42,6 +42,10 @@ pub struct App {
     pub confirm: Option<Confirm>,
     /// A deploy or an apply being prepared.
     pub panel: Option<Panel>,
+    /// The command palette.
+    pub palette: Option<Palette>,
+    /// Unsaved edits about to be lost: asked first.
+    pub discard: Option<Discard>,
     /// Long operations, newest last.
     pub jobs: Vec<Job>,
     pub active_job: Option<u64>,
@@ -72,6 +76,8 @@ impl App {
             help: false,
             confirm: None,
             panel: None,
+            palette: None,
+            discard: None,
             jobs: Vec::new(),
             active_job: None,
             others: Vec::new(),
@@ -214,6 +220,8 @@ impl Toast {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pane {
     Canvas,
+    /// A design's source, beside its canvas.
+    Source,
     Inspector,
     Dock,
 }
@@ -222,7 +230,6 @@ pub enum Pane {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DockTab {
     Problems,
-    Source,
     Events,
     Processes,
     Console,
@@ -253,6 +260,22 @@ pub fn deployed_name(name: &str, suffix: Option<&str>) -> String {
         Some(s) => format!("{name}-{s}"),
         None => name.to_string(),
     }
+}
+
+/// What would lose unsaved edits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Discard {
+    /// Closing this tab.
+    Tab(TabId),
+    /// Quitting.
+    Quit,
+}
+
+/// The command palette: what is typed, which entry is chosen.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Palette {
+    pub query: String,
+    pub selected: usize,
 }
 
 /// A plan or a diff, asked for.
@@ -293,7 +316,7 @@ pub struct Tab {
 }
 
 pub enum Kind {
-    Design(Design),
+    Design(Box<Design>),
     Live(Box<Live>),
 }
 
@@ -314,6 +337,16 @@ pub struct Design {
     pub loading: bool,
     /// The last load's generation: older results are dropped.
     pub load_gen: u64,
+    /// The source, as edited.
+    pub editor: iced::widget::text_editor::Content,
+    /// Edits not saved yet.
+    pub edited: bool,
+    /// The file changed on disk while edited: reload or keep mine.
+    pub changed_on_disk: bool,
+    /// A save under way: the file changing is ours.
+    pub saving: bool,
+    /// Where the problems are, for the editor to mark.
+    pub marks: crate::highlight::Settings,
 }
 
 /// A running lab, followed through the daemon.
@@ -376,7 +409,7 @@ impl Tab {
     ) -> Self {
         Self {
             id,
-            kind: Kind::Design(Design {
+            kind: Kind::Design(Box::new(Design {
                 source,
                 params,
                 declared: Vec::new(),
@@ -387,7 +420,12 @@ impl Tab {
                 problems: Vec::new(),
                 loading: true,
                 load_gen: 0,
-            }),
+                editor: iced::widget::text_editor::Content::new(),
+                edited: false,
+                changed_on_disk: false,
+                saving: false,
+                marks: Default::default(),
+            })),
             topology: None,
             view: TopoView::new(s),
             panes: panes(),
@@ -504,7 +542,7 @@ impl Tab {
     /// The dock pages of this kind of tab.
     pub fn dock_pages(&self) -> &'static [DockTab] {
         match self.kind {
-            Kind::Design(_) => &[DockTab::Problems, DockTab::Source, DockTab::Jobs],
+            Kind::Design(_) => &[DockTab::Problems, DockTab::Jobs],
             Kind::Live(_) => &[
                 DockTab::Events,
                 DockTab::Processes,
@@ -517,6 +555,11 @@ impl Tab {
 }
 
 impl Design {
+    /// The source as it is now: the editor's.
+    pub fn source_text(&self) -> String {
+        self.editor.text()
+    }
+
     pub fn params_vec(&self) -> Vec<(String, String)> {
         self.params
             .iter()

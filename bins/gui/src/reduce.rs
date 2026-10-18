@@ -4,16 +4,20 @@
 
 use std::collections::BTreeMap;
 
+use iced::widget::text_editor;
 use nlink_lab_shared::api::{LabSummary, Notification};
 use nlink_lab_view::Hit;
 
 use crate::backend::Feed;
 use crate::control::{Action, Confirm, ConfirmWhat, ImpairEditor, PairEditor};
-use crate::doc::{Source, Target};
+use crate::doc::{self, Source, Target};
 use crate::effect::{Effect, Fetch};
-use crate::message::{CanvasMsg, Control, Fetched, Message, SessionMsg, Shortcut, WorkflowMsg};
+use crate::message::{
+    CanvasMsg, Control, Fetched, Message, PaletteMsg, SessionMsg, Shortcut, WorkflowMsg,
+};
 use crate::model::{
-    App, Camera, Conn, DockTab, EVENTS, Kind, Level, Panel, Preview, Route, Tab, TabId,
+    App, Camera, Conn, Discard, DockTab, EVENTS, Kind, Level, Palette, Pane, Panel, Preview, Route,
+    Tab, TabId,
 };
 
 /// A zoom step, for the keys and buttons.
@@ -64,7 +68,7 @@ pub fn reduce(app: &mut App, msg: Message) -> Vec<Effect> {
             }
             Some(t) => {
                 let id = t.id;
-                load(app, id)
+                load_from(app, id, true)
             }
             None => vec![],
         },
@@ -90,8 +94,23 @@ pub fn reduce(app: &mut App, msg: Message) -> Vec<Effect> {
                 return vec![];
             }
             d.loading = false;
+            if !loaded.edited {
+                // from disk: the editor shows it, where the cursor was
+                let at = d.editor.cursor().position;
+                d.editor = text_editor::Content::with_text(&loaded.text);
+                let line = at.line.min(d.editor.line_count().saturating_sub(1));
+                d.editor.move_to(text_editor::Cursor {
+                    position: text_editor::Position { line, column: 0 },
+                    selection: None,
+                });
+                d.edited = false;
+                d.changed_on_disk = false;
+                d.modified = loaded.modified;
+            }
+            d.marks = crate::highlight::Settings {
+                marks: std::sync::Arc::new(doc::marks(&loaded.text, &loaded.problems)),
+            };
             d.text = loaded.text;
-            d.modified = loaded.modified;
             d.declared = loaded.declared;
             d.problems = loaded.problems;
             // names it no longer declares: dropped from the form
@@ -141,14 +160,131 @@ pub fn reduce(app: &mut App, msg: Message) -> Vec<Effect> {
         }
         Message::Changed { tab, modified } => {
             match app.tab_mut(tab).and_then(Tab::design_mut) {
+                // our own save
+                Some(d) if d.saving => {
+                    d.modified = modified;
+                    vec![]
+                }
+                // edits would be lost: ask
+                Some(d) if d.edited => {
+                    d.modified = modified;
+                    d.changed_on_disk = true;
+                    vec![]
+                }
                 Some(d) if !d.loading => {
                     // seen: a failed load must not loop
                     d.modified = modified;
-                    load(app, tab)
+                    load_from(app, tab, true)
                 }
                 _ => vec![],
             }
         }
+
+        Message::Edit(action) => {
+            let Some(t) = app.current_mut() else {
+                return vec![];
+            };
+            let id = t.id;
+            let Some(d) = t.design_mut() else {
+                return vec![];
+            };
+            let edit = action.is_edit();
+            d.editor.perform(action);
+            if !edit {
+                return vec![];
+            }
+            d.edited = true;
+            analyze(app, id)
+        }
+        Message::ToggleSource => {
+            if let Some(t) = app.current_mut().filter(|t| t.design().is_some()) {
+                toggle_source(t, None);
+            }
+            vec![]
+        }
+        Message::Save => {
+            let Some(t) = app.current_mut() else {
+                return vec![];
+            };
+            let tab = t.id;
+            let Some(d) = t.design_mut() else {
+                return vec![];
+            };
+            match d.source.path() {
+                Some(path) => {
+                    d.saving = true;
+                    vec![Effect::Save {
+                        tab,
+                        path: path.to_path_buf(),
+                        text: d.source_text(),
+                    }]
+                }
+                None => reduce(app, Message::SaveAs),
+            }
+        }
+        Message::Saved { tab, result } => {
+            let Some(t) = app.tab_mut(tab) else {
+                return vec![];
+            };
+            let title = t.title();
+            let Some(d) = t.design_mut() else {
+                return vec![];
+            };
+            d.saving = false;
+            match result {
+                Ok(modified) => {
+                    d.edited = false;
+                    d.changed_on_disk = false;
+                    d.modified = modified;
+                    app.toast(Level::Info, format!("Saved {title}"));
+                }
+                Err(e) => app.toast(Level::Error, format!("Not saved: {e}")),
+            }
+            vec![]
+        }
+        Message::Format => {
+            let Some(t) = app.current_mut() else {
+                return vec![];
+            };
+            let id = t.id;
+            let Some(d) = t.design_mut() else {
+                return vec![];
+            };
+            let text = d.source_text();
+            match nlink_lab::fmt::format(&text) {
+                Ok(formatted) if formatted == text => {
+                    app.toast(Level::Info, "Already formatted");
+                    vec![]
+                }
+                Ok(formatted) => {
+                    let at = d.editor.cursor().position;
+                    d.editor = text_editor::Content::with_text(&formatted);
+                    let line = at.line.min(d.editor.line_count().saturating_sub(1));
+                    d.editor.move_to(text_editor::Cursor {
+                        position: text_editor::Position { line, column: 0 },
+                        selection: None,
+                    });
+                    d.edited = true;
+                    analyze(app, id)
+                }
+                Err(e) => {
+                    app.toast(Level::Error, format!("Not formatted: {e}"));
+                    vec![]
+                }
+            }
+        }
+        Message::KeepMine => {
+            if let Some(d) = app.current_mut().and_then(Tab::design_mut) {
+                d.changed_on_disk = false;
+            }
+            vec![]
+        }
+        Message::Discard(yes) => match app.discard.take() {
+            Some(Discard::Tab(id)) if yes => close_now(app, id),
+            Some(Discard::Quit) if yes => vec![Effect::Quit],
+            _ => vec![],
+        },
+        Message::Palette(m) => palette(app, m),
 
         Message::Connected(r) => connected(app, r),
         Message::Reconnect => match (&app.conn, app.target.clone()) {
@@ -418,15 +554,25 @@ pub fn reduce(app: &mut App, msg: Message) -> Vec<Effect> {
             let Some(t) = app.current_mut() else {
                 return vec![];
             };
-            let Some(problem) = t.design().and_then(|d| d.problems.get(i)) else {
+            let Some(problem) = t.design().and_then(|d| d.problems.get(i)).cloned() else {
                 return vec![];
             };
+            // its place in the source
+            let mut effects = Vec::new();
+            if let (Some(span), Some(d)) = (&problem.span, t.design_mut()) {
+                let text = d.source_text();
+                let start = span.start.min(text.len());
+                let line = text[..start].matches('\n').count();
+                let column = start - text[..start].rfind('\n').map_or(0, |i| i + 1);
+                d.editor.move_to(text_editor::Cursor {
+                    position: text_editor::Position { line, column },
+                    selection: None,
+                });
+                toggle_source(t, Some(true));
+                effects.push(Effect::Focus(crate::view::EDITOR.into()));
+            }
             let Some(target) = problem.target() else {
-                // a parse error: its line, in the source
-                if problem.line().is_some() {
-                    t.dock = DockTab::Source;
-                }
-                return vec![];
+                return effects;
             };
             let hit = match target {
                 Target::Node(id) => Hit::Node(id),
@@ -434,7 +580,7 @@ pub fn reduce(app: &mut App, msg: Message) -> Vec<Effect> {
                 Target::Endpoint(ep) => Hit::Endpoint(ep),
             };
             select(t, Some(hit));
-            vec![]
+            effects
         }
         Message::Dock(d) => {
             if let Some(t) = app.current_mut()
@@ -484,12 +630,18 @@ pub fn reduce(app: &mut App, msg: Message) -> Vec<Effect> {
             }
             vec![]
         }
-        Message::SaveAs => match app.current().and_then(Tab::design).map(|d| &d.source) {
-            Some(Source::Untitled { name, text }) => vec![Effect::SaveAs {
-                name: name.clone(),
-                text: text.clone(),
+        Message::SaveAs => match app.current().and_then(Tab::design) {
+            Some(d) => vec![Effect::SaveAs {
+                name: match &d.source {
+                    Source::Untitled { name, .. } => name.clone(),
+                    Source::File(p) => p
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .unwrap_or_default(),
+                },
+                text: d.source_text(),
             }],
-            _ => vec![],
+            None => vec![],
         },
         Message::SavedAs(r) => match r {
             None => vec![],
@@ -506,6 +658,9 @@ pub fn reduce(app: &mut App, msg: Message) -> Vec<Effect> {
                     return vec![];
                 };
                 d.source = Source::File(path.clone());
+                // what was edited is the file now
+                d.edited = false;
+                d.changed_on_disk = false;
                 app.settings.remember(&path);
                 app.toast(Level::Info, format!("Saved {}", path.display()));
                 let mut effects = save_settings(app);
@@ -585,7 +740,14 @@ pub fn connect(app: &mut App) -> Vec<Effect> {
     }
 }
 
+/// Analyse a design again (its params changed, it was saved as a
+/// file): the editor's text when it has edits, else its source.
 fn load(app: &mut App, id: TabId) -> Vec<Effect> {
+    load_from(app, id, false)
+}
+
+/// [`load`]; `disk`: the file's text, whatever the editor holds.
+fn load_from(app: &mut App, id: TabId, disk: bool) -> Vec<Effect> {
     let dirs = app.dirs.clone();
     let Some(d) = app.tab_mut(id).and_then(Tab::design_mut) else {
         return vec![];
@@ -596,9 +758,64 @@ fn load(app: &mut App, id: TabId) -> Vec<Effect> {
         tab: id,
         generation: d.load_gen,
         source: d.source.clone(),
+        text: (d.edited && !disk).then(|| d.source_text()),
         params: d.params_vec(),
         dirs,
+        delay_ms: 0,
     }]
+}
+
+/// How long typing pauses before the source is analysed again.
+pub const EDIT_DELAY_MS: u64 = 250;
+
+/// The editor's text analysed, once typing pauses.
+fn analyze(app: &mut App, id: TabId) -> Vec<Effect> {
+    let dirs = app.dirs.clone();
+    let Some(d) = app.tab_mut(id).and_then(Tab::design_mut) else {
+        return vec![];
+    };
+    d.loading = true;
+    d.load_gen += 1;
+    vec![Effect::Load {
+        tab: id,
+        generation: d.load_gen,
+        source: d.source.clone(),
+        text: Some(d.source_text()),
+        params: d.params_vec(),
+        dirs,
+        delay_ms: EDIT_DELAY_MS,
+    }]
+}
+
+/// The source pane beside the canvas, or not; `Some(open)` asks for one.
+fn toggle_source(t: &mut Tab, open: Option<bool>) {
+    use iced::widget::pane_grid::Axis;
+    let source = t
+        .panes
+        .iter()
+        .find(|(_, p)| **p == Pane::Source)
+        .map(|(id, _)| *id);
+    match (source, open) {
+        (Some(_), Some(true)) | (None, Some(false)) => {}
+        (Some(id), _) => {
+            t.panes.close(id);
+        }
+        (None, _) => {
+            let Some(canvas) = t
+                .panes
+                .iter()
+                .find(|(_, p)| **p == Pane::Canvas)
+                .map(|(id, _)| *id)
+            else {
+                return;
+            };
+            if let Some((new, split)) = t.panes.split(Axis::Vertical, canvas, Pane::Source) {
+                // the source on the left
+                t.panes.swap(canvas, new);
+                t.panes.resize(split, 0.45);
+            }
+        }
+    }
 }
 
 /// Places for the nodes a view lacks: a whole layout the first time,
@@ -624,7 +841,60 @@ fn layout(t: &mut Tab) -> Vec<Effect> {
     }]
 }
 
+/// The command palette: opened, typed in, moved through, run.
+fn palette(app: &mut App, m: PaletteMsg) -> Vec<Effect> {
+    match m {
+        PaletteMsg::Open => {
+            app.palette = Some(Palette::default());
+            vec![Effect::Focus(crate::view::PALETTE.into())]
+        }
+        PaletteMsg::Close => {
+            app.palette = None;
+            vec![]
+        }
+        PaletteMsg::Query(q) => {
+            if let Some(p) = &mut app.palette {
+                p.query = q;
+                p.selected = 0;
+            }
+            vec![]
+        }
+        PaletteMsg::Move(by) => {
+            let Some(p) = &app.palette else {
+                return vec![];
+            };
+            let n = crate::commands::filter(&crate::commands::entries(app), &p.query).len();
+            if let Some(p) = &mut app.palette
+                && n > 0
+            {
+                p.selected = (p.selected as i64 + by as i64).clamp(0, n as i64 - 1) as usize;
+            }
+            vec![]
+        }
+        PaletteMsg::Run(which) => {
+            let Some(p) = app.palette.take() else {
+                return vec![];
+            };
+            let entries = crate::commands::entries(app);
+            let shown = crate::commands::filter(&entries, &p.query);
+            match shown.get(which.unwrap_or(p.selected)) {
+                Some(&i) => reduce(app, entries[i].message.clone()),
+                None => vec![],
+            }
+        }
+    }
+}
+
+/// Close a tab; one with unsaved edits asks first.
 fn close(app: &mut App, id: TabId) -> Vec<Effect> {
+    if app.tab(id).and_then(Tab::design).is_some_and(|d| d.edited) {
+        app.discard = Some(Discard::Tab(id));
+        return vec![];
+    }
+    close_now(app, id)
+}
+
+fn close_now(app: &mut App, id: TabId) -> Vec<Effect> {
     let Some(i) = app.tabs.iter().position(|t| t.id == id) else {
         return vec![];
     };
@@ -1367,7 +1637,7 @@ fn start_job(
     lab: &str,
     kind: crate::job::JobKind,
     request: nlink_lab_shared::api::Request,
-    source: Option<(Source, Vec<(String, String)>)>,
+    source: Option<crate::effect::Bundling>,
 ) -> Vec<Effect> {
     let Some(backend) = app.backend().cloned() else {
         app.toast(Level::Error, "Not connected to the daemon");
@@ -1534,7 +1804,9 @@ fn workflow(app: &mut App, w: WorkflowMsg) -> Vec<Effect> {
                 return vec![];
             };
             let name = topo.lab.name.clone();
-            let source = t.design().map(|d| (d.source.clone(), d.params_vec()));
+            let source = t
+                .design()
+                .map(|d| (d.source.clone(), d.source_text(), d.params_vec()));
             let backend = app.backend().cloned().expect("checked");
             match (panel, go) {
                 (Panel::Deploy { .. }, false) => {
@@ -1979,13 +2251,29 @@ fn shortcut(app: &mut App, s: Shortcut) -> Vec<Effect> {
     match s {
         Shortcut::Open => vec![Effect::PickFile],
         Shortcut::Home => reduce(app, Message::GoHome),
-        Shortcut::Quit => vec![Effect::Quit],
+        Shortcut::Quit => {
+            // edits not saved: ask first
+            if app.tabs.iter().filter_map(Tab::design).any(|d| d.edited) {
+                app.discard = Some(Discard::Quit);
+                return vec![];
+            }
+            vec![Effect::Quit]
+        }
         Shortcut::Help => {
             app.help = !app.help;
             vec![]
         }
+        Shortcut::Palette => palette(app, PaletteMsg::Open),
+        Shortcut::Up | Shortcut::Down if app.palette.is_some() => palette(
+            app,
+            PaletteMsg::Move(if s == Shortcut::Up { -1 } else { 1 }),
+        ),
         Shortcut::Escape => {
-            if app.help {
+            if app.palette.is_some() {
+                app.palette = None;
+            } else if app.discard.is_some() {
+                app.discard = None;
+            } else if app.help {
                 app.help = false;
             } else if in_workspace && let Some(t) = app.current_mut() {
                 select(t, None);
@@ -2020,6 +2308,10 @@ fn shortcut(app: &mut App, s: Shortcut) -> Vec<Effect> {
             None => vec![],
         },
         Shortcut::Reload => reduce(app, Message::Reload),
+        Shortcut::Save => reduce(app, Message::Save),
+        Shortcut::ToggleSource => reduce(app, Message::ToggleSource),
+        Shortcut::Format => reduce(app, Message::Format),
+        Shortcut::Up | Shortcut::Down => vec![],
         Shortcut::Fit => {
             if let Some(t) = app.current_mut() {
                 t.view.camera = Camera::Fit;
@@ -2107,12 +2399,14 @@ pub(crate) mod testing {
                     tab,
                     generation,
                     source,
+                    text,
                     params,
                     dirs,
+                    ..
                 } => Message::Loaded {
                     tab,
                     generation,
-                    loaded: Box::new(doc::load(&source, &params, dirs.as_ref())),
+                    loaded: Box::new(doc::load(&source, text, &params, dirs.as_ref())),
                 },
                 Effect::Layout {
                     tab,
@@ -2201,11 +2495,11 @@ pub(crate) mod testing {
                     use iced::futures::StreamExt;
                     let mut request = *request;
                     if let (
-                        Some((src, params)),
+                        Some((src, text, params)),
                         nlink_lab_shared::api::Request::Deploy { source, .. },
                     ) = (source, &mut request)
                     {
-                        *source = Some(crate::effect::bundle(&src, params).unwrap());
+                        *source = Some(crate::effect::bundle(&src, text, params).unwrap());
                     }
                     let stream = fake.session(request, cancel);
                     let items: Vec<_> = futures_lite_block(stream.collect::<Vec<_>>());
@@ -2363,6 +2657,7 @@ mod tests {
                 name: "t".into(),
                 text: "lab \"old\"\nnode z\n".into(),
             },
+            None,
             &[],
             None,
         );
@@ -2541,17 +2836,15 @@ mod tests {
             message: "m".into(),
             location: Some("nodes.b.routes".into()),
             hint: None,
+            span: None,
+            place: None,
         }];
-        reduce(&mut app, Message::ProblemClicked(0));
+        // no place in the source: the canvas only
+        assert!(reduce(&mut app, Message::ProblemClicked(0)).is_empty());
         assert_eq!(
             app.tab(id).unwrap().view.selection,
             Some(Hit::Node("b".into()))
         );
-        // a parse error shows its line
-        app.tab_mut(id).unwrap().design_mut().unwrap().problems[0].location =
-            Some("x.nll:2:1".into());
-        reduce(&mut app, Message::ProblemClicked(0));
-        assert_eq!(app.tab(id).unwrap().dock, DockTab::Source);
     }
 
     #[test]
@@ -3550,5 +3843,257 @@ mod tests {
                 &crate::job::JobKind::Attached("deploy".into())
             )
         );
+    }
+}
+
+/// The source, edited: analysed as typed, saved, formatted, guarded.
+#[cfg(test)]
+mod editor_tests {
+    use super::testing::{open_text, settle};
+    use super::*;
+    use crate::model::Discard;
+    use crate::settings::{LayoutPref, Settings};
+    use text_editor::{Action, Edit, Motion};
+
+    fn app() -> App {
+        App::new(Settings::default(), None)
+    }
+
+    fn design(app: &App) -> &crate::model::Design {
+        app.current().unwrap().design().unwrap()
+    }
+
+    /// Type `text` at the end of the current design's source.
+    fn type_at_end(app: &mut App, text: &str) -> Vec<Effect> {
+        reduce(app, Message::Edit(Action::Move(Motion::DocumentEnd)));
+        reduce(
+            app,
+            Message::Edit(Action::Edit(Edit::Paste(std::sync::Arc::new(text.into())))),
+        )
+    }
+
+    fn source_open(app: &App) -> bool {
+        app.current()
+            .unwrap()
+            .panes
+            .iter()
+            .any(|(_, p)| *p == Pane::Source)
+    }
+
+    #[test]
+    fn typing_is_analysed_once_it_pauses_and_the_canvas_follows() {
+        let mut app = app();
+        open_text(&mut app, "lab \"t\"\nnode a\n");
+        assert_eq!(design(&app).source_text(), "lab \"t\"\nnode a\n");
+        // a move is not an edit
+        assert!(reduce(&mut app, Message::Edit(Action::Move(Motion::Down))).is_empty());
+        assert!(!design(&app).edited);
+        let e = type_at_end(&mut app, "node b\n");
+        assert!(matches!(
+            &e[..],
+            [Effect::Load { text: Some(t), delay_ms: EDIT_DELAY_MS, .. }] if t.ends_with("node b\n")
+        ));
+        assert!(design(&app).edited);
+        settle(&mut app, e);
+        let t = app.current().unwrap();
+        assert!(t.topology.as_ref().unwrap().nodes.contains_key("b"));
+        assert!(t.view.graph.nodes.iter().any(|n| n.id == "b"));
+        // the edits stay through a reload of the params
+        let id = t.id;
+        let e = load(&mut app, id);
+        assert!(matches!(
+            &e[..],
+            [Effect::Load {
+                text: Some(_),
+                delay_ms: 0,
+                ..
+            }]
+        ));
+        // and a reload from disk asks for the file's text
+        let e = reduce(&mut app, Message::Reload);
+        assert!(matches!(&e[..], [Effect::Load { text: None, .. }]));
+        // which, for an unsaved template, is what it was opened with
+        settle(&mut app, e);
+        assert!(!design(&app).edited);
+        assert_eq!(design(&app).source_text(), "lab \"t\"\nnode a\n");
+    }
+
+    #[test]
+    fn a_file_is_saved_and_a_change_on_disk_while_edited_asks() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("t.nll");
+        std::fs::write(&path, "lab \"t\"\nnode a\n").unwrap();
+        let mut app = app();
+        let e = reduce(&mut app, Message::Open(path.clone()));
+        settle(&mut app, e);
+        let id = app.active.unwrap();
+        let e = type_at_end(&mut app, "node b\n");
+        settle(&mut app, e);
+        // saved: the editor's text, written
+        let e = reduce(&mut app, Message::Shortcut(Shortcut::Save));
+        let [Effect::Save { tab, path: p, text }] = &e[..] else {
+            panic!("{e:?}")
+        };
+        assert_eq!((*tab, p), (id, &path));
+        assert!(text.ends_with("node b\n"));
+        assert!(design(&app).saving);
+        // the poll seeing our own write changes nothing
+        reduce(
+            &mut app,
+            Message::Changed {
+                tab: id,
+                modified: None,
+            },
+        );
+        assert!(!design(&app).changed_on_disk);
+        std::fs::write(&path, text).unwrap();
+        reduce(
+            &mut app,
+            Message::Saved {
+                tab: id,
+                result: Ok(doc::modified(&path)),
+            },
+        );
+        assert!(!design(&app).edited && !design(&app).saving);
+        assert!(app.toasts.iter().any(|t| t.text == "Saved t.nll"));
+        // edited again, and changed by someone else: asked, not lost
+        let e = type_at_end(&mut app, "node c\n");
+        settle(&mut app, e);
+        std::fs::write(&path, "lab \"t\"\nnode z\n").unwrap();
+        let e = reduce(
+            &mut app,
+            Message::Changed {
+                tab: id,
+                modified: doc::modified(&path),
+            },
+        );
+        assert!(e.is_empty());
+        assert!(design(&app).changed_on_disk);
+        assert!(design(&app).source_text().ends_with("node c\n"));
+        reduce(&mut app, Message::KeepMine);
+        assert!(!design(&app).changed_on_disk);
+        // or the file taken
+        let e = reduce(&mut app, Message::Reload);
+        settle(&mut app, e);
+        assert_eq!(design(&app).source_text(), "lab \"t\"\nnode z\n");
+        assert!(!design(&app).edited);
+        assert!(
+            app.current()
+                .unwrap()
+                .topology
+                .as_ref()
+                .unwrap()
+                .nodes
+                .contains_key("z")
+        );
+    }
+
+    #[test]
+    fn an_untitled_design_saves_as_and_becomes_its_file() {
+        let mut app = app();
+        open_text(&mut app, "lab \"t\"\nnode a\n");
+        type_at_end(&mut app, "node b\n");
+        let e = reduce(&mut app, Message::Save);
+        assert!(
+            matches!(&e[..], [Effect::SaveAs { name, text }] if name == "t" && text.ends_with("node b\n")),
+            "{e:?}"
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("t.nll");
+        std::fs::write(&path, design(&app).source_text()).unwrap();
+        let e = reduce(&mut app, Message::SavedAs(Some(Ok(path.clone()))));
+        settle(&mut app, e);
+        let d = design(&app);
+        assert_eq!(d.source, Source::File(path));
+        assert!(!d.edited);
+        assert!(d.source_text().ends_with("node b\n"));
+    }
+
+    #[test]
+    fn format_rewrites_the_source_and_closing_unsaved_edits_asks() {
+        let mut app = app();
+        let id = open_text(&mut app, "lab   \"t\"\nnode    a\n");
+        let e = reduce(&mut app, Message::Shortcut(Shortcut::Format));
+        let formatted = nlink_lab::fmt::format("lab   \"t\"\nnode    a\n").unwrap();
+        assert_eq!(design(&app).source_text(), formatted);
+        assert!(design(&app).edited);
+        assert!(matches!(&e[..], [Effect::Load { text: Some(_), .. }]));
+        reduce(&mut app, Message::Format);
+        assert!(app.toasts.iter().any(|t| t.text == "Already formatted"));
+        // closing asks; no keeps it
+        assert!(reduce(&mut app, Message::CloseTab(id)).is_empty());
+        assert_eq!(app.discard, Some(Discard::Tab(id)));
+        reduce(&mut app, Message::Discard(false));
+        assert!(app.discard.is_none() && app.tab(id).is_some());
+        // as does quitting; Escape is a no
+        assert!(reduce(&mut app, Message::Shortcut(Shortcut::Quit)).is_empty());
+        assert_eq!(app.discard, Some(Discard::Quit));
+        reduce(&mut app, Message::Shortcut(Shortcut::Escape));
+        assert!(app.discard.is_none());
+        // yes closes it
+        reduce(&mut app, Message::CloseTab(id));
+        reduce(&mut app, Message::Discard(true));
+        assert!(app.tab(id).is_none());
+        assert!(matches!(
+            &reduce(&mut app, Message::Shortcut(Shortcut::Quit))[..],
+            [Effect::Quit]
+        ));
+    }
+
+    #[test]
+    fn a_problem_opens_the_source_where_it_is() {
+        let mut app = app();
+        open_text(&mut app, "lab \"t\"\nnode a\nnode b {\n  bogus\n}\n");
+        assert!(!source_open(&app));
+        let p = &design(&app).problems[0];
+        assert_eq!(p.line(), Some(4));
+        let e = reduce(&mut app, Message::ProblemClicked(0));
+        assert!(matches!(&e[..], [Effect::Focus(_)]));
+        assert!(source_open(&app));
+        let at = design(&app).editor.cursor().position;
+        assert_eq!((at.line, at.column), (3, 2));
+        // the marks are where the problems are
+        assert_eq!(design(&app).marks.marks[0], (3, 2..7, true));
+        // the toggle closes it, and opens it again
+        reduce(&mut app, Message::Shortcut(Shortcut::ToggleSource));
+        assert!(!source_open(&app));
+        reduce(&mut app, Message::ToggleSource);
+        assert!(source_open(&app));
+    }
+
+    #[test]
+    fn the_palette_runs_what_is_chosen() {
+        let mut app = app();
+        let id = open_text(&mut app, "lab \"t\"\nnode alpha\nnode beta\n");
+        let e = reduce(&mut app, Message::Shortcut(Shortcut::Palette));
+        assert!(matches!(&e[..], [Effect::Focus(_)]));
+        reduce(
+            &mut app,
+            Message::Palette(PaletteMsg::Query("layout circ".into())),
+        );
+        let e = reduce(&mut app, Message::Palette(PaletteMsg::Run(None)));
+        assert!(app.palette.is_none());
+        settle(&mut app, e);
+        assert_eq!(app.tab(id).unwrap().view.layout, LayoutPref::Circle);
+        // moving stays within what is shown
+        reduce(&mut app, Message::Shortcut(Shortcut::Palette));
+        reduce(
+            &mut app,
+            Message::Palette(PaletteMsg::Query("go to".into())),
+        );
+        for _ in 0..5 {
+            reduce(&mut app, Message::Shortcut(Shortcut::Down));
+        }
+        assert_eq!(app.palette.as_ref().unwrap().selected, 1);
+        reduce(&mut app, Message::Shortcut(Shortcut::Up));
+        reduce(&mut app, Message::Palette(PaletteMsg::Run(None)));
+        assert_eq!(
+            app.tab(id).unwrap().view.selection,
+            Some(nlink_lab_view::Hit::Node("alpha".into()))
+        );
+        // Escape closes it
+        reduce(&mut app, Message::Shortcut(Shortcut::Palette));
+        reduce(&mut app, Message::Shortcut(Shortcut::Escape));
+        assert!(app.palette.is_none());
     }
 }

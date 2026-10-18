@@ -1,26 +1,26 @@
 //! `nlink-lab lsp` — Language Server Protocol server for NLL (issue #56).
 //!
 //! Speaks LSP over stdio, so every editor drives it the same way:
-//! `nlink-lab lsp`. [`analyze`] is the diagnostic pipeline, [`locate`]
-//! maps validator locations back to source spans, [`position`] converts
-//! byte offsets to UTF-16 positions and [`symbols`] answers the
-//! navigation requests off the token stream.
+//! `nlink-lab lsp`. The analysis is the library's
+//! ([`nlink_lab::analysis`]: diagnostics, validator locations mapped back
+//! to source spans, [`symbols`] for the navigation requests off the token
+//! stream); [`analyze`] makes its places LSP positions, which [`position`]
+//! converts from byte offsets to UTF-16.
 //!
 //! Note for anyone adding output to this module: stdout **is** the
 //! protocol. Diagnostics go through the client, logs go to stderr (see
 //! the writer switch in `main.rs`), and nothing here may `println!`.
 
 mod analyze;
-mod locate;
 mod position;
 #[cfg(test)]
 mod protocol_tests;
-mod symbols;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 use analyze::Analysis;
+use nlink_lab::analysis::symbols;
 use tower_lsp_server::ls_types::*;
 use tower_lsp_server::{Client, LanguageServer, LspService, Server, jsonrpc};
 

@@ -1,11 +1,11 @@
 //! Resolve a validator/lint `location` string to a source span.
 //!
-//! [`nlink_lab::ValidationIssue::location`] and
-//! [`nlink_lab::LintFinding::location`] are paths into the **lowered**
+//! [`crate::ValidationIssue::location`] and
+//! [`crate::LintFinding::location`] are paths into the **lowered**
 //! data model (`links[3].addresses[1]`, `networks.core.subnet`,
 //! `nodes.r1.routes.10.0.0.0/24`, `impairments."a:eth0"`), not source
 //! positions. Editors need positions, so this module maps the path back
-//! onto the token stream — using the [`nlink_lab::Topology`] where the
+//! onto the token stream — using the [`crate::Topology`] where the
 //! path indexes a lowered collection (`links[i]` is an index into
 //! `Topology::links`, not into the source's `link` statements).
 //!
@@ -18,8 +18,8 @@
 //! reporting at the top of the file with the path appended to the
 //! message, so the information is never silently dropped.
 
-use nlink_lab::Topology;
-use nlink_lab::parser::nll::lexer::{Spanned, Token};
+use crate::Topology;
+use crate::parser::nll::lexer::{Spanned, Token};
 
 use super::symbols;
 
@@ -194,7 +194,7 @@ impl<'a> Resolver<'a> {
         let eps: Vec<_> = link
             .endpoints
             .iter()
-            .filter_map(|e| nlink_lab::EndpointRef::parse(e))
+            .filter_map(|e| crate::EndpointRef::parse(e))
             .collect();
         if eps.len() != 2 {
             return Resolved::Unknown;
@@ -245,7 +245,7 @@ impl<'a> Resolver<'a> {
     }
 
     /// The `link` statement whose two endpoints match `eps`, in either order.
-    fn link_head(&self, eps: &[nlink_lab::EndpointRef]) -> Option<usize> {
+    fn link_head(&self, eps: &[crate::EndpointRef]) -> Option<usize> {
         (0..self.tokens.len())
             .filter(|&i| {
                 matches!(self.tokens[i].token, Token::Link)
@@ -339,7 +339,7 @@ impl<'a> Resolver<'a> {
         let Some((key, rest)) = take_name(rest) else {
             return Resolved::Unknown;
         };
-        let Some(want) = nlink_lab::EndpointRef::parse(&key) else {
+        let Some(want) = crate::EndpointRef::parse(&key) else {
             return Resolved::Unknown;
         };
         let head = (0..self.tokens.len()).find(|&i| {
@@ -484,7 +484,7 @@ impl<'a> Resolver<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nlink_lab::parser::nll::lexer::lex;
+    use crate::parser::nll::lexer::lex;
 
     const SRC: &str = concat!(
         "lab \"t\" {\n  routing auto\n}\n",
@@ -498,10 +498,7 @@ mod tests {
     );
 
     fn setup() -> (Vec<Spanned>, Topology) {
-        (
-            lex(SRC).unwrap(),
-            nlink_lab::parser::nll::parse(SRC).unwrap(),
-        )
+        (lex(SRC).unwrap(), crate::parser::nll::parse(SRC).unwrap())
     }
 
     fn text_of(r: &Resolved) -> &'static str {
@@ -602,7 +599,7 @@ mod tests {
     fn a_loop_generated_node_is_unknown() {
         let src = "lab \"t\"\nfor i in 1..3 {\n  node spine${i}\n}\n";
         let t = lex(src).unwrap();
-        let topo = nlink_lab::parser::nll::parse(src).unwrap();
+        let topo = crate::parser::nll::parse(src).unwrap();
         assert!(topo.nodes.contains_key("spine1"));
         let r = Resolver::new(&t, Some(&topo)).resolve("nodes.spine1");
         assert_eq!(r, Resolved::Unknown);

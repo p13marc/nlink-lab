@@ -1,6 +1,7 @@
-//! The topology canvas: paints a `Scene` in three cached layers (regions,
-//! the graph, the hover), maps the mouse to selections, drags, pans and
-//! zooms. It handles no keys: shortcuts are the app's.
+//! The topology canvas: paints a `Scene` in cached layers (regions, the
+//! graph, the hover, and a minimap when the topology does not fit), maps
+//! the mouse to selections, drags, pans and zooms. It handles no keys:
+//! shortcuts are the app's.
 
 use std::cell::Cell;
 
@@ -63,6 +64,79 @@ impl Xf {
     }
 }
 
+/// The minimap's largest size, and its margin from the canvas's corner.
+const MINI: (f32, f32) = (180.0, 120.0);
+const MINI_MARGIN: f32 = 12.0;
+
+/// Where the minimap goes and how it maps the world: shown only when the
+/// topology does not fit in the canvas as it is zoomed.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Mini {
+    /// On the canvas.
+    rect: Rectangle,
+    /// The world it shows.
+    world: Rect,
+    /// Minimap pixels per world unit.
+    k: f32,
+}
+
+impl Mini {
+    fn of(scene: &Scene, xf: Xf, size: Size) -> Option<Self> {
+        let b = scene.bounds?;
+        let (p, s) = xf.rect(&b);
+        let fits = p.x >= 0.0
+            && p.y >= 0.0
+            && p.x + s.width <= size.width
+            && p.y + s.height <= size.height;
+        // no room for it on a small canvas
+        if fits || size.width < MINI.0 * 2.5 || size.height < MINI.1 * 2.5 {
+            return None;
+        }
+        // a margin around the world, so the edges show
+        let pad = 0.05 * b.w.max(b.h);
+        let world = Rect {
+            x: b.x - pad,
+            y: b.y - pad,
+            w: b.w + 2.0 * pad,
+            h: b.h + 2.0 * pad,
+        };
+        let k = (MINI.0 / world.w).min(MINI.1 / world.h);
+        let (w, h) = (world.w * k, world.h * k);
+        Some(Self {
+            rect: Rectangle::new(
+                Point::new(size.width - w - MINI_MARGIN, size.height - h - MINI_MARGIN),
+                Size::new(w, h),
+            ),
+            world,
+            k,
+        })
+    }
+
+    fn pt(&self, p: Pos) -> Point {
+        Point::new(
+            self.rect.x + (p.x - self.world.x) * self.k,
+            self.rect.y + (p.y - self.world.y) * self.k,
+        )
+    }
+
+    fn world(&self, p: Point) -> Pos {
+        Pos::new(
+            self.world.x + (p.x - self.rect.x) / self.k,
+            self.world.y + (p.y - self.rect.y) / self.k,
+        )
+    }
+
+    /// The camera that puts the world point under `p` in the middle.
+    fn center_on(&self, p: Point, xf: Xf, size: Size) -> Camera {
+        let w = self.world(p);
+        Camera::Manual {
+            x: size.width / 2.0 - w.x * xf.scale,
+            y: size.height / 2.0 - w.y * xf.scale,
+            scale: xf.scale,
+        }
+    }
+}
+
 /// What the cached layers were drawn for.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Drawn {
@@ -89,6 +163,8 @@ enum Press {
         hit: Option<Hit>,
         moved: bool,
     },
+    /// The minimap: the view follows the mouse.
+    Mini,
 }
 
 #[derive(Default)]
@@ -96,6 +172,7 @@ pub struct State {
     regions: Cache,
     graph: Cache,
     overlay: Cache,
+    mini: Cache,
     drawn: Cell<Option<Drawn>>,
     hover: Option<Hit>,
     press: Option<Press>,
@@ -153,6 +230,7 @@ impl canvas::Program<Message> for TopoCanvas<'_> {
                 _ => Some(Action::capture()),
             };
         }
+        let mini = Mini::of(&self.view.scene, xf, size);
         if let Event::Mouse(mouse::Event::CursorMoved { .. }) = event
             && let Some(press) = &mut state.press
         {
@@ -188,10 +266,20 @@ impl canvas::Program<Message> for TopoCanvas<'_> {
                         scale: camera.scale,
                     }))
                 }
+                Press::Mini => match mini {
+                    Some(m) => publish(CanvasMsg::Camera(m.center_on(p, xf, size))),
+                    None => Some(Action::capture()),
+                },
             };
         }
         let p = cursor.position_in(bounds)?;
         match event {
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
+                if let Some(m) = mini.filter(|m| m.rect.contains(p)) =>
+            {
+                state.press = Some(Press::Mini);
+                publish(CanvasMsg::Camera(m.center_on(p, xf, size)))
+            }
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let hit = self.view.scene.hit(xf.world(p));
                 if let Some(Hit::Node(id)) = &hit {
@@ -270,6 +358,7 @@ impl canvas::Program<Message> for TopoCanvas<'_> {
             state.regions.clear();
             state.graph.clear();
             state.overlay.clear();
+            state.mini.clear();
             state.drawn.set(Some(drawn));
         }
         let scene = &self.view.scene;
@@ -319,7 +408,13 @@ impl canvas::Program<Message> for TopoCanvas<'_> {
             }
             hover(f, scene, state.hover.as_ref(), xf, &pal);
         });
-        vec![regions, graph, overlay]
+        let Some(m) = Mini::of(scene, xf, size) else {
+            return vec![regions, graph, overlay];
+        };
+        let mini = state
+            .mini
+            .draw(renderer, size, |f| minimap(f, scene, m, xf, size, &pal));
+        vec![regions, graph, overlay, mini]
     }
 
     fn mouse_interaction(
@@ -343,6 +438,63 @@ impl canvas::Program<Message> for TopoCanvas<'_> {
             mouse::Interaction::default()
         }
     }
+}
+
+/// The whole topology small, in a corner, with the part in view.
+fn minimap(f: &mut Frame, scene: &Scene, m: Mini, xf: Xf, size: Size, pal: &Palette) {
+    let frame = Path::rounded_rectangle(m.rect.position(), m.rect.size(), 4.0.into());
+    f.fill(
+        &frame,
+        iced::Color {
+            a: 0.92,
+            ..pal.background
+        },
+    );
+    for r in &scene.regions {
+        let a = m.pt(Pos::new(r.rect.x, r.rect.y));
+        f.fill_rectangle(
+            a,
+            Size::new(r.rect.w * m.k, r.rect.h * m.k),
+            pal.region_fill,
+        );
+    }
+    for e in &scene.edges {
+        f.stroke(
+            &Path::line(m.pt(e.from), m.pt(e.to)),
+            Stroke::default().with_color(pal.text_muted).with_width(1.0),
+        );
+    }
+    for n in &scene.nodes {
+        let a = m.pt(Pos::new(n.rect.x, n.rect.y));
+        let s = Size::new((n.rect.w * m.k).max(2.0), (n.rect.h * m.k).max(2.0));
+        // the node's state, readable this small
+        let tone = if n.selected {
+            nlink_lab_view::scene::Tone::Accent
+        } else {
+            n.tone
+        };
+        f.fill_rectangle(a, s, pal.tone(tone));
+    }
+    // the part in view, clipped to the map
+    let a = m.pt(xf.world(Point::ORIGIN));
+    let b = m.pt(xf.world(Point::new(size.width, size.height)));
+    let (x0, y0) = (a.x.max(m.rect.x), a.y.max(m.rect.y));
+    let (x1, y1) = (
+        b.x.min(m.rect.x + m.rect.width),
+        b.y.min(m.rect.y + m.rect.height),
+    );
+    if x1 > x0 && y1 > y0 {
+        f.stroke(
+            &Path::rectangle(Point::new(x0, y0), Size::new(x1 - x0, y1 - y0)),
+            Stroke::default().with_color(pal.text).with_width(1.5),
+        );
+    }
+    f.stroke(
+        &frame,
+        Stroke::default()
+            .with_color(pal.region_stroke)
+            .with_width(1.0),
+    );
 }
 
 fn edge_path(e: &SceneEdge, xf: Xf) -> Path {
@@ -528,5 +680,59 @@ fn hover(f: &mut Frame, scene: &Scene, hit: Option<&Hit>, xf: Xf, pal: &Palette)
             }
         }
         Some(Hit::Region(_)) | None => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scene(w: f32, h: f32) -> Scene {
+        Scene {
+            bounds: Some(Rect {
+                x: 0.0,
+                y: 0.0,
+                w,
+                h,
+            }),
+            ..Scene::default()
+        }
+    }
+
+    #[test]
+    fn the_minimap_shows_when_the_topology_does_not_fit() {
+        let size = Size::new(1000.0, 600.0);
+        let fit = Xf {
+            scale: 1.0,
+            x: 10.0,
+            y: 10.0,
+        };
+        assert_eq!(Mini::of(&scene(800.0, 500.0), fit, size), None);
+        let zoomed = Xf {
+            scale: 3.0,
+            x: -100.0,
+            y: -100.0,
+        };
+        let m = Mini::of(&scene(800.0, 500.0), zoomed, size).expect("a minimap");
+        // in the bottom-right corner, within its largest size
+        assert!(m.rect.width <= MINI.0 + 0.01 && m.rect.height <= MINI.1 + 0.01);
+        assert!((m.rect.x + m.rect.width - (size.width - MINI_MARGIN)).abs() < 0.01);
+        assert!((m.rect.y + m.rect.height - (size.height - MINI_MARGIN)).abs() < 0.01);
+        // its points and the world's map both ways
+        let p = m.pt(Pos::new(400.0, 250.0));
+        let w = m.world(p);
+        assert!((w.x - 400.0).abs() < 0.01 && (w.y - 250.0).abs() < 0.01);
+        // a click there puts that point in the middle, at the same zoom
+        let Camera::Manual { x, y, scale } = m.center_on(p, zoomed, size) else {
+            panic!()
+        };
+        assert_eq!(scale, 3.0);
+        assert!((400.0 * scale + x - 500.0).abs() < 0.01);
+        assert!((250.0 * scale + y - 300.0).abs() < 0.01);
+        // no room on a small canvas
+        assert_eq!(
+            Mini::of(&scene(800.0, 500.0), zoomed, Size::new(300.0, 200.0)),
+            None
+        );
     }
 }

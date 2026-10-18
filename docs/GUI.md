@@ -90,8 +90,8 @@ the full key map.
 ## The desktop app (experimental)
 
 `nlink-lab-gui` draws a topology from its file and keeps up with it —
-save the file in your editor and the drawing follows — and follows the
-labs running on the host through the daemon. Install it from
+edit it in the app, or save it in your editor, and the drawing follows —
+and follows the labs running on the host through the daemon. Install it from
 [INSTALL.md](INSTALL.md#option-c--the-desktop-app-flatpak) — it ships
 as a flatpak bundle, or builds with
 `cargo build --release -p nlink-lab-gui`.
@@ -111,8 +111,10 @@ Home lists the running labs, the recent files and the built-in
 templates (`nlink-lab init`'s); a template opens unsaved, and **Save
 as…** makes it a file.
 Each topology is a tab: the canvas, the inspector on the right, and
-the dock under the canvas with the topology's **Problems** and its
-**Source**. The panes resize by their borders.
+the dock under the canvas with the topology's **Problems**; **Source**
+(`Ctrl+U`) opens the source beside the canvas. The panes resize by
+their borders. `Ctrl+K` finds any command by name — an action, a
+layout, an export, a node to go to, a tab, a recent file, a template.
 
 - **The drawing**: routers (rounded), hosts, containers (dashed),
   networks (ellipses, their members around them), the host interfaces
@@ -133,13 +135,32 @@ the dock under the canvas with the topology's **Problems** and its
   interface's address, peer, impairment, rate limit and qdisc. With
   nothing selected, the lab, its params (Enter applies; `*` marks a
   value set over its default) and the placed nodes.
-- **Problems**: what `nlink-lab validate` reports, and a parse error
-  with its place. Clicking one selects what it is about, or shows its
-  line in Source. A file that stops parsing keeps its last drawing,
-  said so above the canvas.
+- **Problems**: what `nlink-lab validate` and `nlink-lab lint` report
+  (a lint's finding as a hint), each with its line and column — the
+  same analysis `nlink-lab lsp` gives an editor. Clicking one opens the
+  source at it and selects what it is about. A file that stops parsing
+  keeps its last drawing, said so above the canvas.
+- **The minimap**: zoomed in past the window, the whole topology small
+  in the canvas's corner, with the part in view; click or drag in it to
+  move there.
 - **Export**: the drawing as SVG or PNG (the graph alone, not the
   window), the topology as Graphviz DOT or Mermaid (what `nlink-lab
   render --diagram` prints).
+
+### Editing the source
+
+**Source** shows a design's NLL beside its canvas, coloured (statements,
+fields, literals, strings, `${…}`, comments), its problems marked in
+red or amber where they are. Typing redraws the canvas once you pause:
+the source is analysed again, with its params, and a node it gains is
+placed beside its neighbours. **Format** rewrites it as `nlink-lab fmt`
+would; **Save** (`Ctrl+S`) writes it — a template asks where. A tab
+with edits not saved says `*`, and closing it or quitting asks first.
+If the file changes on disk while you edit it, the app asks whether to
+reload it or keep your edits; untouched, it just follows the file.
+
+A deploy sends what the editor holds, saved or not, with the files it
+imports.
 
 ### Running labs
 
@@ -244,7 +265,11 @@ own; another app through the daemon) are listed there to **Follow**.
 
 | Keys | What they do |
 |------|--------------|
+| `Ctrl+K`, `Ctrl+Shift+P` | Every command, by name |
 | `Ctrl+O` | Open a topology |
+| `Ctrl+S` | Save the source |
+| `Ctrl+U` | The source beside the topology, or not |
+| `Ctrl+Shift+F` | Format the source |
 | `Ctrl+R`, `F5` | Reload |
 | `Ctrl+W` | Close the tab |
 | `Ctrl+Tab`, `Ctrl+Shift+Tab` | Next, previous tab |
@@ -254,7 +279,7 @@ own; another app through the daemon) are listed there to **Follow**.
 | `L`, `Shift+L` | Next layout; forget placed nodes |
 | `A`, `M` | Addresses, management network on and off |
 | `Ctrl+E`, `Ctrl+Shift+E` | Export SVG, PNG |
-| `Esc` | Clear the selection |
+| `Esc` | Clear the selection; close the palette or a question |
 | `Ctrl+Q` | Quit |
 
 ### What it remembers
@@ -280,7 +305,7 @@ The bundle is confined:
 
 ### Why "experimental"
 
-- Its looks are still settling, and it has no source editor yet.
+- Its looks are still settling.
 - It is the only artifact with no plain-binary release; you get a
   flatpak bundle or you build it.
 - Its looks and keys are free to change between releases without a

@@ -23,9 +23,8 @@ impl From<WatchFamilyArg> for nlink_lab::WatchFamily {
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Event family: route, nftables, or both.
     #[arg(long, value_enum, default_value_t = WatchFamilyArg::Both)]
@@ -53,6 +52,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         node,
         include_snapshot,
     } = args;
+    let lab = lab.resolve()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
     // unprivileged, every subscription failed with EPERM, retried (#226)
     crate::ctx::require_root()?;

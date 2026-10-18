@@ -101,7 +101,7 @@ nodes, in the image for container nodes):
 ```bash
 sudo apt-get install iperf3   # or: dnf install iperf3
 sudo nlink-lab deploy examples/benchmark.nll
-sudo nlink-lab benchmark perf-test latency
+sudo nlink-lab benchmark -L perf-test latency
 ```
 
 Output looks like:
@@ -115,7 +115,7 @@ Benchmark "latency": PASS
       ok  assert loss below 5% (actual 0)
 ```
 
-`nlink-lab benchmark perf-test` without a name lists the lab's
+`nlink-lab benchmark -L perf-test` without a name lists the lab's
 benchmarks. A test that measured nothing (no address for the target,
 iperf3 missing) says why under its line.
 
@@ -124,7 +124,7 @@ iperf3 missing) says why under its line.
 ```bash
 # CI script
 sudo nlink-lab deploy examples/benchmark.nll
-sudo nlink-lab benchmark perf-test latency
+sudo nlink-lab benchmark -L perf-test latency
 RC=$?
 sudo nlink-lab destroy perf-test
 exit $RC

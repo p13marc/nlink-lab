@@ -47,13 +47,12 @@ A node whose stream ends prints `watch ended: <error>` (an `ended` record in `--
 
 Every change is shown, whoever made it: what a concurrent `apply`, `impair`, `edit` or `restart` does prints like a hand edit.
 
-Usage: nlink-lab watch [OPTIONS] <LAB>
-
-Arguments:
-  <LAB>
-          Lab name
+Usage: nlink-lab watch [OPTIONS]
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
       --family <FAMILY>
           Event family: route, nftables, or both
           

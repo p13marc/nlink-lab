@@ -4,9 +4,8 @@ use crate::ctx::Ctx;
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Node name.
     #[arg(add = crate::ctx::node_completer())]
@@ -28,6 +27,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         iface,
         cidr,
     } = args;
+    let lab = lab.resolve()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
     let addrs = running.node_addresses(&node)?;
 

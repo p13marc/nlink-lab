@@ -4,7 +4,7 @@
 //! separate CLI invocation, so lifecycle events cannot be *observed* by
 //! one process the way RTNETLINK drift can; they are *recorded* instead:
 //! each operation appends one NDJSON line to
-//! `<state_dir>/<lab>/events.ndjson`. `nlink-lab events <lab>` prints
+//! `<state_dir>/<lab>/events.ndjson`. `nlink-lab events -L <lab>` prints
 //! and follows the file (merging it with drift and runtime events), and
 //! the backend republishes new lines on zenoh / HTTP.
 //!

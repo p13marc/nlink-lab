@@ -66,7 +66,7 @@ sudo nlink-lab deploy examples/macvlan.nll
 ### Verify the gateway reaches the LAN
 
 ```bash
-sudo nlink-lab exec macvlan-demo gateway -- ping -c 3 192.168.1.1
+sudo nlink-lab exec -L macvlan-demo gateway -- ping -c 3 192.168.1.1
 ```
 
 If your LAN gateway is at `192.168.1.1`, the ping should succeed.
@@ -85,7 +85,7 @@ on the LAN.
 ### Verify the internal node still routes through the gateway
 
 ```bash
-sudo nlink-lab exec macvlan-demo internal -- ping -c 3 192.168.1.1
+sudo nlink-lab exec -L macvlan-demo internal -- ping -c 3 192.168.1.1
 ```
 
 Traffic flows `internal → veth → gateway → macvlan → enp3s0`.

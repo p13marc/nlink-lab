@@ -24,13 +24,13 @@ readable by tcpdump, Wireshark, scapy, and tshark.
 
 | Argument | Description |
 |----------|-------------|
-| `<LAB>` | Lab name. |
 | `<ENDPOINT>` | `node:iface` — for example, `router:eth0`. |
 
 ## Options
 
 | Flag | Description |
 |------|-------------|
+| `-L`, `--lab LAB` | The lab (default: `$NLINK_LAB`, then `nlink-lab use`, then the only running lab). |
 | `-o`, `--output FILE` | Write to pcap (`--write` is an alias). Without this, summaries go to stdout. |
 | `-c`, `--count N` | Stop after N packets. |
 | `--duration DURATION` | Stop after this long (`30s`). |
@@ -76,7 +76,7 @@ For OR or hand-rolled bytecode, use the library API directly.
 ### Capture 100 TCP packets on port 80
 
 ```bash
-sudo nlink-lab capture lab client:eth0 \
+sudo nlink-lab capture -L lab client:eth0 \
   -c 100 \
   --filter-tcp --filter-dst-port 80 \
   -o http.pcap
@@ -85,7 +85,7 @@ sudo nlink-lab capture lab client:eth0 \
 ### Watch traffic live with summaries
 
 ```bash
-sudo nlink-lab capture lab router:wan --filter-icmp
+sudo nlink-lab capture -L lab router:wan --filter-icmp
 ```
 
 ```text
@@ -97,7 +97,7 @@ sudo nlink-lab capture lab router:wan --filter-icmp
 ### Time-limited capture for a CI artifact
 
 ```bash
-sudo nlink-lab capture lab server:eth0 \
+sudo nlink-lab capture -L lab server:eth0 \
   --duration 30s \
   -o /tmp/server-eth0.pcap
 ```
@@ -105,22 +105,22 @@ sudo nlink-lab capture lab server:eth0 \
 ### Capture both sides of a link in parallel
 
 ```bash
-sudo nlink-lab capture lab a:eth0 -o a-eth0.pcap &
-sudo nlink-lab capture lab b:eth0 -o b-eth0.pcap &
+sudo nlink-lab capture -L lab a:eth0 -o a-eth0.pcap &
+sudo nlink-lab capture -L lab b:eth0 -o b-eth0.pcap &
 wait
 ```
 
 ### Open in Wireshark
 
 ```bash
-sudo nlink-lab capture lab router:wan --duration 10s -o /tmp/trace.pcap
+sudo nlink-lab capture -L lab router:wan --duration 10s -o /tmp/trace.pcap
 wireshark /tmp/trace.pcap
 ```
 
 ### Pipe to tshark live
 
 ```bash
-sudo nlink-lab capture lab router:wan -o - -c 100 | tshark -r -
+sudo nlink-lab capture -L lab router:wan -o - -c 100 | tshark -r -
 ```
 
 (Some shells need `-o /dev/stdout` instead of `-o -`.)
@@ -156,16 +156,16 @@ sudo nlink-lab capture lab router:wan -o - -c 100 | tshark -r -
 ```text
 Capture packets on an interface using netring
 
-Usage: nlink-lab capture [OPTIONS] <LAB> <ENDPOINT>
+Usage: nlink-lab capture [OPTIONS] <ENDPOINT>
 
 Arguments:
-  <LAB>
-          Lab name
-
   <ENDPOINT>
           Endpoint (e.g., "router:eth0")
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
   -o, --output <FILE>
           Write a pcap file (default: print summaries to stdout)
 

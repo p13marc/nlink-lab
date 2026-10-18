@@ -30,16 +30,16 @@ Run a `scenario` block from a deployed lab's topology.
 
 JSON OUTPUT (with `--json`): the full `ScenarioResult` (steps, actions, assertion outcomes, timings). Exit 2 when any step fails.
 
-Usage: nlink-lab scenario <LAB> [NAME]
+Usage: nlink-lab scenario [OPTIONS] [NAME]
 
 Arguments:
-  <LAB>
-          Lab name (must be deployed)
-
   [NAME]
           Scenario name as declared in the topology (`scenario "name" { … }`). Omit to list the scenarios the lab defines
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
   -h, --help
           Print help (see a summary with '-h')
 ```

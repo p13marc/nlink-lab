@@ -9,16 +9,16 @@ Bring a running lab back to a snapshot: `apply` the saved topology, then re-inst
 
 Restores what nlink-lab manages, not hand-made `ip`/`tc` edits inside the namespaces. `--dry-run` prints the plan.
 
-Usage: nlink-lab restore [OPTIONS] <LAB> <NAME>
+Usage: nlink-lab restore [OPTIONS] <NAME>
 
 Arguments:
-  <LAB>
-          Lab name
-
   <NAME>
-          Snapshot name (see `nlink-lab snapshot <lab> --list`)
+          Snapshot name (see `nlink-lab snapshot --list`)
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
       --dry-run
           Show the plan without changing anything
 

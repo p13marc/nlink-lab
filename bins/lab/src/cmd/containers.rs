@@ -4,13 +4,13 @@ use crate::ctx::Ctx;
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 }
 
 pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args { lab } = args;
+    let lab = lab.resolve()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
     let containers = running.containers();
     if ctx.json {

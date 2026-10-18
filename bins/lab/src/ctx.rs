@@ -17,6 +17,87 @@ pub struct Ctx {
 
 pub use crate::output::style::{bold, green, red, yellow};
 
+/// `-L/--lab`: the lab a lab-scoped command acts on.
+#[derive(clap::Args, Debug, Clone, Default)]
+pub struct LabArg {
+    /// The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use`
+    /// selected, then the only running lab.
+    #[arg(short = 'L', long = "lab", value_name = "LAB", add = lab_completer())]
+    pub lab: Option<String>,
+}
+
+/// Where the lab of a command came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum LabFrom {
+    /// `-L LAB`.
+    Flag,
+    /// `NLINK_LAB`.
+    Env,
+    /// `nlink-lab use LAB`.
+    Context,
+    /// The only lab running.
+    Only,
+}
+
+impl LabArg {
+    /// The lab: the flag, `NLINK_LAB`, the current lab, or the only one.
+    pub fn resolve(&self) -> nlink_lab::Result<String> {
+        resolve_lab(self.lab.as_deref()).map(|(lab, _)| lab)
+    }
+}
+
+/// Who runs this: the user behind `sudo` (`SUDO_UID`), else the caller.
+/// The current lab is theirs, not root's.
+pub fn caller_uid() -> u32 {
+    // SAFETY: getuid/geteuid cannot fail.
+    if unsafe { libc::geteuid() } == 0
+        && let Some(uid) = std::env::var("SUDO_UID").ok().and_then(|u| u.parse().ok())
+    {
+        return uid;
+    }
+    unsafe { libc::getuid() }
+}
+
+/// The lab `flag` names, else `NLINK_LAB`, else the caller's current lab
+/// (`nlink-lab use`), else the only running lab; and where it came from.
+pub fn resolve_lab(flag: Option<&str>) -> nlink_lab::Result<(String, LabFrom)> {
+    let checked = |lab: String, from| {
+        nlink_lab::state::validate_lab_name(&lab)?;
+        Ok((lab, from))
+    };
+    if let Some(lab) = flag {
+        return checked(lab.to_string(), LabFrom::Flag);
+    }
+    if let Some(lab) = std::env::var("NLINK_LAB").ok().filter(|l| !l.is_empty()) {
+        return checked(lab, LabFrom::Env);
+    }
+    if let Some(lab) = nlink_lab::state::context_get(caller_uid()) {
+        if !nlink_lab::state::exists(&lab) {
+            return Err(nlink_lab::Error::invalid_argument(format!(
+                "the current lab '{lab}' (`nlink-lab use`) is not running: \
+                 `nlink-lab use LAB` picks another, `nlink-lab use --clear` forgets it"
+            )));
+        }
+        return checked(lab, LabFrom::Context);
+    }
+    let labs = nlink_lab::state::list()?;
+    match labs.as_slice() {
+        [only] => checked(only.name.clone(), LabFrom::Only),
+        [] => Err(nlink_lab::Error::invalid_argument(
+            "no lab is running: deploy one, or name one with -L LAB",
+        )),
+        many => Err(nlink_lab::Error::invalid_argument(format!(
+            "{} labs are running ({}): pick one with -L LAB, NLINK_LAB=LAB or `nlink-lab use LAB`",
+            many.len(),
+            many.iter()
+                .map(|l| l.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))),
+    }
+}
+
 /// Parse a topology file, optionally with CLI `--set` parameters.
 pub fn parse_topology(
     path: &std::path::Path,
@@ -62,14 +143,42 @@ pub fn lab_completer() -> clap_complete::ArgValueCompleter {
     })
 }
 
-/// Node names of every deployed lab (the shell cannot tell us which lab
-/// the previous argument named, so the union is offered).
+/// The lab a completion is for: a `-L LAB` already on the line being
+/// completed (the shell passes its words to the binary), else the current
+/// lab, else none (every lab's names are offered).
+fn completing_lab() -> Option<String> {
+    let words: Vec<String> = std::env::args().collect();
+    for (i, w) in words.iter().enumerate() {
+        if let Some(lab) = w.strip_prefix("--lab=") {
+            return Some(lab.to_string());
+        }
+        if (w == "-L" || w == "--lab")
+            && let Some(lab) = words.get(i + 1)
+        {
+            return Some(lab.clone());
+        }
+    }
+    resolve_lab(None).ok().map(|(lab, _)| lab)
+}
+
+/// The labs completions draw on: the one being worked on, or all of them.
+fn completion_labs() -> Vec<String> {
+    match completing_lab() {
+        Some(lab) => vec![lab],
+        None => nlink_lab::state::list()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|l| l.name)
+            .collect(),
+    }
+}
+
+/// Node names of the lab being worked on (container nodes too: `logs`
+/// takes only those).
 pub fn node_completer() -> clap_complete::ArgValueCompleter {
     clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {
-        let labs = nlink_lab::state::list().unwrap_or_default();
-        let nodes = labs.into_iter().flat_map(|l| {
-            nlink_lab::state::load(&l.name)
-                // container nodes too: `logs <lab> <node>` takes only those
+        let nodes = completion_labs().into_iter().flat_map(|lab| {
+            nlink_lab::state::load(&lab)
                 .map(|(st, _)| {
                     st.namespaces
                         .keys()
@@ -80,6 +189,18 @@ pub fn node_completer() -> clap_complete::ArgValueCompleter {
                 .unwrap_or_default()
         });
         candidates(current, nodes)
+    })
+}
+
+/// `node:iface` endpoints of the lab being worked on.
+pub fn endpoint_completer() -> clap_complete::ArgValueCompleter {
+    clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {
+        let endpoints = completion_labs().into_iter().flat_map(|lab| {
+            nlink_lab::state::load(&lab)
+                .map(|(_, topo)| nlink_lab::impair_parse::topology_endpoints(&topo))
+                .unwrap_or_default()
+        });
+        candidates(current, endpoints)
     })
 }
 

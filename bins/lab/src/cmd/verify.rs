@@ -7,9 +7,8 @@ use crate::output::{DryRunReport, EXIT_VALIDATION, set_exit_code};
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Compare the live lab against this topology file instead of the
     /// one it was deployed from (what `apply` would converge to).
@@ -31,6 +30,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         topology,
         params,
     } = args;
+    let lab = lab.resolve()?;
     require_root()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
     let desired = match topology {

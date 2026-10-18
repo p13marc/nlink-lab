@@ -8,9 +8,8 @@ use crate::output::{EXIT_FAILURE, EXIT_TIMEOUT, set_exit_code};
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Node name.
     #[arg(add = crate::ctx::node_completer())]
@@ -47,6 +46,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         timeout,
         cmd,
     } = args;
+    let lab = lab.resolve()?;
     require_root()?;
     let env_refs: Vec<(&str, &str)> = env_vars
         .iter()

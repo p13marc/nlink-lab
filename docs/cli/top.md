@@ -6,10 +6,10 @@ interfaces, and its TCP flows, refreshed every `--interval` seconds. It is
 in one screen.
 
 ```bash
-sudo nlink-lab top mylab               # collect locally (needs root)
-sudo nlink-lab top mylab --interval 2s
-nlink-lab top mylab --zenoh            # read a running `daemon` (no root)
-nlink-lab top mylab --once             # one text frame, for pipes and CI
+sudo nlink-lab top -L mylab            # collect locally (needs root)
+sudo nlink-lab top -L mylab --interval 2s
+nlink-lab top -L mylab --zenoh         # read a running `daemon` (no root)
+nlink-lab top -L mylab --once          # one text frame, for pipes and CI
 ```
 
 ## Panes
@@ -90,13 +90,12 @@ KEYS up/down or j/k  select        Tab  next pane      s  cycle sort i  impair p
 
 `--once` prints a single text frame and exits — no terminal control, so it is safe in pipes, CI and `watch -n1`. With `--json` it prints the raw snapshot (schema: docs/json-schemas/metrics-snapshot.schema.json).
 
-Usage: nlink-lab top [OPTIONS] <LAB>
-
-Arguments:
-  <LAB>
-          Lab name
+Usage: nlink-lab top [OPTIONS]
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
   -i, --interval <DURATION>
           Refresh interval (`1s`; 100ms at least)
           

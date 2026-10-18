@@ -95,16 +95,16 @@ By the time `deploy` returns, `db` accepts connections and `app`'s
 setup has run:
 
 ```bash
-sudo nlink-lab exec container-lifecycle app -- cat /tmp/ready
-sudo nlink-lab exec container-lifecycle app -- \
+sudo nlink-lab exec -L container-lifecycle app -- cat /tmp/ready
+sudo nlink-lab exec -L container-lifecycle app -- \
   python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8080/').status)"
 ```
 
 ### Inspect health state
 
 ```bash
-nlink-lab containers container-lifecycle
-nlink-lab stats container-lifecycle
+nlink-lab containers -L container-lifecycle
+nlink-lab stats -L container-lifecycle
 ```
 
 ### Check the order
@@ -162,7 +162,7 @@ This is the test:
 set -euo pipefail
 sudo nlink-lab deploy examples/container-lifecycle.nll
 trap 'sudo nlink-lab destroy container-lifecycle' EXIT
-sudo nlink-lab exec container-lifecycle app -- cat /tmp/ready
+sudo nlink-lab exec -L container-lifecycle app -- cat /tmp/ready
 ```
 
 If anything along the chain (db boot, healthcheck, app setup,

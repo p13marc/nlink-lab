@@ -25,13 +25,12 @@ Show resource usage of container nodes and cpu/memory-limited namespace nodes.
 
 With `--json`, one object per node, from its cgroup v2: `{node, kind: "namespace" | "container", cpu_usec, memory_bytes, memory_max, cpu_max, pids}` (`memory_max` and `cpu_max` are null when unlimited).
 
-Usage: nlink-lab stats <LAB>
-
-Arguments:
-  <LAB>
-          Lab name
+Usage: nlink-lab stats [OPTIONS]
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
   -h, --help
           Print help (see a summary with '-h')
 ```

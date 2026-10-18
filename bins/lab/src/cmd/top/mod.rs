@@ -19,9 +19,8 @@ use crate::ctx::Ctx;
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Refresh interval (`1s`; 100ms at least).
     #[arg(short, long, value_name = "DURATION", default_value = "1s", value_parser = crate::args::interval)]
@@ -87,22 +86,22 @@ enum Due {
 }
 
 impl Source {
-    async fn open(args: &Args) -> nlink_lab::Result<Self> {
+    async fn open(args: &Args, lab: &str) -> nlink_lab::Result<Self> {
         if args.zenoh || args.zenoh_connect.is_some() {
-            return Self::open_zenoh(args).await;
+            return Self::open_zenoh(args, lab).await;
         }
         if !crate::ctx::has_privileges() {
             return Err(nlink_lab::Error::deploy_failed(
                 "top collects metrics locally, which needs root (same as `diagnose`): run it \
-                 with sudo, or start `nlink-lab daemon <lab>` and use `top <lab> --zenoh`",
+                 with sudo, or start `nlink-lab daemon -L <lab>` and use `top -L <lab> --zenoh`",
             ));
         }
-        let lab = nlink_lab::RunningLab::load(&args.lab)?;
+        let lab = nlink_lab::RunningLab::load(lab)?;
         let collector = nlink_lab::metrics::MetricsCollector::new(&lab);
         Ok(Source::Local { lab, collector })
     }
 
-    async fn open_zenoh(args: &Args) -> nlink_lab::Result<Self> {
+    async fn open_zenoh(args: &Args, lab: &str) -> nlink_lab::Result<Self> {
         // Same configuration path as `nlink-lab metrics`.
         let mut config = zenoh::Config::default();
         if let Some(connect) = &args.zenoh_connect {
@@ -113,7 +112,7 @@ impl Source {
         let session = zenoh::open(config).await.map_err(|e| {
             nlink_lab::Error::deploy_failed(format!("failed to open Zenoh session: {e}"))
         })?;
-        let topic = nlink_lab_shared::topics::metrics_snapshot(&args.lab);
+        let topic = nlink_lab_shared::topics::metrics_snapshot(lab);
         let subscriber = session
             .declare_subscriber(&topic)
             .await
@@ -138,7 +137,7 @@ impl Source {
         Ok(Source::Zenoh {
             _task: task,
             rx,
-            lab: nlink_lab::RunningLab::load(&args.lab).ok(),
+            lab: nlink_lab::RunningLab::load(lab).ok(),
             ended: false,
         })
     }
@@ -257,6 +256,7 @@ impl Source {
 }
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
+    let lab = args.lab.resolve()?;
     // Fail before touching the terminal: the interactive view needs a tty,
     // and cli-smoke runs headless.
     if !args.once && !std::io::stdout().is_terminal() {
@@ -265,13 +265,8 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         ));
     }
     let interval = args.interval.max(Duration::from_millis(100));
-    let mut source = Source::open(&args).await?;
-    let mut app = App::new(
-        &args.lab,
-        interval,
-        deployed_at_unix(&args.lab),
-        source.can_mutate(),
-    );
+    let mut source = Source::open(&args, &lab).await?;
+    let mut app = App::new(&lab, interval, deployed_at_unix(&lab), source.can_mutate());
     if let Some(filter) = &args.node {
         app.filter = filter.to_lowercase();
     }

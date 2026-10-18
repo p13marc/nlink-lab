@@ -45,16 +45,16 @@ Options:
 ```text
 Wait for a service or condition inside a lab node
 
-Usage: nlink-lab wait-for [OPTIONS] <LAB> <NODE>
+Usage: nlink-lab wait-for [OPTIONS] <NODE>
 
 Arguments:
-  <LAB>
-          Lab name
-
   <NODE>
           Node name
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
       --tcp <[IP:]PORT>
           Wait for TCP port (e.g., "127.0.0.1:8080" or just "8080" for localhost). With --exec or --file too, all must hold, within one --timeout
 

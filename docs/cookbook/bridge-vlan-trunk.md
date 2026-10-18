@@ -61,23 +61,23 @@ The lab has no L3 addresses by default — VLAN segmentation happens
 at L2. Add IPs manually for the test:
 
 ```bash
-sudo nlink-lab exec vlan-trunk host1 -- ip addr add 10.0.0.1/24 dev eth0
-sudo nlink-lab exec vlan-trunk host2 -- ip addr add 10.0.0.2/24 dev eth0
-sudo nlink-lab exec vlan-trunk host3 -- ip addr add 10.0.0.3/24 dev eth0
+sudo nlink-lab exec -L vlan-trunk host1 -- ip addr add 10.0.0.1/24 dev eth0
+sudo nlink-lab exec -L vlan-trunk host2 -- ip addr add 10.0.0.2/24 dev eth0
+sudo nlink-lab exec -L vlan-trunk host3 -- ip addr add 10.0.0.3/24 dev eth0
 ```
 
 ### Verify same-VLAN connectivity
 
 ```bash
 # host1 and host2 share VLAN 100 — connectivity works
-sudo nlink-lab exec vlan-trunk host1 -- ping -c 3 10.0.0.2
+sudo nlink-lab exec -L vlan-trunk host1 -- ping -c 3 10.0.0.2
 ```
 
 ### Verify cross-VLAN isolation
 
 ```bash
 # host1 (VLAN 100) cannot reach host3 (VLAN 200), even though same subnet
-sudo nlink-lab exec vlan-trunk host1 -- ping -c 3 -W 2 10.0.0.3
+sudo nlink-lab exec -L vlan-trunk host1 -- ping -c 3 -W 2 10.0.0.3
 # expect 100% packet loss
 ```
 

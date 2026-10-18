@@ -5,9 +5,8 @@ use nlink_lab::wait::WaitCondition;
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Node name.
     #[arg(add = crate::ctx::node_completer())]
@@ -45,6 +44,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         timeout,
         interval,
     } = args;
+    let lab = lab.resolve()?;
     require_root()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
 

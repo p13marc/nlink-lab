@@ -82,16 +82,16 @@ JSON OUTPUT (with `--show --json`): `{ "lab": str, "endpoints": { "<node>:<iface
 
 Without `--show`, applies impairment changes; output is plain confirmation text.
 
-Usage: nlink-lab impair [OPTIONS] <LAB> [ENDPOINT]
+Usage: nlink-lab impair [OPTIONS] [ENDPOINT]
 
 Arguments:
-  <LAB>
-          Lab name
-
   [ENDPOINT]
           Endpoint (e.g., "router:eth0"). Not required with --show
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
       --show
           Show every endpoint's root qdisc, one line each: netem's delay, jitter, loss and rate, and whether it is partitioned. Read over netlink, so no `tc` is needed in the node
 

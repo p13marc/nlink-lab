@@ -9,9 +9,8 @@ use crate::ctx::Ctx;
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Keep running: tail new lifecycle events and merge live drift
     /// (`watch`) and runtime events (process exits, interface state).
@@ -203,6 +202,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         interval,
         socket,
     } = args;
+    let lab = lab.resolve()?;
     if !nlink_lab::state::exists(&lab) {
         return Err(nlink_lab::Error::NotFound { name: lab });
     }

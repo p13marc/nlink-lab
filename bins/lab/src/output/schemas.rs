@@ -32,6 +32,10 @@ pub fn all_schemas() -> Vec<(&'static str, schemars::Schema)> {
             output_schema_for::<StatusScanReport<'static>>(),
         ),
         (
+            "use",
+            output_schema_for::<super::Document<'static, crate::cmd::use_lab::UseReport>>(),
+        ),
+        (
             "ps",
             output_schema_for::<super::Document<'static, crate::cmd::ps::PsReport>>(),
         ),

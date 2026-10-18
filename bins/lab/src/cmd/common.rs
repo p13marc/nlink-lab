@@ -152,13 +152,21 @@ pub fn collect_nll(path: &Path, recursive: bool) -> std::io::Result<Vec<PathBuf>
     Ok(out)
 }
 
-/// `node` of `lab`, or `NodeNotFound` after listing the lab's nodes.
+/// `node` of `lab`, or `NodeNotFound` after listing the lab's nodes. A
+/// node named like a lab is the old `exec LAB NODE` order: the hint says
+/// `-L`.
 pub fn require_node(lab: &nlink_lab::RunningLab, node: &str) -> nlink_lab::Result<()> {
     let names: Vec<&str> = lab.node_names().collect();
     if names.contains(&node) {
         return Ok(());
     }
     eprintln!("Available nodes: {}", names.join(", "));
+    if nlink_lab::state::exists(node) {
+        eprintln!(
+            "  {} '{node}' is a lab: select it with -L {node}",
+            crate::ctx::bold("hint:")
+        );
+    }
     Err(nlink_lab::Error::NodeNotFound {
         name: node.to_string(),
     })

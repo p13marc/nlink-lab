@@ -50,16 +50,16 @@ Without `--pid`: shows the container's stdout/stderr (node must be a container).
 
 (under `$NLINK_LAB_STATE_DIR` when it is set). The path is stable; consumers can read it directly.
 
-Usage: nlink-lab logs [OPTIONS] <LAB> [NODE]
+Usage: nlink-lab logs [OPTIONS] [NODE]
 
 Arguments:
-  <LAB>
-          Lab name
-
   [NODE]
           Node name (for container logs)
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
       --pid <PID>
           Process ID (for background process logs)
 

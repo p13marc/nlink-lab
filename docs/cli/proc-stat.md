@@ -48,12 +48,9 @@ CPU ticks are in `sysconf(_SC_CLK_TCK)` units (typically 100 per second); conver
 
 Sum `pss_kb`, not `rss_kb`, to get a node's memory: RSS double-counts every page shared between processes, which systematically overstates whichever configuration runs more of them.
 
-Usage: nlink-lab proc-stat [OPTIONS] <LAB> <NODE> [PID]
+Usage: nlink-lab proc-stat [OPTIONS] <NODE> [PID]
 
 Arguments:
-  <LAB>
-          Lab name
-
   <NODE>
           Node name
 
@@ -61,6 +58,9 @@ Arguments:
           Process ID as the node sees it: the host PID on a namespace node, the container's own PID on a container node. Omit it and pass `--all`, `--pid` or `--pidfile-glob` instead to sample more than one process per call. Every record carries both `host_pid` and `ns_pid`
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
       --pid <PID>
           Sample this PID, as the node sees it (repeatable). Output is a JSON array even for a single `--pid`, unlike the positional form
 

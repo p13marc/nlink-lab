@@ -4,7 +4,14 @@ use crate::ctx::Ctx;
 use crate::output::set_exit_code;
 
 #[derive(clap::Args)]
-pub struct Args {}
+pub struct Args {
+    /// Fix what can be fixed, then check: create the `nlink-lab` group
+    /// and the state root, give the root its group and modes, move the
+    /// idle labs of older versions into it, remove stale lock files.
+    /// Needs root.
+    #[arg(long)]
+    pub fix: bool,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
@@ -30,6 +37,57 @@ pub struct DoctorReport {
     pub ok: bool,
     pub failed: usize,
     pub checks: Vec<Check>,
+    /// What `--fix` did, before the checks ran.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub fixes: Vec<String>,
+}
+
+/// `--fix`: what can be repaired on this host, as lines saying what was
+/// done (or why not).
+fn fix() -> nlink_lab::Result<Vec<String>> {
+    use nlink_lab::state;
+    if !crate::ctx::has_privileges() {
+        return Err(nlink_lab::Error::Privileges(
+            "doctor --fix changes the host: run it with sudo".into(),
+        ));
+    }
+    let mut done = Vec::new();
+    if state::group_gid().is_none() {
+        match std::process::Command::new("groupadd")
+            .args(["--system", state::GROUP])
+            .status()
+        {
+            Ok(s) if s.success() => done.push(format!("created the `{}` group", state::GROUP)),
+            Ok(s) => done.push(format!(
+                "could not create the `{}` group: groupadd {s}",
+                state::GROUP
+            )),
+            Err(e) => done.push(format!(
+                "could not create the `{}` group: {e}",
+                state::GROUP
+            )),
+        }
+    }
+    state::adopt_root()?;
+    done.push(format!(
+        "{} has its owner, group and modes",
+        state::root_dir().display()
+    ));
+    for (from, name) in state::legacy_labs() {
+        match state::migrate_lab(&from, &name) {
+            Ok(to) => done.push(format!(
+                "moved lab '{name}' from {} to {}",
+                from.display(),
+                to.display()
+            )),
+            Err(e) => done.push(format!("kept lab '{name}' in {}: {e}", from.display())),
+        }
+    }
+    match state::sweep_locks() {
+        0 => {}
+        n => done.push(format!("removed {n} stale lock file(s)")),
+    }
+    Ok(done)
 }
 
 fn check(name: &'static str, ok: bool, required: bool, detail: impl Into<String>) -> Check {
@@ -77,7 +135,8 @@ const STALE_LOCK_WARN: usize = 32;
 /// modules the examples need, writable state dir, and leftovers on the
 /// host. Exit 1 when a required check fails, 0 otherwise (warnings are
 /// informational).
-pub async fn run(ctx: &Ctx, _args: Args) -> nlink_lab::Result<()> {
+pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
+    let fixes = if args.fix { fix()? } else { Vec::new() };
     let mut checks = Vec::new();
 
     let privileged = crate::ctx::has_privileges();
@@ -348,7 +407,7 @@ pub async fn run(ctx: &Ctx, _args: Args) -> nlink_lab::Result<()> {
             name: "old state dirs",
             status: Status::Warn,
             detail: format!(
-                "{} lab(s) deployed by an older nlink-lab, not moved yet: {}",
+                "{} lab(s) deployed by an older nlink-lab, not moved yet (`sudo nlink-lab doctor --fix` moves the idle ones): {}",
                 legacy.len(),
                 names.join(", ")
             ),
@@ -432,9 +491,16 @@ pub async fn run(ctx: &Ctx, _args: Args) -> nlink_lab::Result<()> {
                 ok: failed == 0,
                 failed,
                 checks,
+                fixes,
             })?
         );
     } else {
+        for f in &fixes {
+            println!("  fix   {f}");
+        }
+        if !fixes.is_empty() {
+            println!();
+        }
         for c in &checks {
             let tag = match c.status {
                 Status::Ok => "ok  ",

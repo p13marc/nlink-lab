@@ -32,16 +32,16 @@ Options:
 ```text
 Show IP addresses assigned to a node
 
-Usage: nlink-lab ip [OPTIONS] <LAB> <NODE>
+Usage: nlink-lab ip [OPTIONS] <NODE>
 
 Arguments:
-  <LAB>
-          Lab name
-
   <NODE>
           Node name
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
       --iface <IFACE>
           Filter by interface name
 

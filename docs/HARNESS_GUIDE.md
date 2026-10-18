@@ -32,8 +32,8 @@ parsing. It routes through nlink-lab's root context, so the
 `/proc/<pid>/fd/` permission gymnastics go away:
 
 ```bash
-nlink-lab proc-stat des-3m site_a 292086 --json
-nlink-lab proc-stat des-3m site_a 292086 --json --watch 5s  # NDJSON, every 5s
+nlink-lab proc-stat -L des-3m site_a 292086 --json
+nlink-lab proc-stat -L des-3m site_a 292086 --json --watch 5s  # NDJSON, every 5s
 ```
 
 To sample more than one process, take them in a single call rather than
@@ -42,9 +42,9 @@ container nodes too, so a sample costs no exec into the node at all
 (#157):
 
 ```bash
-nlink-lab proc-stat des-3m site_a --all --json          # whole namespace
-nlink-lab proc-stat des-3m site_a --pid 292086 --pid 292090 --json
-nlink-lab proc-stat des-3m site_a --pidfile-glob '/run/*.pid' --json
+nlink-lab proc-stat -L des-3m site_a --all --json       # whole namespace
+nlink-lab proc-stat -L des-3m site_a --pid 292086 --pid 292090 --json
+nlink-lab proc-stat -L des-3m site_a --pidfile-glob '/run/*.pid' --json
 ```
 
 A PID you name is the node's: the host PID on a namespace node, the
@@ -79,7 +79,7 @@ Sleeps are a anti-pattern — they're either too short (flaky) or too
 long (slow tests).
 
 ```bash
-nlink-lab spawn $LAB site_a --json \
+nlink-lab spawn -L $LAB site_a --json \
     --wait-log '^STARTED$' --wait-timeout 10s \
     -- /usr/local/bin/zenohd --config $cfg
 ```
@@ -97,7 +97,7 @@ structural probes (Plan 157 PR G):
 Probes AND-compose; specify multiple:
 
 ```bash
-nlink-lab spawn $LAB site_a --json \
+nlink-lab spawn -L $LAB site_a --json \
     --wait-log '^STARTED$' --wait-port 7447 --wait-timeout 10s \
     -- zenohd
 ```
@@ -163,7 +163,7 @@ incoming. Use `--dedupe-loopback` (Plan 156 PR H) to drop the
 outgoing copies at the kernel:
 
 ```bash
-nlink-lab capture $LAB site_a:lo --dedupe-loopback -o site_a-lo.pcap
+nlink-lab capture -L $LAB site_a:lo --dedupe-loopback -o site_a-lo.pcap
 ```
 
 Without the flag, your downstream processing has to dedupe.
@@ -174,7 +174,7 @@ Without the flag, your downstream processing has to dedupe.
 For multi-hour scenarios, use rotation (Plan 157 PR F):
 
 ```bash
-nlink-lab capture $LAB router:eth0 -o router.pcap \
+nlink-lab capture -L $LAB router:eth0 -o router.pcap \
     --max-size 100M --keep 5
 ```
 
@@ -200,15 +200,15 @@ When a scenario fails:
    evidence you have.
 2. **`nlink-lab status --json $LAB`** — topology + per-node
    addresses + `host_resources` (mgmt bridge, declared subnets).
-3. **`nlink-lab ps --json $LAB`** — every spawned PID with
+3. **`nlink-lab ps --json -L $LAB`** — every spawned PID with
    `alive: bool` and log paths. Pass `--alive-only` for liveness
    polling.
-4. **`nlink-lab proc-stat $LAB <node> <pid>`** — resource snapshot
+4. **`nlink-lab proc-stat -L $LAB <node> <pid>`** — resource snapshot
    of the suspected-stuck process. `--watch 1` while you reproduce
    for an NDJSON timeline.
-5. **`nlink-lab logs $LAB --pid <pid> [--stderr] [--follow]`** —
+5. **`nlink-lab logs -L $LAB --pid <pid> [--stderr] [--follow]`** —
    per-process captured stdout/stderr.
-6. **`nlink-lab impair --show --json $LAB`** — current netem state
+6. **`nlink-lab impair --show --json -L $LAB`** — current netem state
    per endpoint. Lets you assert "the partition I asked for is
    actually live" without grepping `tc qdisc show`.
 

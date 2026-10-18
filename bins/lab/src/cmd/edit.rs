@@ -7,9 +7,8 @@ use nlink_lab::edit::Edit;
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Add a namespace node: NAME or NAME:PROFILE (repeatable).
     #[arg(long, value_name = "NAME[:PROFILE]")]
@@ -143,8 +142,9 @@ fn apply_edits(topo: &mut nlink_lab::Topology, args: &Args) -> nlink_lab::Result
 }
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
+    let lab = args.lab.resolve()?;
     require_root()?;
-    let mut running = nlink_lab::RunningLab::load(&args.lab)?;
+    let mut running = nlink_lab::RunningLab::load(&lab)?;
     // Every edit is checked, and the result validated, before anything
     // changes: a bad edit next to an MTU change used to fail after the MTU
     // changed (#209).
@@ -159,7 +159,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         if ctx.json {
             println!(
                 "{}",
-                serde_json::json!({ "lab": args.lab, "edits": ed.log, "ops": 0, "removed": 0, "applied": [] })
+                serde_json::json!({ "lab": lab, "edits": ed.log, "ops": 0, "removed": 0, "applied": [] })
             );
         } else if !ctx.quiet {
             for l in &ed.log {
@@ -182,7 +182,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             println!(
                 "{}",
                 serde_json::to_string_pretty(
-                    &DryRunReport::new(&args.lab, &layered, &removals).with_ops(&plan_ops)
+                    &DryRunReport::new(&lab, &layered, &removals).with_ops(&plan_ops)
                 )?
             );
             return Ok(());
@@ -201,7 +201,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         println!(
             "{}",
             serde_json::json!({
-                "lab": args.lab,
+                "lab": lab,
                 "edits": ed.log,
                 "ops": report.ops,
                 "removed": report.removed,
@@ -214,7 +214,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         }
         println!(
             "Applied {} op(s) ({} removal(s)) to lab {:?}",
-            report.ops, report.removed, args.lab
+            report.ops, report.removed, lab
         );
     }
     Ok(())
@@ -226,7 +226,7 @@ mod tests {
 
     fn args() -> Args {
         Args {
-            lab: "t".into(),
+            lab: Default::default(),
             add_node: vec![],
             remove_node: vec![],
             add_link: vec![],

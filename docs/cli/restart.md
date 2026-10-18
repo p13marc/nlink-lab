@@ -26,16 +26,16 @@ Options:
 ```text
 Restart a container node
 
-Usage: nlink-lab restart <LAB> <NODE>
+Usage: nlink-lab restart [OPTIONS] <NODE>
 
 Arguments:
-  <LAB>
-          Lab name
-
   <NODE>
           Node name (must be a container node)
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
   -h, --help
           Print help
 ```

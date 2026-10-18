@@ -26,16 +26,16 @@ Options:
 ```text
 Kill a tracked background process
 
-Usage: nlink-lab kill [OPTIONS] <LAB> <PID>
+Usage: nlink-lab kill [OPTIONS] <PID>
 
 Arguments:
-  <LAB>
-          Lab name
-
   <PID>
           Process ID to kill
 
 Options:
+  -L, --lab <LAB>
+          The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
+
   -s, --signal <SIGNAL>
           Send this signal instead of the TERM-then-KILL sequence: TERM, KILL, STOP, CONT, HUP, INT, USR1, USR2 (with or without the SIG prefix). STOP/CONT freeze and thaw a process in place -- a "TCP answers, application is dead" peer for resilience tests
 

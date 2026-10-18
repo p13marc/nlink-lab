@@ -107,13 +107,13 @@ Now ping between nodes and watch the latency match the topology:
 
 ```bash
 # Ring-adjacent: ~12ms
-sudo nlink-lab exec satellite-mesh sat0 -- ping -c 3 172.100.0.2
+sudo nlink-lab exec -L satellite-mesh sat0 -- ping -c 3 172.100.0.2
 
 # Cross-plane jump: ~80ms
-sudo nlink-lab exec satellite-mesh sat0 -- ping -c 3 172.100.0.7
+sudo nlink-lab exec -L satellite-mesh sat0 -- ping -c 3 172.100.0.7
 
 # Degraded antenna: ~95ms with packet loss
-sudo nlink-lab exec satellite-mesh sat3 -- ping -c 10 172.100.0.10
+sudo nlink-lab exec -L satellite-mesh sat3 -- ping -c 10 172.100.0.10
 ```
 
 ## What the kernel actually built
@@ -135,9 +135,9 @@ sat0:rf
 You can inspect any of these directly:
 
 ```bash
-sudo nlink-lab exec satellite-mesh sat0 -- tc -s qdisc show dev rf
-sudo nlink-lab exec satellite-mesh sat0 -- tc -s class show dev rf
-sudo nlink-lab exec satellite-mesh sat0 -- tc filter show dev rf
+sudo nlink-lab exec -L satellite-mesh sat0 -- tc -s qdisc show dev rf
+sudo nlink-lab exec -L satellite-mesh sat0 -- tc -s class show dev rf
+sudo nlink-lab exec -L satellite-mesh sat0 -- tc filter show dev rf
 ```
 
 This is the standard kernel TC stack, applied directly. nlink-lab

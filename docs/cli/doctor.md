@@ -9,9 +9,12 @@ Check this host for everything nlink-lab needs.
 
 Privileges, netlink, the binaries exec'd inside namespaces, kernel modules, a writable state dir, pending crash journals and orphaned lab resources. Exit 1 when a required check fails.
 
-Usage: nlink-lab doctor
+Usage: nlink-lab doctor [OPTIONS]
 
 Options:
+      --fix
+          Fix what can be fixed, then check: create the `nlink-lab` group and the state root, give the root its group and modes, move the idle labs of older versions into it, remove stale lock files. Needs root
+
   -h, --help
           Print help (see a summary with '-h')
 ```

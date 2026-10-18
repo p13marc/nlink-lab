@@ -4,9 +4,8 @@ use crate::ctx::{Ctx, require_root};
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Node name.
     #[arg(add = crate::ctx::node_completer())]
@@ -19,6 +18,7 @@ pub struct Args {
 
 pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args { lab, node, shell } = args;
+    let lab = lab.resolve()?;
     require_root()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
     crate::cmd::common::require_node(&running, &node)?;

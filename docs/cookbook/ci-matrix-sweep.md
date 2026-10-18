@@ -69,7 +69,7 @@ for latency in "${LATENCIES[@]}"; do
     fi
 
     # Run the test inside the lab.
-    if ! sudo nlink-lab exec "wan-test-${latency}-${loss}" a -- \
+    if ! sudo nlink-lab exec -L "wan-test-${latency}-${loss}" a -- \
          /usr/bin/my-test --target b
     then
       failed+=("$name")

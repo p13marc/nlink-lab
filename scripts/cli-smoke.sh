@@ -22,7 +22,7 @@ while read -r -a cmd; do
 done < "$tmp/commands"
 
 say "== usage errors exit 64"
-for args in "no-such-command" "ps" "--format xml ps lab" "deploy --no-such-flag f.nll"; do
+for args in "no-such-command" "kill" "--format xml ps" "deploy --no-such-flag f.nll" "ps stray-positional"; do
   set +e; "$bin" $args >/dev/null 2>&1; rc=$?; set -e
   [ "$rc" -eq 64 ] || { say "FAIL: '$args' exited $rc (expected 64)"; fail=1; }
 done
@@ -95,7 +95,7 @@ say "== doctor / verify (rootless)"
 set +e; "$bin" --json doctor > "$tmp/doctor.json" 2>/dev/null; rc=$?; set -e
 [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ] || { say "FAIL: doctor exited $rc"; fail=1; }
 python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert "checks" in d and isinstance(d["ok"], bool), d' "$tmp/doctor.json" || { say "FAIL doctor --json"; fail=1; }
-set +e; NLINK_LAB_STATE_DIR="$tmp/state" "$bin" verify no-such-lab >/dev/null 2>&1; rc=$?; set -e
+set +e; NLINK_LAB_STATE_DIR="$tmp/state" "$bin" verify -L no-such-lab >/dev/null 2>&1; rc=$?; set -e
 [ "$rc" -eq 1 ] || { say "FAIL: verify on a missing lab exited $rc (expected 1)"; fail=1; }
 
 say "== completions"
@@ -103,7 +103,7 @@ for sh in bash zsh fish; do "$bin" completions "$sh" >/dev/null || { say "FAIL c
 
 say "== ps --json carries a schema_version"
 mkdir -p "$tmp/state"
-set +e; NLINK_LAB_STATE_DIR="$tmp/state" "$bin" --json ps no-such-lab 2>"$tmp/err.json" >/dev/null; rc=$?; set -e
+set +e; NLINK_LAB_STATE_DIR="$tmp/state" "$bin" --json ps -L no-such-lab 2>"$tmp/err.json" >/dev/null; rc=$?; set -e
 [ "$rc" -eq 1 ] || { say "FAIL: ps on a missing lab exited $rc (expected 1)"; fail=1; }
 python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["code"] == "not_found", d' "$tmp/err.json" || { say "FAIL: ps --json error document"; fail=1; }
 
@@ -122,11 +122,11 @@ printf 'Content-Length: %d\r\n\r\n%s' "${#req}" "$req" \
 
 say "== top (headless)"
 # `--once` on a missing lab: a clean exit 1, never a hang.
-set +e; NLINK_LAB_STATE_DIR="$tmp/state" timeout 10 "$bin" top no-such-lab --once >/dev/null 2>&1; rc=$?; set -e
+set +e; NLINK_LAB_STATE_DIR="$tmp/state" timeout 10 "$bin" top -L no-such-lab --once >/dev/null 2>&1; rc=$?; set -e
 [ "$rc" -eq 1 ] || { say "FAIL: top --once on a missing lab exited $rc (expected 1)"; fail=1; }
 # Without a tty the interactive form must refuse immediately, not hang or
 # garble the terminal.
-set +e; NLINK_LAB_STATE_DIR="$tmp/state" timeout 10 "$bin" top no-such-lab </dev/null >/dev/null 2>&1; rc=$?; set -e
+set +e; NLINK_LAB_STATE_DIR="$tmp/state" timeout 10 "$bin" top -L no-such-lab </dev/null >/dev/null 2>&1; rc=$?; set -e
 [ "$rc" -ne 124 ] || { say "FAIL: top hung without a tty"; fail=1; }
 "$bin" top --help | grep -- '--once' >/dev/null || { say "FAIL: top --help lacks --once"; fail=1; }
 

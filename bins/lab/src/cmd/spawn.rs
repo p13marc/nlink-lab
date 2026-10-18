@@ -25,9 +25,8 @@ impl From<WaitLogStream> for nlink_lab::LogStream {
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name.
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Node name.
     #[arg(add = crate::ctx::node_completer())]
@@ -111,6 +110,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         wait_timeout,
         cmd,
     } = args;
+    let lab = lab.resolve()?;
     // Every argument is checked (by clap) before the process starts: a
     // bad `--wait-log` regex used to start it, print its PID and fail,
     // and a retry started a second one (#209).

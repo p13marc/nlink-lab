@@ -6,9 +6,8 @@ use anstream::println;
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name (must be deployed).
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Scenario name as declared in the topology (`scenario "name" { … }`).
     /// Omit to list the scenarios the lab defines.
@@ -17,6 +16,7 @@ pub struct Args {
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args { lab, name } = args;
+    let lab = lab.resolve()?;
     let mut running = nlink_lab::RunningLab::load(&lab)?;
     let scenarios = &running.topology().scenarios;
     let Some(name) = name else {

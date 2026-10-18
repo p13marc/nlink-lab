@@ -6,9 +6,8 @@ use anstream::println;
 
 #[derive(clap::Args)]
 pub struct Args {
-    /// Lab name (must be deployed).
-    #[arg(add = crate::ctx::lab_completer())]
-    pub lab: String,
+    #[command(flatten)]
+    pub lab: crate::ctx::LabArg,
 
     /// Benchmark name as declared in the topology
     /// (`benchmark "name" { … }`). Omit to list the benchmarks the lab
@@ -18,6 +17,7 @@ pub struct Args {
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args { lab, name } = args;
+    let lab = lab.resolve()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
     let benchmarks = &running.topology().benchmarks;
     let Some(name) = name else {

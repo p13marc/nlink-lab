@@ -16,6 +16,10 @@ env:
   # Guarded by the first step so a missing mount does not fail the build.
   RUSTC_WRAPPER: /srv/cache/bin/sccache
   CARGO_INCREMENTAL: "0"
+  # Cap build parallelism, same as ci.yml: cargo otherwise defaults to nproc
+  # (6 on vm-runner-01). This lane's job runs beside the standard lane's
+  # three, in the same 10 GB VM.
+  CARGO_BUILD_JOBS: "2"
   # debug info is most of target/ and of the linker's memory (#293)
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
 

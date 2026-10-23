@@ -200,11 +200,11 @@ fn describe_impairment(imp: &crate::types::Impairment) -> String {
     }
 }
 
-/// Current time as RFC 3339 UTC (the `ts` every record carries).
 fn is_zero(n: &usize) -> bool {
     *n == 0
 }
 
+/// Current time as RFC 3339 UTC (the `ts` every record carries).
 pub fn now_iso8601() -> String {
     crate::deploy::now_iso8601()
 }

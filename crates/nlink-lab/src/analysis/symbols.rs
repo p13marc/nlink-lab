@@ -526,6 +526,8 @@ pub const CONTEXTUAL_KEYWORDS: &[&str] = &["qdisc", "bond", "vlan", "site", "if"
 mod tests {
     use super::*;
 
+    use crate::parser::nll::lexer::lex;
+
     /// A rule written straight in a `firewall { }` block is completed like
     /// one in a chain: the `firewall` entry holds every chain word.
     #[test]
@@ -539,7 +541,6 @@ mod tests {
             assert!(firewall.contains(word), "{word}");
         }
     }
-    use crate::parser::nll::lexer::lex;
 
     const SRC: &str = concat!(
         "lab \"t\"\n",

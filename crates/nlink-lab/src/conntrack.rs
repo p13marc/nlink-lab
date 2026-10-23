@@ -32,11 +32,13 @@ pub(crate) fn changed_rules<'a>(old: &'a [NatRule], new: &'a [NatRule]) -> Vec<&
 /// entry does not record interfaces, so a rule's `iif`/`oif` is not
 /// checked: it matches the flows on every interface.
 pub(crate) fn rule_matches(rule: &NatRule, entry: &ConntrackEntry) -> bool {
+    // the one address the installed rule matches (`nat_rule_spec`); a
+    // `translate` is a 1:1 DNAT, expanded to `dnat` rules by the parser
     let (cidr, addr) = match rule.action {
-        NatAction::Dnat | NatAction::Redirect => (rule.dst.as_deref(), entry.orig.dst_ip),
-        NatAction::Snat | NatAction::Masquerade | NatAction::Translate => {
-            (rule.src.as_deref(), entry.orig.src_ip)
+        NatAction::Dnat | NatAction::Redirect | NatAction::Translate => {
+            (rule.dst.as_deref(), entry.orig.dst_ip)
         }
+        NatAction::Snat | NatAction::Masquerade => (rule.src.as_deref(), entry.orig.src_ip),
     };
     if let Some(cidr) = cidr
         && !addr.is_some_and(|a| in_cidr(a, cidr))
@@ -68,8 +70,8 @@ fn coarse_filter(rule: &NatRule) -> ConntrackFilter {
         }
     }
     let (cidr, dst) = match rule.action {
-        NatAction::Dnat | NatAction::Redirect => (rule.dst.as_deref(), true),
-        _ => (rule.src.as_deref(), false),
+        NatAction::Dnat | NatAction::Redirect | NatAction::Translate => (rule.dst.as_deref(), true),
+        NatAction::Snat | NatAction::Masquerade => (rule.src.as_deref(), false),
     };
     if let Some((addr, prefix)) = cidr.and_then(|c| crate::helpers::parse_ip_or_cidr(c).ok())
         && prefix == if addr.is_ipv4() { 32 } else { 128 }
@@ -95,6 +97,9 @@ fn in_cidr(addr: IpAddr, cidr: &str) -> bool {
     let Ok((net, prefix)) = crate::helpers::parse_ip_or_cidr(cidr) else {
         return false;
     };
+    if prefix > if net.is_ipv4() { 32 } else { 128 } {
+        return false;
+    }
     match (addr, net) {
         (IpAddr::V4(a), IpAddr::V4(n)) => {
             let mask = u32::MAX.checked_shl(32 - u32::from(prefix)).unwrap_or(0);
@@ -205,6 +210,23 @@ mod tests {
             &snat,
             &flow(IpProtocol::Icmp, "fd00::1", "fd00::2", 0)
         ));
+    }
+
+    /// A `translate` (a 1:1 DNAT the parser expands to `dnat` rules)
+    /// matches by destination, as a dnat does.
+    #[test]
+    fn a_translate_matches_by_destination() {
+        let mut t = nat("dnat dst 203.0.113.10 to 10.0.1.10");
+        t.action = NatAction::Translate;
+        assert!(rule_matches(
+            &t,
+            &flow(IpProtocol::Tcp, "198.51.100.7", "203.0.113.10", 443)
+        ));
+        assert!(!rule_matches(
+            &t,
+            &flow(IpProtocol::Tcp, "203.0.113.10", "198.51.100.7", 443)
+        ));
+        assert!(!in_cidr("10.0.0.1".parse().unwrap(), "10.0.0.0/33"));
     }
 
     #[test]

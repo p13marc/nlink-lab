@@ -14,7 +14,7 @@ use std::net::IpAddr;
 use nlink::Connection;
 use nlink::netlink::Netfilter;
 use nlink::netlink::netfilter::{
-    ConntrackEntry, ConntrackFilter, ConntrackStatus, ConntrackTuple, IpProtocol,
+    ConntrackEntry, ConntrackFilter, ConntrackStatus, ConntrackTuple, IpProtocol, TcpConntrackState,
 };
 use nlink_lab_shared::api::{ConntrackFlow, ConntrackQuery, FlowTuple};
 
@@ -289,7 +289,7 @@ fn flow_of(node: &str, entry: &ConntrackEntry) -> ConntrackFlow {
         proto,
         orig: tuple(&entry.orig),
         reply: tuple(&entry.reply),
-        state: entry.tcp_state.map(|s| snake(&format!("{s:?}"))),
+        state: entry.tcp_state.map(|s| tcp_state_name(s).to_string()),
         status: STATUS
             .iter()
             .filter(|(_, bit)| status.contains(*bit))
@@ -301,16 +301,27 @@ fn flow_of(node: &str, entry: &ConntrackEntry) -> ConntrackFlow {
     }
 }
 
-/// `TimeWait` as `time_wait`.
-fn snake(name: &str) -> String {
-    let mut out = String::new();
-    for (i, c) in name.chars().enumerate() {
-        if c.is_ascii_uppercase() && i > 0 {
-            out.push('_');
-        }
-        out.push(c.to_ascii_lowercase());
+/// A TCP flow's state by the kernel's name (`TIME_WAIT` as `time_wait`),
+/// spelled out so the JSON does not follow nlink's variant names.
+fn tcp_state_name(state: TcpConntrackState) -> &'static str {
+    match state {
+        TcpConntrackState::None => "none",
+        TcpConntrackState::SynSent => "syn_sent",
+        TcpConntrackState::SynRecv => "syn_recv",
+        TcpConntrackState::Established => "established",
+        TcpConntrackState::FinWait => "fin_wait",
+        TcpConntrackState::CloseWait => "close_wait",
+        TcpConntrackState::LastAck => "last_ack",
+        TcpConntrackState::TimeWait => "time_wait",
+        TcpConntrackState::Close => "close",
+        TcpConntrackState::Listen => "listen",
+        TcpConntrackState::SynSent2 => "syn_sent2",
+        TcpConntrackState::Max => "max",
+        TcpConntrackState::Ignore => "ignore",
+        TcpConntrackState::Retrans => "retrans",
+        TcpConntrackState::Unack => "unack",
+        _ => "unknown",
     }
-    out
 }
 
 impl RunningLab {
@@ -508,6 +519,17 @@ mod tests {
         assert!(sel.filter.matches(&other) && !sel.selects(&other));
         let plain = flow(IpProtocol::Udp, "10.0.1.10", "10.0.2.1", 5000);
         assert!(!sel.filter.matches(&plain), "not DNATed");
+        // --mark 0 selects the flows nothing marked: the kernel sends no mark
+        let unmarked = Selection::of(&ConntrackQuery {
+            mark: Some(0),
+            ..Default::default()
+        })
+        .unwrap();
+        let mut marked = plain.clone();
+        marked.mark = Some(7);
+        assert!(unmarked.filter.matches(&plain) && !unmarked.filter.matches(&marked));
+        marked.mark = Some(0);
+        assert!(unmarked.filter.matches(&marked));
         // what cannot be asked
         for (bad, why) in [
             (
@@ -547,7 +569,7 @@ mod tests {
             dst_port: Some(40000),
             ..Default::default()
         };
-        e.tcp_state = Some(nlink::netlink::netfilter::TcpConntrackState::TimeWait);
+        e.tcp_state = Some(TcpConntrackState::TimeWait);
         e.status = Some(ConntrackStatus::DST_NAT.bits() | ConntrackStatus::ASSURED.bits());
         let f = flow_of("gw", &e);
         assert_eq!(

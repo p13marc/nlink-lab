@@ -57,7 +57,7 @@ completions, the licence/changelog and an `install.sh`. The desktop
 app has its own tarball ([Option C](#option-c--the-desktop-app)).
 
 ```bash
-VER=0.14.0   # check the releases page for the newest
+VER=0.15.0   # check the releases page for the newest
 base=https://git.marcpardo.eu/marcpardo/nlink-lab/releases/download/$VER
 
 curl -LO $base/nlink-lab-$VER-x86_64-linux-gnu.tar.gz
@@ -110,7 +110,7 @@ As a plain binary, `nlink-lab-gui-<version>-x86_64-linux-gnu.tar.gz`,
 with its desktop entry, icon and the `text/x-nll` media type:
 
 ```bash
-VER=0.14.0
+VER=0.15.0
 curl -LO https://git.marcpardo.eu/marcpardo/nlink-lab/releases/download/$VER/nlink-lab-gui-$VER-x86_64-linux-gnu.tar.gz
 tar xzf nlink-lab-gui-$VER-x86_64-linux-gnu.tar.gz
 nlink-lab-gui-$VER-x86_64-linux-gnu/install.sh      # for you, under ~/.local
@@ -125,7 +125,7 @@ sudo apt install flatpak     # or dnf/pacman equivalent
 flatpak remote-add --if-not-exists --user \
     flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
-VER=0.14.0
+VER=0.15.0
 curl -LO https://git.marcpardo.eu/marcpardo/nlink-lab/releases/download/$VER/nlink-lab-gui-$VER.flatpak
 flatpak install --user ./nlink-lab-gui-$VER.flatpak
 

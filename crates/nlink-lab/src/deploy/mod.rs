@@ -981,13 +981,18 @@ pub(crate) async fn apply_stack_for_node(
     // `-vv` shows what the node's nftables layer changes, as nft prints
     // it: planned once more here, read-only, since the report only counts
     // it (#300)
-    if tracing::enabled!(tracing::Level::DEBUG)
-        && let Ok(planned) = stack.plan_in(handle.spec(), apply.plan.clone()).await
-        && let Some(diff) = planned
-            .nftables
-            .filter(|d| !d.is_empty() || !d.blocked.is_empty())
-    {
-        tracing::debug!(node = %node_name, "nftables plan: {diff}");
+    if tracing::enabled!(tracing::Level::DEBUG) {
+        match stack.plan_in(handle.spec(), apply.plan.clone()).await {
+            Ok(planned) => {
+                if let Some(diff) = planned
+                    .nftables
+                    .filter(|d| !d.is_empty() || !d.blocked.is_empty())
+                {
+                    tracing::debug!(node = %node_name, "nftables plan: {diff}");
+                }
+            }
+            Err(e) => tracing::debug!(node = %node_name, "nftables plan not shown: {e}"),
+        }
     }
     let retry = nlink::reconcile::ReconcileOptions::new()
         .with_max_retries(2)
@@ -1194,7 +1199,10 @@ async fn preflight_recreates(running: &RunningLab, desired: &Topology) -> Result
 /// cannot recreate, table flags it cannot change. That refusal comes from
 /// the `Stack` stage, after earlier stages of the same apply have run, so
 /// it is checked here first: a read-only diff of every node whose stack the
-/// apply reconciles and that has, or had, a firewall or NAT.
+/// apply reconciles and that has, or had, a firewall or NAT. The stages
+/// before Stack do not touch nftables, and `refusal()` is the check
+/// nlink's `NftablesDiff::apply` fails with before it writes, so this
+/// refuses what the Stack stage would, and nothing else.
 async fn preflight_nftables(running: &RunningLab, current: &Plan, diff: &Plan) -> Result<()> {
     let had_nftables: BTreeSet<&str> = current
         .ops
@@ -1215,9 +1223,10 @@ async fn preflight_nftables(running: &RunningLab, current: &Plan, diff: &Plan) -
             continue;
         }
         // a node the apply adds has no namespace yet, and nothing to refuse
-        let Ok(handle) = node_handle_for(running, node) else {
+        if !running.topology().nodes.contains_key(node) {
             continue;
-        };
+        }
+        let handle = node_handle_for(running, node)?;
         let conn: Connection<nlink::Nftables> = handle
             .connection()
             .map_err(|e| Error::nlink(format!("nftables connection on '{node}'"), e))?;

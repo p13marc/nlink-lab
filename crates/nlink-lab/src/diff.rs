@@ -917,6 +917,37 @@ mod tests {
     use super::*;
     use crate::Lab;
 
+    /// A node's nftables part prints its header once, then nlink's lines
+    /// without nlink's own count line (#300): this pins the format of
+    /// nlink's `Display` it relies on.
+    #[test]
+    fn an_nftables_diff_prints_one_header_then_nlinks_lines() {
+        use nlink::netlink::nftables::config::NftDiffOptions;
+        let parse = |src: &str| crate::parser::parse(src).unwrap();
+        let plan = |t: &crate::types::Topology| {
+            let fw = t.effective_firewall(&t.nodes["hq"]);
+            crate::deploy::plan::nftables::topology_to_nftables_config(fw.as_deref(), None).unwrap()
+        };
+        let before = parse(
+            "lab \"d\"\nnode hq {\n  firewall policy drop {\n    accept ct established,related\n  }\n}\n",
+        );
+        let after = parse(
+            "lab \"d\"\nnode hq {\n  firewall policy drop {\n    accept ct established,related\n    accept tcp dport 8080\n  }\n}\n",
+        );
+        let nftables = plan(&after)
+            .diff_against(&plan(&before), &NftDiffOptions::default())
+            .unwrap();
+        let layered = LayeredDiff {
+            nftables: [("hq".to_string(), nftables)].into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            layered.to_string(),
+            "NftablesDiff (hq, 1 change):\n  + rule Inet nlink-lab/input \
+             [nlink-lab/fw/input/1] (after handle=4): tcp dport 8080 accept\n"
+        );
+    }
+
     /// Networks, link addresses, node fields, lab settings and sections
     /// were not compared at all (#210).
     #[test]

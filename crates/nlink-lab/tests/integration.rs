@@ -4533,6 +4533,7 @@ node gw : router {{
   }}
   firewall forward policy accept {{
     drop tcp flags syn / syn,ack tcp dport > 9000 counter name high-syn
+    tcp flags fin,syn tcp dport 8080 counter name fin-or-syn
     tcp dport 8080 mark set 0x20
     mark >= 0x10 counter name marked
     ct status dnat counter name translated
@@ -4592,6 +4593,8 @@ link gw:wan0 -- server:eth0 {{ 10.0.2.1/24 -- 10.0.2.10/24 }}
     lab.tcp_connect("client", "10.0.2.10:8080".parse().unwrap(), wait)
         .expect("8080 is not above 9000");
     assert!(counter("marked") >= 1, "mark >= 0x10 after mark set 0x20");
+    // a flag list matches any of its flags: a lone SYN is `fin,syn`
+    assert!(counter("fin-or-syn") >= 1, "tcp flags fin,syn on a SYN");
     lab.tcp_connect("client", "10.0.1.1:80".parse().unwrap(), wait)
         .expect("the DNATed port reaches the server");
     assert!(counter("translated") >= 1, "ct status dnat");

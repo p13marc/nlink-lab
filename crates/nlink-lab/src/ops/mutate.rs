@@ -430,6 +430,7 @@ pub async fn handle(req: Request, ctx: &OpCtx) -> Option<Result<Response>> {
                 crate::subnet_pool::resolve_auto_subnets(running.topology(), &mut desired)?;
                 let opts = ApplyOptions {
                     reset_impairments: options.reset_impairments,
+                    keep_conntrack: options.keep_conntrack,
                 };
                 let check = check(&running, &desired, &opts).await?;
                 report("dry_run", &check.report(&lab))
@@ -489,6 +490,7 @@ pub async fn handle(req: Request, ctx: &OpCtx) -> Option<Result<Response>> {
                 if dry_run {
                     let opts = ApplyOptions {
                         reset_impairments: true,
+                        ..Default::default()
                     };
                     let check = check(&running, &snapshot.topology, &opts).await?;
                     return report("dry_run", &check.report(&lab));
@@ -757,6 +759,7 @@ async fn apply(
     crate::subnet_pool::resolve_auto_subnets(running.topology(), &mut desired)?;
     let opts = ApplyOptions {
         reset_impairments: options.reset_impairments,
+        keep_conntrack: options.keep_conntrack,
     };
     let applied = crate::apply_with_ctx(&mut running, &desired, &opts, ctx).await?;
     let failed = assertions_outcome(
@@ -772,6 +775,7 @@ async fn apply(
             "ops": applied.ops,
             "removed": applied.removed,
             "applied": applied.applied,
+            "conntrack_deleted": applied.conntrack_deleted,
             "assertions": running.assertion_results(),
             "assertions_failed": failed,
         }),

@@ -1606,6 +1606,10 @@
       "description": "Options of an apply.",
       "type": "object",
       "properties": {
+        "keep_conntrack": {
+          "description": "Keep the tracked flows of the NAT rules the apply changes; they are\ndeleted otherwise, so they take the new rules (#303).",
+          "type": "boolean"
+        },
         "reset_impairments": {
           "description": "Drop runtime impairments and partitions.",
           "type": "boolean",

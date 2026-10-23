@@ -1684,6 +1684,10 @@ fn workflow(app: &mut App, w: WorkflowMsg) -> Vec<Effect> {
                 options.reset_impairments = *v;
                 return vec![];
             }
+            (WorkflowMsg::KeepConntrack(v), Panel::Apply { options, .. }) => {
+                options.keep_conntrack = *v;
+                return vec![];
+            }
             _ => {}
         }
     }
@@ -3774,6 +3778,11 @@ mod tests {
         };
         assert!(diff.contains("+ node: c"), "{diff}");
         wf(&mut app, W::ResetImpairments(true));
+        wf(&mut app, W::KeepConntrack(true));
+        let Some(Panel::Apply { options, .. }) = &app.panel else {
+            panic!("{:?}", app.panel)
+        };
+        assert!(options.keep_conntrack && options.reset_impairments);
         wf(&mut app, W::Go);
         assert!(matches!(
             &app.jobs.last().unwrap().state,

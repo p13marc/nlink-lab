@@ -37,6 +37,20 @@ JSON Schema did not describe its JSON (nlink #876).
   its cascade under it, and what the diff cannot do comes last as `!`
   lines.
 
+- **An `apply` that changes a NAT rule moves the flows it matched**
+  (#303). The kernel translates a flow once, when it begins, so an apply
+  used to change only new flows: a UDP stream or an open connection kept
+  its old translation until its conntrack entry timed out. Now, once the
+  apply is done, the tracked flows that a NAT rule it added, removed or
+  changed matches are deleted, and their next packet is translated by the
+  new rules. A flow is matched by its original tuple: the destination and
+  port of a `dnat` or `redirect`, the source of a `snat` or `masquerade`.
+  An entry does not record interfaces, so `iif`/`oif` do not narrow it.
+  `apply --keep-conntrack` (and `keep_conntrack` in the daemon's apply
+  options, a box in the app's apply panel) keeps the old behaviour. The
+  count is in `apply --json` (`conntrack_deleted`), the daemon's result,
+  and the `applied` event. It is best effort: a node it cannot clean is a
+  warning, never a failed apply.
 - **A firewall port range is installed as nft writes it** (#299): one
   `range` compare, where nlink-lab 0.14 wrote a `>=`/`<=` pair. A lab
   deployed by 0.14 with a rule like `drop tcp dport 8000-8999` shows that

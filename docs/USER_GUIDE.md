@@ -335,6 +335,15 @@ edited rule is replaced in place, a new one is inserted where it is
 declared — in one atomic batch, so the kernel never sees a half-built
 ruleset and conntrack state is untouched.
 
+A NAT edit is different: the kernel translates a flow once, when it
+begins, and an `apply` does not change the flows already tracked. So
+once the apply is done, the tracked flows that a NAT rule it added,
+removed or changed matches (by the destination and port of a `dnat` or
+`redirect`, the source of a `snat` or `masquerade`; interfaces are not
+recorded, so `iif`/`oif` do not narrow it) are deleted, and their next
+packet is translated by the new rules. `apply --keep-conntrack` leaves
+them on the translation they began with.
+
 ---
 
 ## Step 6 — Mid-test chaos with the scenario engine (10 minutes)

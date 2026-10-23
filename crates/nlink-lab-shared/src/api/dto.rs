@@ -161,6 +161,10 @@ pub struct ApplyOptions {
     pub reset_impairments: bool,
     #[serde(default)]
     pub strict: bool,
+    /// Keep the tracked flows of the NAT rules the apply changes; they are
+    /// deleted otherwise, so they take the new rules (#303).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub keep_conntrack: bool,
 }
 
 /// A condition a `wait_for` (or a spawn) waits for. Conditions given

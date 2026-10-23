@@ -267,6 +267,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     for (module, why) in [
         ("bridge", "network blocks"),
         ("nf_tables", "firewall/nat"),
+        ("nf_conntrack_netlink", "NAT flows moved by apply"),
         ("vrf", "vrf blocks"),
         ("wireguard", "wireguard blocks"),
         ("8021q", "vlan-filtering networks"),

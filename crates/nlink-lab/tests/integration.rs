@@ -4610,6 +4610,105 @@ link gw:wan0 -- server:eth0 {{ 10.0.2.1/24 -- 10.0.2.10/24 }}
     lab.destroy().await.expect("destroy failed");
 }
 
+/// #303: an apply that changes a DNAT target deletes the flows the old rule
+/// translated, so a UDP stream that began before it takes the new target on
+/// its next datagram. With `keep_conntrack` it keeps the translation it began
+/// with, which shows the flow does stay without the cleanup.
+#[tokio::test]
+async fn an_apply_that_changes_a_dnat_moves_the_flows_it_translated() {
+    if !privileged("an_apply_that_changes_a_dnat_moves_the_flows_it_translated") {
+        return;
+    }
+    if !feature(
+        "an_apply_that_changes_a_dnat_moves_the_flows_it_translated",
+        "nf_conntrack_netlink",
+        has_kernel_module("nf_conntrack_netlink"),
+    ) {
+        return;
+    }
+    let lab_name = format!("ctnat-{}", std::process::id());
+    let src = |target: &str| {
+        format!(
+            r#"lab "{lab_name}"
+profile router {{ forward ipv4 }}
+node client {{ route default via 10.0.1.1 }}
+node gw : router {{
+  nat {{ dnat dst 10.0.1.1 udp dport 5000 to {target}:5000 }}
+}}
+node s1 {{ route default via 10.0.2.1 }}
+node s2 {{ route default via 10.0.3.1 }}
+link client:eth0 -- gw:lan0 {{ 10.0.1.10/24 -- 10.0.1.1/24 }}
+link gw:wan0 -- s1:eth0 {{ 10.0.2.1/24 -- 10.0.2.10/24 }}
+link gw:wan1 -- s2:eth0 {{ 10.0.3.1/24 -- 10.0.3.10/24 }}
+"#
+        )
+    };
+    let topo = nlink_lab::parser::parse(&src("10.0.2.10")).unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let udp = |node: &str, bind: &str| {
+        let bind = bind.to_string();
+        let socket = lab
+            .ns_resolver_of(node)
+            .unwrap()
+            .netns()
+            .unwrap()
+            .run(move || std::net::UdpSocket::bind(bind.as_str()))
+            .unwrap()
+            .unwrap();
+        socket
+            .set_read_timeout(Some(std::time::Duration::from_millis(1500)))
+            .unwrap();
+        socket
+    };
+    let (s1, s2) = (udp("s1", "0.0.0.0:5000"), udp("s2", "0.0.0.0:5000"));
+    let client = udp("client", "0.0.0.0:41000");
+    client.connect("10.0.1.1:5000").unwrap();
+    let got = |server: &std::net::UdpSocket| {
+        let mut buf = [0u8; 16];
+        server.recv(&mut buf).ok().map(|n| buf[..n].to_vec())
+    };
+
+    client.send(b"a").unwrap();
+    assert_eq!(
+        got(&s1).as_deref(),
+        Some(&b"a"[..]),
+        "the flow starts to s1"
+    );
+
+    // the target moves to s2: the flow the old rule translated is deleted
+    let to_s2 = nlink_lab::parser::parse(&src("10.0.3.10")).unwrap();
+    let report = nlink_lab::apply(&mut lab, &to_s2).await.expect("apply");
+    assert!(report.conntrack_deleted >= 1, "{report:?}");
+    client.send(b"b").unwrap();
+    assert_eq!(
+        got(&s2).as_deref(),
+        Some(&b"b"[..]),
+        "the flow follows the rule"
+    );
+    assert_eq!(got(&s1), None);
+
+    // back to s1, keeping the flows: this one stays on s2
+    let to_s1 = nlink_lab::parser::parse(&src("10.0.2.10")).unwrap();
+    let keep = nlink_lab::ApplyOptions {
+        keep_conntrack: true,
+        ..Default::default()
+    };
+    let report = nlink_lab::apply_with(&mut lab, &to_s1, &keep)
+        .await
+        .expect("apply");
+    assert_eq!(report.conntrack_deleted, 0, "{report:?}");
+    client.send(b"c").unwrap();
+    assert_eq!(
+        got(&s2).as_deref(),
+        Some(&b"c"[..]),
+        "a kept flow keeps the translation it began with"
+    );
+    lab.destroy().await.expect("destroy failed");
+}
+
 // ─── Plan 156 PR C — impair --show JSON view ────────────
 
 // Round-4 follow-up: `--show --json` returned `endpoints: {}` for any
@@ -5649,6 +5748,7 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 delay 1ms }}
     // --reset-impairments converges on the declaration again.
     let reset = nlink_lab::ApplyOptions {
         reset_impairments: true,
+        ..Default::default()
     };
     nlink_lab::apply_with(&mut lab, &desired, &reset)
         .await

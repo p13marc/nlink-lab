@@ -190,6 +190,12 @@
         {
           "type": "object",
           "properties": {
+            "conntrack_deleted": {
+              "description": "Tracked flows deleted because a NAT rule changed (#303).",
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
             "event": {
               "type": "string",
               "const": "applied"

@@ -139,7 +139,7 @@ side-by-side examples, and migration notes — lives at
 Beta. NLL syntax and the Rust API are stable across patch
 releases; breaking changes are flagged in the CHANGELOG with a
 migration note. Built on
-[`nlink`](https://git.marcpardo.eu/marcpardo/nlink) 0.32.
+[`nlink`](https://git.marcpardo.eu/marcpardo/nlink) 0.33.
 
 Current release: **0.14.0** (2026-10-18) — the redesign release.
 The CLI is regrouped into 39 commands with one vocabulary (`-L`

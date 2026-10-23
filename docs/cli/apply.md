@@ -36,8 +36,7 @@ respawn — apply leaves them alone.
 | Flag | Description |
 |------|-------------|
 | `--dry-run` | Print the diff and what would change; don't make kernel calls. |
-| `--check` | Drift gate — exit non-zero if the live lab differs from the NLL. Implies `--dry-run`. |
-| `--json` | Emit a structured report. With `--dry-run`/`--check`: the schema-v3 envelope (`{schema_version: 3, lab, no_op, change_count, topology: {…}, network: {…}, nftables: {…}, wireguard: {…}}`, see `docs/json-schemas/layered-diff.v3.schema.json`) suitable for CI. Traffic-control changes live in `topology`. |
+| `--json` | Emit a structured report. With `--dry-run`: the schema-v3 envelope (`{schema_version: 3, lab, no_op, change_count, topology: {…}, network: {…}, nftables: {…}, wireguard: {…}}`, see `docs/json-schemas/layered-diff.v3.schema.json`) suitable for CI. Traffic-control changes live in `topology`. |
 | `-v`, `--verbose` | Print every reconcile step. |
 | `-q`, `--quiet` | Suppress non-error output. |
 
@@ -82,7 +81,7 @@ nlink-lab --json verify --file topo.nll \
 # or simply rely on the exit code: `nlink-lab verify --file topo.nll` exits 2 on drift
 ```
 
-The `--json` flag with `--dry-run`/`--check` emits the schema-v3 envelope
+The `--json` flag with `--dry-run` (and `verify --json`) emits the schema-v3 envelope
 (`docs/json-schemas/layered-diff.v3.schema.json`): the lab-graph diff,
 plus per-namespace typed diffs from nlink keyed by node name, with empty
 layers elided.
@@ -119,25 +118,38 @@ layers elided.
   },
   "nftables": {
     "hq": {
-      "rules-to-add": [
+      "blocked": [],
+      "changes": [
         {
-          "rule": { "table": "nlink-lab", "chain": "input", "family": "inet", "handle-key": "nlink-lab/fw/input/1" },
-          "placement": { "After": 3 }
+          "type": "rule", "op": "add",
+          "family": "inet", "table": "nlink-lab", "chain": "input",
+          "key": "nlink-lab/fw/input/1", "handle": null,
+          "placement": { "after": 4 },
+          "nft": "tcp dport 8080 accept"
         }
       ],
-      "generation": 2
+      "generation": 7
     }
   }
 }
 ```
 
-Trimmed from a real run: `network` and `nftables` are nlink's own diffs,
-serialized with kebab-case keys, and every key they define is present
-(empty ones are left out above) — among them `links-to-recreate`
-(a declared link whose kind parameters changed, see below),
-`rules-to-move` (rules found out of declared order) and the set and
-object collections. `rules-to-add` items carry the rule and where it goes
-in the chain (`"Append"`, `{"Before": handle}`, `{"After": handle}`), and
+Trimmed from a real run: `network` and `nftables` are nlink's own diffs.
+`network` is serialized with kebab-case keys, and every key it defines is
+present (empty ones are left out above), among them `links-to-recreate`
+(a declared link whose kind parameters changed, see below).
+
+`nftables` is nlink's `NftablesDiff` (nlink 0.33): `changes` lists one
+entry per table, chain, rule, set, batch of elements, object or flowtable
+it changes. Each names its `type` and its `op`: `add` and `remove` carry
+the value's fields, `update` carries `from` (what the kernel holds) and
+`to`, and `recreate` adds a `reason` and a `cascade` (a set's elements and
+the rules it moves, a chain's rules) that is not listed again. A rule
+carries `nft`, the rule as `nft -s list` prints it, and where it goes
+(`"append"`, `{"before": handle}`, `{"after": handle}`; a rule moved back
+into declared order is an `update` with a placement). `blocked` lists what
+the diff cannot do; an entry that refuses (a set that a rule nlink-lab did
+not write uses, recreated) fails the apply before anything changes.
 `generation` is the ruleset generation the diff was taken from (an apply
 of it is refused if the ruleset moved since).
 

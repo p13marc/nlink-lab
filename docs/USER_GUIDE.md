@@ -1372,7 +1372,7 @@ sudo nlink-lab impair -L mylab router:wan0 --heal    # traffic flows again
 **Semantics:**
 - `--partition` drops everything the endpoint sends and receives: a matchall drop filter on both hooks of a clsact qdisc, ahead of any other filter. Its root qdisc and the tree under it (an `impair` netem, a `qdisc` block, a `rate` limit, a network's per-pair matrix) stay as they are
 - `--heal` takes the filters away; the link is exactly as it was before the partition
-- An `apply` while partitioned keeps the partition (`--reset-impairments` drops it); `--check` and `verify` do not report it as drift
+- An `apply` while partitioned keeps the partition (`--reset-impairments` drops it); `apply --dry-run` and `verify` do not report it as drift
 - Double partition is a no-op
 - `--clear` removes the endpoint's impairment and its partition
 

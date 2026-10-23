@@ -2186,7 +2186,7 @@ validate {
             "an undeclared forward chain accepts"
         );
         assert!(matches!(
-            t.rules()[0].exprs().last(),
+            t.rules()[0].exprs().unwrap().last(),
             Some(nlink::netlink::nftables::Expr::Reject { .. })
         ));
 
@@ -2259,6 +2259,7 @@ node gw {
             .iter()
             .filter(|r| {
                 r.exprs()
+                    .unwrap()
                     .iter()
                     .any(|e| matches!(e, nlink::netlink::nftables::Expr::Lookup(_)))
             })
@@ -2290,6 +2291,7 @@ node s {
         assert_eq!(objects, ["all", "ssh"], "declared once each, sorted");
         let kinds: Vec<&'static str> = t.rules()[0]
             .exprs()
+            .unwrap()
             .iter()
             .filter_map(|e| match e {
                 Expr::Limit(_) => Some("limit"),
@@ -2306,7 +2308,10 @@ node s {
             "{kinds:?}"
         );
         // a verdict-less rule ends with its statement
-        assert!(matches!(t.rules()[2].exprs().last(), Some(Expr::Objref(_))));
+        assert!(matches!(
+            t.rules()[2].exprs().unwrap().last(),
+            Some(Expr::Objref(_))
+        ));
     }
 
     /// #167: mangle statements lower to their nlink expressions; a clamp
@@ -2343,7 +2348,7 @@ qdisc gw:wan0 prio { bands 3 }
                 .find(|r| r.handle_key() == Some(key))
                 .unwrap()
                 .exprs()
-                .to_vec()
+                .unwrap()
         };
         let clamp = rule("nlink-lab/fw/forward/0");
         assert!(

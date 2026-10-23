@@ -33,7 +33,7 @@ pub(crate) fn topology_to_nftables_config(
 ) -> Result<nlink::netlink::nftables::config::NftablesConfig> {
     use crate::types::NatAction;
     use nlink::netlink::nftables::config::NftablesConfig;
-    use nlink::netlink::nftables::types::{ChainType, Family, Hook, Priority};
+    use nlink::netlink::nftables::types::{BaseChain, Family, NatHook, Priority};
 
     // The rule closures below `.expect()` these literals.
     if let Some(nat) = nat {
@@ -107,10 +107,7 @@ pub(crate) fn topology_to_nftables_config(
         }
         for (chain, policy) in fw_chains {
             t = t.chain(chain.name(), |c| {
-                c.hook(chain.hook())
-                    .priority(Priority::Filter)
-                    .chain_type(ChainType::Filter)
-                    .policy(policy)
+                c.base(BaseChain::filter(chain.hook(), Priority::Filter).policy(policy))
             });
         }
         for (chain, key, rule) in fw_rules {
@@ -120,14 +117,10 @@ pub(crate) fn topology_to_nftables_config(
         if want_nat {
             t = t
                 .chain("prerouting", |c| {
-                    c.hook(Hook::Prerouting)
-                        .priority(Priority::DstNat)
-                        .chain_type(ChainType::Nat)
+                    c.base(BaseChain::nat(NatHook::Prerouting, Priority::DstNat))
                 })
                 .chain("postrouting", |c| {
-                    c.hook(Hook::Postrouting)
-                        .priority(Priority::SrcNat)
-                        .chain_type(ChainType::Nat)
+                    c.base(BaseChain::nat(NatHook::Postrouting, Priority::SrcNat))
                 });
 
             for (idx, nat_rule) in nat_rules.iter().enumerate() {
@@ -525,7 +518,7 @@ mod golden {
                             "{name} {node_name} rule {} {} {:?}",
                             rule.chain(),
                             rule.handle_key().unwrap_or("-"),
-                            rule.exprs()
+                            rule.exprs().unwrap()
                         )
                         .unwrap();
                     }

@@ -149,9 +149,10 @@ needed; nftables evaluates top-to-bottom.)
 
 ## Variations
 
-- **Conntrack zones**: assign different conntrack zones to
-  different VRFs to track them independently. Use
-  `ct zone N` matchers.
+- **Conntrack zones**: `ct zone N` (or `ct zone > 0`) matches the
+  zone a connection was tracked in. NLL does not assign zones; a raw
+  table installed by hand (`nlink-lab exec NODE -- nft -f …`) can, for
+  instance per VRF.
 - **NAT**: separate from `firewall`, the `nat { }` block handles
   masquerade/SNAT/DNAT. See [NLL: NAT syntax](../NLL_DSL_DESIGN.md).
 - **Per-direction policy**: declare a second `firewall` block on the

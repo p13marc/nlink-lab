@@ -751,6 +751,23 @@ mod tests {
         assert!(labels.contains(&"r1"), "{labels:?}");
     }
 
+    /// Inside a firewall chain, the rule verbs and match fields are offered,
+    /// #302's included.
+    #[test]
+    fn completion_inside_a_firewall_chain_offers_its_matches() {
+        let a = doc(
+            "lab \"t\"\nnode gw {\n  firewall {\n    input policy drop {\n      drop tcp flags syn\n    }\n  }\n}\n",
+        );
+        let at = a.text.find("drop tcp").unwrap();
+        let labels: Vec<String> = completions_at(&a, a.index.position(at))
+            .into_iter()
+            .map(|i| i.label)
+            .collect();
+        for word in ["accept", "pkttype", "l4proto", "flags", "status"] {
+            assert!(labels.iter().any(|l| l == word), "{word}: {labels:?}");
+        }
+    }
+
     /// In the states the trigger characters produce: a lone `$` did not
     /// lex, so there were no tokens; `link r1:` at the end did not parse,
     /// and profiles were offered (#218).

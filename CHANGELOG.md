@@ -51,6 +51,25 @@ JSON Schema did not describe its JSON (nlink #876).
 
 ### Added
 
+- **More firewall matches, and ordered compares** (#302), on nlink 0.33's
+  `Match`:
+  - `tcp flags syn,ack` (any of them), `tcp flags != syn`, and nft's mask
+    form `tcp flags syn / syn,ack` (of SYN and ACK, only SYN: a new
+    connection);
+  - `ct status dnat` (`snat`, `seen-reply`, `assured`, `confirmed`,
+    `expected`, `dying`), `ct direction original|reply`, `ct zone N`;
+  - `pkttype host|broadcast|multicast|other`, `l4proto NAME|N`;
+  - `<`, `>`, `<=`, `>=` on a port, `mark`, `ct mark`, `ct zone` and
+    `l4proto` (`tcp dport > 1024`, `mark >= 0x10`), and `!=` on a plain,
+    masked or ranged `mark` and on `ct mark`, which NLL refused (`mark !=`
+    took a set only).
+
+  `reject with tcp-reset` accepts `tcp flags` and `l4proto tcp` as its
+  TCP match. The tree-sitter, VS Code and Zed grammars know the new
+  words, the LSP completes a firewall chain's verbs and matches, and
+  `examples/firewall-matches.nll` uses them all. A root test drives
+  traffic through each (a SYN above port 9000 dropped, a marked packet,
+  a DNATed flow and its replies, pings, a broadcast) and counts it.
 - **Drift events say the rule** (#300). A rule added or deleted behind
   the lab's back used to show as its handle (`new_nft_rule chain=input
   handle=9 …`); it now ends with the rule as `nft -s list` prints it

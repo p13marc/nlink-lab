@@ -369,20 +369,39 @@ forward { … } output { … } }`.
 - **Verdicts:** `accept`, `drop`, `reject`. `reject` answers with ICMP(v6)
   port unreachable; `reject with tcp-reset | port-unreachable |
   host-unreachable | no-route | admin-prohibited` picks the answer
-  (`tcp-reset` needs a `tcp` match).
+  (`tcp-reset` needs a TCP match: `tcp dport`/`sport`, `tcp flags` or
+  `l4proto tcp`).
 - **Matches** (any number, all must hold; first matching rule wins):
 
   | match | example |
   |---|---|
-  | `src` / `dst` [`!=`] address or CIDR (either family) | `src 10.0.1.0/24`, `dst != fd00::/64` |
-  | `tcp` / `udp` `dport` / `sport` [`!=`] port or range | `tcp dport 22`, `udp dport 8000-8999`, `tcp sport != 53` |
+  | `src` / `dst` [`!=`] address or CIDR (either family), or a set | `src 10.0.1.0/24`, `dst != fd00::/64`, `src @blocked` |
+  | `tcp` / `udp` `dport` / `sport` [OP] port, [`!=`] range or set | `tcp dport 22`, `udp dport 8000-8999`, `tcp sport != 53`, `tcp dport > 1024` |
+  | `tcp flags` [`!=`] flags [`/` mask] | `tcp flags syn,ack` (any of them), `tcp flags != syn`, `tcp flags syn / syn,ack` (of SYN and ACK, only SYN) |
   | `ct` [`state`] states | `ct established,related` (also `new`, `invalid`, `untracked`) |
+  | `ct status` [`!=`] status bits | `ct status dnat` (also `snat`, `seen-reply`, `assured`, `confirmed`, `expected`, `dying`) |
+  | `ct direction` [`!=`] `original` / `reply` | `ct direction reply` |
+  | `ct zone` [OP] zone | `ct zone 5`, `ct zone > 0` |
+  | `ct mark` [OP] value | `ct mark 0x1`, `ct mark != 0` |
+  | `mark` [OP] value, [`!=`] `V/MASK`, range or set | `mark 42`, `mark >= 0x10`, `mark != 0x10/0xff`, `mark 0x10-0x1f`, `mark @marks` |
+  | `pkttype` [`!=`] `host` / `broadcast` / `multicast` / `other` | `pkttype broadcast` |
+  | `l4proto` [OP] protocol name or number | `l4proto sctp`, `l4proto 47`, `l4proto != udp` |
   | `iif` / `oif` [`!=`] interface | `iif lan0`, `oif != wan0` |
   | `icmp` / `icmpv6` type | `icmp 8` |
-  | `mark` value | `mark 42` |
+  | `rpf` | the source is not routed back out of the interface it came in on |
+  | `FIELD . FIELD` [`!=`] set | `dst . tcp dport @published` |
+
+  OP is `!=` or an order, `<`, `>`, `<=`, `>=` (#302). An order compares
+  one value: not a range, a mask, a set or a list of flags. TCP flags and
+  conntrack status bits are nft's names (`fin syn rst psh ack urg ecn cwr`);
+  a list matches any of them, and with a mask the flags under it must be
+  exactly these. `l4proto` takes `tcp`, `udp`, `icmp`, `icmpv6`, `igmp`,
+  `gre`, `esp`, `ah`, `dccp`, `ospf`, `vrrp`, `sctp`, `udplite` or a
+  number. Nothing in NLL puts a connection in a conntrack zone: `ct zone`
+  matches zones a table outside the lab sets.
 
   `iif` cannot match in output and `oif` cannot match in input
-  (`firewall-chain-context`). A negated port range is not supported.
+  (`firewall-chain-context`).
 
 **Sets.** A set is a list a rule looks up in one step — a blocklist, the
 ports a service listens on, the address/port pairs that are published:
@@ -1713,14 +1732,21 @@ log_level      = "emerg" | "alert" | "crit" | "err" | "warn" | "notice" | "info"
 reject_type    = "tcp-reset" | "port-unreachable" | "host-unreachable"
                | "no-route" | "admin-prohibited"
 match_expr     = "ct" "state"? IDENT ("," IDENT)*
-               | ("tcp" | "udp") ("dport" | "sport") "!="? (INT | INT "-" INT | set_ref)
+               | "ct" "status" "!="? IDENT ("," IDENT)*
+               | "ct" "direction" "!="? ("original" | "reply")
+               | "ct" "zone" cmp? INT
+               | ("tcp" | "udp") ("dport" | "sport") (cmp? INT | "!="? (INT "-" INT | set_ref))
+               | "tcp" "flags" "!="? IDENT ("," IDENT)* ("/" IDENT ("," IDENT)*)?
                | "icmp" INT | "icmpv6" INT
-               | "mark" (mark_value | (INT | HEX) "-" (INT | HEX) | "!="? set_ref)
+               | "mark" (cmp? (INT | HEX) | "!="? (mark_value | (INT | HEX) "-" (INT | HEX) | set_ref))
                | "rpf"
-               | "ct" "mark" (INT | HEX)
+               | "ct" "mark" cmp? (INT | HEX)
+               | "pkttype" "!="? IDENT
+               | "l4proto" cmp? (IDENT | INT)
                | ("src" | "dst") "!="? (CIDR | set_ref)
                | ("iif" | "oif") "!="? IDENT
                | set_field ("." set_field)+ "!="? set_ref
+cmp            = "!=" | "<" | ">" | "<=" | ">="
 set_ref        = "@" IDENT
 set_field      = "src" | "dst" | ("tcp" | "udp") ("dport" | "sport") | "mark"
 

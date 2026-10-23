@@ -5,7 +5,10 @@
 //! dev-dependency:
 //!
 //! - [`root_gate`] — the privilege check (fail by default, skip when
-//!   [`SKIP_ROOT_TESTS_ENV`] is set).
+//!   [`SKIP_ROOT_TESTS_ENV`] is set); [`privileged`] is the same gate for
+//!   a hand-written test, and [`feature`] gates on a kernel feature or a
+//!   tool, failing instead of skipping where [`STRICT_FEATURES_ENV`]
+//!   names it.
 //! - [`cleanup_lab`] / [`cleanup_lab_blocking`] — full host teardown
 //!   for a lab, used by the macro's panic-path guard. Pure nlink /
 //!   std, no `ip(8)` shell-outs.
@@ -44,9 +47,19 @@ pub mod __macro_support {
 }
 
 /// Environment variable that turns a missing-root **failure** into a
-/// **skip** for `#[lab_test]` functions. Set it to any value other
-/// than `""`, `"0"` or `"false"` (conventionally `1`).
+/// **skip** for `#[lab_test]` functions and [`privileged`] tests. Off when
+/// unset, empty, `0`, `false`, `no` or `off` (in any case); any other value
+/// (conventionally `1`) is on, so a typo skips loudly rather than failing
+/// quietly the other way.
 pub const SKIP_ROOT_TESTS_ENV: &str = "NLINK_LAB_SKIP_ROOT_TESTS";
+
+/// Environment variable naming the kernel features and tools a run must
+/// have: a [`feature`] gate it names **fails** instead of skipping. A
+/// comma-separated list of the names the tests use (`nftables,vrf`), or
+/// `1`/`all` for every one (see [`feature_required`]). nlink's
+/// `NLINK_TEST_STRICT_MODULES` is the same switch: a lane that lost a
+/// module otherwise passes every test that needs it.
+pub const STRICT_FEATURES_ENV: &str = "NLINK_LAB_STRICT_FEATURES";
 
 /// True when the effective UID is 0.
 pub fn is_root() -> bool {
@@ -82,31 +95,94 @@ pub enum RootGate {
 /// behaviour (the skip is printed to stderr so it is visible in
 /// `cargo test -- --nocapture` / CI logs).
 pub fn root_gate(test_name: &str) -> RootGate {
-    if has_privileges() {
-        return RootGate::Proceed;
-    }
-    if skip_root_tests_requested() {
+    let gate = gate_for(
+        has_privileges(),
+        std::env::var(SKIP_ROOT_TESTS_ENV).ok().as_deref(),
+        test_name,
+    );
+    if gate == RootGate::Skip {
         eprintln!(
-            "\n*** SKIPPING #[lab_test] '{test_name}' — not root and \
-             {SKIP_ROOT_TESTS_ENV} is set ***"
+            "\n*** SKIPPING test '{test_name}' — not root and {SKIP_ROOT_TESTS_ENV} is set ***"
         );
-        return RootGate::Skip;
     }
-    RootGate::Fail(root_required_message(test_name))
+    gate
+}
+
+/// The decision [`root_gate`] makes, from the privileges and the value
+/// of [`SKIP_ROOT_TESTS_ENV`].
+pub fn gate_for(has_privileges: bool, skip_env: Option<&str>, test_name: &str) -> RootGate {
+    if has_privileges {
+        RootGate::Proceed
+    } else if skip_env.is_some_and(env_flag) {
+        RootGate::Skip
+    } else {
+        RootGate::Fail(root_required_message(test_name))
+    }
 }
 
 /// True when [`SKIP_ROOT_TESTS_ENV`] is set to an opt-in value.
 pub fn skip_root_tests_requested() -> bool {
-    std::env::var(SKIP_ROOT_TESTS_ENV)
-        .map(|v| !matches!(v.trim(), "" | "0" | "false"))
-        .unwrap_or(false)
+    std::env::var(SKIP_ROOT_TESTS_ENV).is_ok_and(|v| env_flag(&v))
 }
 
-/// The message a `#[lab_test]` panics with when it is run without
-/// root and [`SKIP_ROOT_TESTS_ENV`] is unset.
+/// An on/off environment value, as nlink reads its test switches: off
+/// for an empty value, `0`, `false`, `no` or `off`, in any case; on for
+/// anything else.
+fn env_flag(value: &str) -> bool {
+    !matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "" | "0" | "false" | "no" | "off"
+    )
+}
+
+/// The privilege gate for a test written without `#[lab_test]`:
+/// `if !privileged("my_test") { return; }`. True with root or
+/// CAP_NET_ADMIN + CAP_SYS_ADMIN; false (a loud skip) without them when
+/// [`SKIP_ROOT_TESTS_ENV`] is set; a panic otherwise, so a test that needs
+/// root never passes without running.
+pub fn privileged(test_name: &str) -> bool {
+    match root_gate(test_name) {
+        RootGate::Proceed => true,
+        RootGate::Skip => false,
+        RootGate::Fail(msg) => panic!("{msg}"),
+    }
+}
+
+/// The gate on a kernel feature or a tool a test needs:
+/// `if !feature("my_test", "vrf", has_vrf()) { return; }`. True when it is
+/// `present`; otherwise a loud skip, or a panic when
+/// [`STRICT_FEATURES_ENV`] names `what` (or is on for every feature).
+pub fn feature(test_name: &str, what: &str, present: bool) -> bool {
+    if present {
+        return true;
+    }
+    let strict = std::env::var(STRICT_FEATURES_ENV).ok();
+    if feature_required(strict.as_deref(), what) {
+        panic!("'{test_name}' needs {what}, and {STRICT_FEATURES_ENV} requires it");
+    }
+    eprintln!("\n*** SKIPPING test '{test_name}' — {what} is not available here ***");
+    false
+}
+
+/// Whether [`STRICT_FEATURES_ENV`]'s value requires `what`: `1`, `true`,
+/// `yes`, `on` or `all` require every feature; `0`, `false`, `no`, `off`
+/// or nothing, none; anything else is a comma-separated list of names.
+pub fn feature_required(strict_env: Option<&str>, what: &str) -> bool {
+    let Some(value) = strict_env.map(str::trim) else {
+        return false;
+    };
+    match value.to_ascii_lowercase().as_str() {
+        "" | "0" | "false" | "no" | "off" => false,
+        "1" | "true" | "yes" | "on" | "all" => true,
+        _ => value.split(',').map(str::trim).any(|name| name == what),
+    }
+}
+
+/// The message a `#[lab_test]` (or a [`privileged`] test) panics with
+/// when it is run without root and [`SKIP_ROOT_TESTS_ENV`] is off.
 pub fn root_required_message(test_name: &str) -> String {
     format!(
-        "#[lab_test] '{test_name}' needs root or CAP_NET_ADMIN+CAP_SYS_ADMIN; run under \
+        "test '{test_name}' needs root or CAP_NET_ADMIN+CAP_SYS_ADMIN; run under \
          sudo, or set {SKIP_ROOT_TESTS_ENV}=1 to skip"
     )
 }
@@ -523,5 +599,60 @@ pub struct CaptureGuard(CaptureSlot);
 impl Drop for CaptureGuard {
     fn drop(&mut self) {
         self.0.finish(std::thread::panicking());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Without privileges a test fails unless the skip variable is on;
+    /// `no` and `off` are off, as nlink reads them (they used to turn the
+    /// skip on).
+    #[test]
+    fn the_root_gate_fails_unless_the_skip_is_on() {
+        assert_eq!(gate_for(true, None, "t"), RootGate::Proceed);
+        assert_eq!(gate_for(true, Some("1"), "t"), RootGate::Proceed);
+        for on in ["1", "true", "yes", "YES", "on", "x"] {
+            assert_eq!(gate_for(false, Some(on), "t"), RootGate::Skip, "{on:?}");
+        }
+        for off in [
+            None,
+            Some(""),
+            Some(" "),
+            Some("0"),
+            Some("false"),
+            Some("no"),
+            Some("Off"),
+            Some("FALSE"),
+        ] {
+            assert!(
+                matches!(gate_for(false, off, "t"), RootGate::Fail(m) if m.contains("'t'")),
+                "{off:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn strict_features_name_a_list_or_all() {
+        assert!(!feature_required(None, "vrf"));
+        for none in ["", "0", "off", "no", "False"] {
+            assert!(!feature_required(Some(none), "vrf"), "{none:?}");
+        }
+        for all in ["1", "all", "ON", "true"] {
+            assert!(feature_required(Some(all), "vrf"), "{all:?}");
+        }
+        assert!(feature_required(Some("nftables, vrf"), "vrf"));
+        assert!(!feature_required(Some("nftables,vrf"), "wireguard"));
+        assert!(!feature_required(Some("vrfs"), "vrf"));
+    }
+
+    #[test]
+    fn a_present_feature_runs_and_a_missing_one_skips_unless_required() {
+        assert!(feature("t", "vrf", true));
+        // the variable is unset in the unit tests' environment
+        if std::env::var_os(STRICT_FEATURES_ENV).is_none() {
+            assert!(!feature("t", "vrf", false));
+        }
     }
 }

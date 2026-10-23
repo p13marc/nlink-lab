@@ -10,9 +10,11 @@
 //!
 //! # Privileges
 //!
-//! Deploying a lab needs root (or `CAP_NET_ADMIN`). A test that runs
-//! without it **fails** with a clear message; set
-//! `NLINK_LAB_SKIP_ROOT_TESTS=1` to turn that into a loud skip instead.
+//! Deploying a lab needs root (or `CAP_NET_ADMIN` + `CAP_SYS_ADMIN`). A
+//! test that runs without it **fails** with a clear message; set
+//! `NLINK_LAB_SKIP_ROOT_TESTS=1` to turn that into a loud skip instead. A
+//! test written without the macro uses the same gate,
+//! `nlink_lab::test_helpers::privileged`.
 //!
 //! # Usage
 //!

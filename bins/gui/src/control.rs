@@ -534,8 +534,33 @@ pub fn describe_plan(report: &serde_json::Value) -> String {
             }
         }
     }
-    // the kernel's side, per node: what each layer would change
-    for layer in ["network", "nftables", "wireguard"] {
+    // nftables: each change nlink's diff lists, a rule as nft prints it,
+    // and what it cannot do (#300)
+    if let Some(Value::Object(nodes)) = report.get("nftables") {
+        for (node, diff) in nodes {
+            for change in diff
+                .get("changes")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                out.push_str(&format!("  {}\n", nft_change(node, change)));
+            }
+            for blocked in diff
+                .get("blocked")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                out.push_str(&format!(
+                    "  ! nftables on {node}: {}\n",
+                    nft_blocked(blocked)
+                ));
+            }
+        }
+    }
+    // the kernel's other layers, per node: what each would change
+    for layer in ["network", "wireguard"] {
         let Some(Value::Object(nodes)) = report.get(layer) else {
             continue;
         };
@@ -575,6 +600,89 @@ pub fn describe_plan(report: &serde_json::Value) -> String {
         out.push_str(&format!("  + {}\n", label(op)));
     }
     out
+}
+
+/// One change of an nftables diff (nlink 0.33's `{"type", "op", …}`): a
+/// rule as nft prints it, an edit as before and after, a recreate with
+/// its reason; what goes with a recreate is counted, not listed.
+fn nft_change(node: &str, change: &serde_json::Value) -> String {
+    use serde_json::Value;
+    let text = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).map(str::to_string);
+    let kind = text(change, "type").unwrap_or_else(|| "change".into());
+    let op = text(change, "op").unwrap_or_default();
+    // what one side of the change is called
+    let name = |v: &Value| -> String {
+        match kind.as_str() {
+            "rule" => {
+                let rule = text(v, "nft")
+                    .or_else(|| text(v, "key"))
+                    .unwrap_or_else(|| {
+                        format!("handle {}", v.get("handle").unwrap_or(&Value::Null))
+                    });
+                format!("{}: {rule}", text(v, "chain").unwrap_or_default())
+            }
+            "elements" => format!(
+                "{} of {}",
+                v.get("elements")
+                    .and_then(Value::as_array)
+                    .map_or(0, Vec::len),
+                text(v, "set").unwrap_or_default()
+            ),
+            _ => text(v, "name").unwrap_or_else(|| label(v)),
+        }
+    };
+    let side = |k: &str| change.get(k).unwrap_or(&Value::Null);
+    let what = match op.as_str() {
+        "add" => format!("+ nftables on {node}: {kind} {}", name(change)),
+        "remove" => format!("- nftables on {node}: {kind} {}", name(change)),
+        "update" if kind == "rule" => {
+            let (from, to) = (name(side("from")), text(side("to"), "nft"));
+            match to {
+                Some(to) if !from.ends_with(&format!(": {to}")) => {
+                    format!("~ nftables on {node}: rule {from} -> {to}")
+                }
+                _ => format!("~ nftables on {node}: rule {from} (moved)"),
+            }
+        }
+        "recreate" => format!(
+            "~ nftables on {node}: {kind} {} recreated ({})",
+            name(side("to")),
+            text(change, "reason").unwrap_or_default()
+        ),
+        _ => format!("~ nftables on {node}: {kind} {}", name(side("to"))),
+    };
+    match change
+        .get("cascade")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+    {
+        Some(n) if n > 0 => format!("{what}, with {n} more"),
+        _ => what,
+    }
+}
+
+/// What an nftables diff cannot do (nlink 0.33's `blocked`): its kind,
+/// what it is about, and the rules in its way.
+fn nft_blocked(blocked: &serde_json::Value) -> String {
+    use serde_json::Value;
+    let kind = blocked
+        .get("kind")
+        .and_then(Value::as_str)
+        .unwrap_or("blocked")
+        .replace('-', " ");
+    let item = blocked.get("item").unwrap_or(blocked);
+    let what = ["name", "chain", "table"]
+        .iter()
+        .find_map(|k| item.get(*k).and_then(Value::as_str))
+        .unwrap_or("?");
+    let what = match item.get("type").and_then(Value::as_str) {
+        Some(t) => format!("{t} {what}"),
+        None => what.to_string(),
+    };
+    match blocked.get("rules").and_then(Value::as_array).map(Vec::len) {
+        Some(n) if n > 0 => format!("{kind}: {what}, held by {n} rule(s) nlink-lab did not write"),
+        _ => format!("{kind}: {what}"),
+    }
 }
 
 /// One thing of a report, named: a string as it is, a link by its
@@ -737,6 +845,33 @@ mod tests {
             plan,
             "4 change(s)\n  + node: c\n  - link: a:eth0 -- b:eth0\n  + impairment: a:eth1\n  \
              ~ route: a default\n  ~ network on a: 1 links to add\n  - delete veth b:eth0\n"
+        );
+        // nftables: a change per line, a rule as nft prints it (#300)
+        let plan = describe_plan(&serde_json::json!({
+            "no_op": false, "change_count": 4,
+            "nftables": {"fw": {
+                "generation": 7,
+                "changes": [
+                    {"type": "rule", "op": "update",
+                     "from": {"chain": "input", "key": "k0", "handle": 6, "nft": "tcp dport 22 accept"},
+                     "to": {"chain": "input", "key": "k0", "handle": 6, "placement": null, "nft": "tcp dport 2222 accept"}},
+                    {"type": "rule", "op": "remove", "chain": "input", "handle": 8, "nft": "udp dport 53 accept"},
+                    {"type": "set", "op": "recreate", "from": {"name": "mgmt"}, "to": {"name": "mgmt"},
+                     "reason": "key inet_service -> ipv4_addr",
+                     "cascade": [{"type": "elements", "op": "add", "set": "mgmt", "elements": [{}]}]},
+                    {"type": "elements", "op": "add", "set": "allow", "elements": [{}, {}]},
+                ],
+                "blocked": [{"kind": "in-use", "item": {"type": "set", "name": "old"}, "rules": [{}]}],
+            }},
+        }));
+        assert_eq!(
+            plan,
+            "4 change(s)\n  \
+             ~ nftables on fw: rule input: tcp dport 22 accept -> tcp dport 2222 accept\n  \
+             - nftables on fw: rule input: udp dport 53 accept\n  \
+             ~ nftables on fw: set mgmt recreated (key inet_service -> ipv4_addr), with 1 more\n  \
+             + nftables on fw: elements 2 of allow\n  \
+             ! nftables on fw: in use: set old, held by 1 rule(s) nlink-lab did not write\n"
         );
         // a deploy's plan, by stage
         let plan = describe_plan(&serde_json::json!([

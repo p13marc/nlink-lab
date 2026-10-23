@@ -537,6 +537,7 @@ mod tests {
             node: "a".into(),
             family: nlink_lab::WatchFamily::Route,
             kind: nlink_lab::watch::WatchEventKind::Event {
+                nft: None,
                 event: nlink::netlink::events::view::EventView::Address {
                     action: nlink::netlink::events::view::Action::New,
                     ifindex: 2,

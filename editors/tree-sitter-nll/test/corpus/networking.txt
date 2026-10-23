@@ -452,3 +452,66 @@ node gw {
           (identifier)
           (integer)
           (integer))))))
+
+================
+nlink 0.33 firewall matches: flags, ct status/direction/zone, pkttype, l4proto, orders (#302)
+================
+node fw {
+  firewall policy drop {
+    drop tcp flags syn / syn,ack tcp dport 9090 counter
+    accept tcp flags != syn tcp dport > 1024
+    accept ct status dnat,seen-reply
+    accept ct direction reply
+    drop ct zone >= 2
+    drop pkttype != host
+    accept l4proto icmp
+    drop l4proto < 50
+    accept mark != 0x10 ct mark <= 5
+  }
+}
+---
+
+(source_file
+  (node_definition
+    (identifier)
+    (node_body
+      (firewall_block
+        (firewall_chain
+          (firewall_rule
+            (match_expression
+              (name_list
+                (identifier))
+              (name_list
+                (identifier)
+                (identifier))
+              (integer))
+            (fw_statement))
+          (firewall_rule
+            (match_expression
+              (name_list
+                (identifier))
+              (integer)))
+          (firewall_rule
+            (match_expression
+              (name_list
+                (identifier)
+                (identifier))))
+          (firewall_rule
+            (match_expression
+              (identifier)))
+          (firewall_rule
+            (match_expression
+              (integer)))
+          (firewall_rule
+            (match_expression
+              (identifier)))
+          (firewall_rule
+            (match_expression
+              (identifier)))
+          (firewall_rule
+            (match_expression
+              (integer)))
+          (firewall_rule
+            (match_expression
+              (hex)
+              (integer))))))))

@@ -8,6 +8,7 @@ pub mod archive;
 pub mod benchmark;
 pub mod capture;
 pub mod common;
+pub mod conntrack;
 pub mod deploy;
 pub mod destroy;
 pub mod diagnose;
@@ -81,6 +82,7 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
         Commands::Capture(args) => capture::run(ctx, args),
         Commands::Wait(args) => wait::run(ctx, args).await,
         Commands::Ip(args) => ip::run(ctx, args),
+        Commands::Conntrack(args) => conntrack::run(ctx, args).await,
         Commands::Diff(args) => diff::run(ctx, args),
         Commands::Export(args) => export::run(ctx, args),
         Commands::Archive(args) => archive::run(ctx, args),

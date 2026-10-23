@@ -26,6 +26,15 @@ pub fn interval(s: &str) -> Result<Duration, String> {
 }
 
 /// `KEY=VALUE` (`--env`, `--set`). The key is not empty; the value may be.
+/// A 32-bit value, in decimal or `0x` hex: a mark.
+pub fn u32_dec_or_hex(s: &str) -> Result<u32, String> {
+    let parsed = match s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        Some(hex) => u32::from_str_radix(hex, 16),
+        None => s.parse(),
+    };
+    parsed.map_err(|_| format!("'{s}' is not a 32-bit number (decimal or 0x hex)"))
+}
+
 pub fn key_value(s: &str) -> Result<(String, String), String> {
     match s.split_once('=') {
         Some((k, v)) if !k.trim().is_empty() => Ok((k.trim().to_string(), v.to_string())),

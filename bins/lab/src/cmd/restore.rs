@@ -27,6 +27,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         // What `restore` runs: an apply that resets runtime impairments.
         let opts = nlink_lab::ApplyOptions {
             reset_impairments: true,
+            ..Default::default()
         };
         let plan = nlink_lab::apply_plan_with(&running, &snapshot.topology, &opts)?;
         // What changes, as `apply --dry-run` shows it: the topology diff

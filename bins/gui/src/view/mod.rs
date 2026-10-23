@@ -459,6 +459,10 @@ fn panel<'a>(app: &'a App, p: &'a crate::model::Panel) -> Element<'a, Message> {
                         .label("A failed assertion fails the apply")
                         .text_size(13)
                         .on_toggle(move |v| w(W::Strict(v))),
+                    iced::widget::checkbox(options.keep_conntrack)
+                        .label("Keep the flows of changed NAT rules on their old translation")
+                        .text_size(13)
+                        .on_toggle(move |v| w(W::KeepConntrack(v))),
                 ]
                 .spacing(8)
                 .into(),

@@ -262,6 +262,8 @@ pub enum WorkflowMsg {
     SkipAssertions(bool),
     Strict(bool),
     ResetImpairments(bool),
+    /// Keep the tracked flows of the NAT rules an apply changes (#303).
+    KeepConntrack(bool),
     /// The plan of a deploy, the diff of an apply.
     Preview,
     /// Deploy, or apply.

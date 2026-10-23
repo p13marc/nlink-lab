@@ -45,6 +45,13 @@ pub struct Args {
     /// that endpoint.
     #[arg(long)]
     pub reset_impairments: bool,
+
+    /// Keep the tracked flows of the NAT rules this apply changes. Without
+    /// it they are deleted once the apply is done, so a flow that began
+    /// before (a UDP stream, an open connection) is translated by the new
+    /// rules on its next packet rather than keep its old translation.
+    #[arg(long)]
+    pub keep_conntrack: bool,
 }
 
 /// The topology to converge on, and the source to record for the next
@@ -140,8 +147,12 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         strict,
         skip_validate,
         reset_impairments,
+        keep_conntrack,
     } = args;
-    let apply_opts = nlink_lab::ApplyOptions { reset_impairments };
+    let apply_opts = nlink_lab::ApplyOptions {
+        reset_impairments,
+        keep_conntrack,
+    };
 
     let (mut desired, source) = desired_topology(topology, &lab, params)?;
     if skip_validate {
@@ -302,6 +313,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             "ops": report.ops,
             "removed": report.removed,
             "applied": report.applied,
+            "conntrack_deleted": report.conntrack_deleted,
             "duration_ms": elapsed.as_millis() as u64,
         });
         if !running.assertion_results().is_empty() {
@@ -320,6 +332,12 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             n => n,
         };
         println!("\nApplied {changes} change(s) in {elapsed:.0?}");
+        if report.conntrack_deleted > 0 {
+            println!(
+                "Deleted {} tracked flow(s) of the changed NAT rules: they take the new rules",
+                report.conntrack_deleted
+            );
+        }
         common::print_assertions(running.assertion_results());
     }
 

@@ -1,6 +1,7 @@
 //! What changes labs (#266): one queue per lab, run on a thread of its own
-//! (nlink's reconciles are not `Send`), and the long operations as jobs a
-//! client can leave and find again.
+//! (a change can block it: a lab's lock waited for, a scenario or a
+//! benchmark run to its end), and the long operations as jobs a client can
+//! leave and find again.
 //!
 //! Every change goes through its lab's queue, so two of them never race on
 //! the lab's state; one queued behind another reports its position. A long
@@ -383,8 +384,7 @@ fn spawn_queue(lab: String, queues: Queues) -> Queue {
                 return;
             }
         };
-        let local = tokio::task::LocalSet::new();
-        local.block_on(&rt, async move {
+        rt.block_on(async move {
             loop {
                 let work = match tokio::time::timeout(IDLE, rx.recv()).await {
                     Ok(Some(work)) => work,

@@ -194,7 +194,8 @@ pub(crate) async fn wait_for(
             let _ = events.send(event);
         }));
     let (lab, node) = (lab.to_string(), node.to_string());
-    // its connections into the node are not `Send`: on a runtime of its own
+    // a wait blocks (a TCP connect inside the node, a command run to its
+    // end): on a thread and a runtime of its own
     let work = tokio::task::spawn_blocking(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()

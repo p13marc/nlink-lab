@@ -61,6 +61,22 @@ fn roles_follow_what_a_method_does() {
         Role::Operator,
         "secrets need an operator"
     );
+    // reading the conntrack tables is a viewer's, deleting flows an
+    // operator's (#303)
+    let conntrack = Request::Conntrack {
+        lab: lab(),
+        node: None,
+        query: Default::default(),
+    };
+    assert!(conntrack.meta().role == Role::Viewer && !conntrack.meta().mutating);
+    let flush = Request::FlushConntrack {
+        lab: lab(),
+        node: Some("gw".into()),
+        query: Default::default(),
+    };
+    assert!(flush.meta().role == Role::Operator && flush.meta().mutating);
+    assert_eq!(flush.lab(), Some("l"));
+    assert_eq!(flush.method(), "flush_conntrack");
     let deploy = Request::Deploy {
         topology: json!({}),
         options: Default::default(),

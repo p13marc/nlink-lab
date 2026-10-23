@@ -23,10 +23,12 @@ sends) and [`api-server.v1`](json-schemas/api-server.v1.schema.json)
 
 ## Version
 
-`API_VERSION` is `1.0`, exchanged once when a connection opens. A daemon
+`API_VERSION` is `1.1`, exchanged once when a connection opens. A daemon
 refuses a client of another major version, and a client one of another
 major. A minor version only adds methods and fields, announced as
-`features`; old clients ignore what they do not know.
+`features`; old clients ignore what they do not know. 1.1 added
+`conntrack` and `flush_conntrack` (feature `conntrack`, #303), and
+`keep_conntrack` in an apply's options.
 
 ## Roles
 
@@ -119,7 +121,8 @@ The daemon serves every request:
 - the reads: `list_labs`, `get_lab` (the lab's summary and what `status
   --json` prints), `get_topology`, `list_processes`, `get_impairments`,
   `list_snapshots`, `read_events`, `get_metrics`, `diagnose`,
-  `node_addresses`, `proc_stat`, `stats`, `scan_host`;
+  `node_addresses`, `proc_stat`, `stats`, `scan_host`, `conntrack` (a
+  node's or every node's tracked flows, filtered by a `query`);
 - `subscribe` to `labs`, `lifecycle`, `topology`, `metrics`, `runtime`,
   `ops` and `drift`;
 - the sessions: `exec` (on pipes, or on a terminal with `tty: true`),
@@ -129,7 +132,8 @@ The daemon serves every request:
   `destroy`, `restart`, `snapshot`, `delete_snapshot`, `restore`,
   `run_scenario`, `run_benchmark`, `run_assertions`, `pull_images`,
   `reap_orphans`, `impair`, `clear_impairment`, `partition`, `heal`,
-  `set_pair_impairment`, `spawn`, `kill`; and `plan_deploy`,
+  `set_pair_impairment`, `spawn`, `kill`, `flush_conntrack` (deletes
+  the flows a `query` selects; how many, per node); and `plan_deploy`,
   `check_apply` and `verify`, which change nothing;
 - the jobs: `list_ops`, `attach_op`, `cancel_op`.
 
@@ -206,8 +210,8 @@ A frame is at most 16 MiB. Call 0 is the connection itself. The client
 opens with `hello`, the daemon answers `welcome`:
 
 ```json
-{"t": "hello", "api": "1.0", "client": "my-tool/0.1", "features": []}
-{"t": "welcome", "api": "1.0", "server": "nlink-labd/0.14.0", "host": "lab1",
+{"t": "hello", "api": "1.1", "client": "my-tool/0.1", "features": []}
+{"t": "welcome", "api": "1.1", "server": "nlink-labd/0.14.0", "host": "lab1",
  "uid": 1000, "user": "alice", "role": "operator", "features": ["read", "subscribe", "exec"]}
 ```
 

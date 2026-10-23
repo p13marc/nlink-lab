@@ -278,6 +278,27 @@ pub enum Commands {
     /// Show IP addresses assigned to a node.
     Ip(cmd::ip::Args),
 
+    /// List a lab's tracked flows (its nodes' conntrack tables), or delete
+    /// them with `--flush`.
+    ///
+    /// Filters select by the flow's original direction, as it began
+    /// (`--dst` is the address before a DNAT); every filter given must
+    /// hold. The NAT REPLY column shows where a translated flow's replies
+    /// come from. Deleting a flow makes its next packet start a new one,
+    /// through the rules as they are now: what `apply` does for the flows
+    /// of the NAT rules it changes.
+    ///
+    /// JSON OUTPUT (with `--json`):
+    ///   { "schema_version": 1, "lab": str,
+    ///     "flows": [ { "node": str, "family": "ipv4" | "ipv6", "proto": str,
+    ///       "orig": { "src", "dst", "sport", "dport" }, "reply": { … },
+    ///       "state": str?, "status": [str], "timeout": int?, "mark": int?,
+    ///       "zone": int? }, ... ],
+    ///     "deleted": { NODE: int } }  (with --flush)
+    /// Schema: docs/json-schemas/conntrack.schema.json. With `--quiet`, the
+    /// number of flows listed or deleted.
+    Conntrack(cmd::conntrack::Args),
+
     /// Compare two topology files and show differences.
     Diff(cmd::diff::Args),
 
@@ -366,7 +387,10 @@ pub const GROUPS: &[(&str, &[&str])] = &[
             "exec", "shell", "spawn", "wait", "ps", "kill", "logs", "stats",
         ],
     ),
-    ("Network", &["impair", "node", "link", "ip", "capture"]),
+    (
+        "Network",
+        &["impair", "node", "link", "ip", "conntrack", "capture"],
+    ),
     ("Observe", &["events", "top", "diagnose"]),
     ("Test", &["test", "scenario", "benchmark"]),
     (

@@ -167,6 +167,80 @@ pub struct ApplyOptions {
     pub keep_conntrack: bool,
 }
 
+/// What a conntrack listing or flush selects (#303): every field it sets
+/// must hold. Addresses and ports are the flow's original direction, as it
+/// began (before NAT).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ConntrackQuery {
+    /// `tcp`, `udp`, `icmp`, `icmpv6`, `sctp`, … or a protocol number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proto: Option<String>,
+    /// The source, an address or a CIDR.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub src: Option<String>,
+    /// The destination, an address or a CIDR.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dst: Option<String>,
+    /// The source port (with `proto` tcp or udp).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sport: Option<u16>,
+    /// The destination port (with `proto` tcp or udp).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dport: Option<u16>,
+    /// The connection mark.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mark: Option<u32>,
+    /// The conntrack zone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub zone: Option<u16>,
+    /// Status bits the flow has, nft's names: `snat`, `dnat`, `assured`,
+    /// `seen-reply`, `confirmed`, `expected`, `dying`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub status: Vec<String>,
+}
+
+/// One direction of a tracked flow.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct FlowTuple {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub src: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dst: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sport: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dport: Option<u16>,
+}
+
+/// One tracked flow (#303).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ConntrackFlow {
+    /// The node whose conntrack table holds it.
+    pub node: String,
+    /// `ipv4` or `ipv6`.
+    pub family: String,
+    /// `tcp`, `udp`, `icmp`, … or the protocol number.
+    pub proto: String,
+    /// The direction it began in.
+    pub orig: FlowTuple,
+    /// The direction its replies take; where it differs from `orig`
+    /// swapped, NAT translated it.
+    pub reply: FlowTuple,
+    /// A TCP flow's state: `established`, `time_wait`, …
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    /// Status bits, nft's names.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub status: Vec<String>,
+    /// Seconds before it expires.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mark: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub zone: Option<u16>,
+}
+
 /// A condition a `wait_for` (or a spawn) waits for. Conditions given
 /// together must all hold.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

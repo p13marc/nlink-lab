@@ -355,7 +355,7 @@ Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
-CLI commands (39, grouped in `--help`; lab-scoped ones take `-L LAB`, else `$NLINK_LAB`, `use`, or the only lab):
+CLI commands (40, grouped in `--help`; lab-scoped ones take `-L LAB`, else `$NLINK_LAB`, `use`, or the only lab):
 `deploy` (`.nll` or `.nlz`, with `--set`, `--unique`, `--suffix`, `--json`), `use` (`--clear`),
 `destroy` (`LAB…`, `--all`, `--orphans`), `apply` (`[FILE]`, default the recorded source; `--reset-impairments`),
 `ls` (`--scan`, reports orphans + stale labs), `status [LAB]` (nodes, addresses, containers,
@@ -370,7 +370,8 @@ impairments, partitions, processes, counters),
 `impair EP SPEC…` (`--dir out|in|both`, `--clear`, `--partition`/`--heal`, `--pair SRC DST`, `--show`),
 `diagnose` (`--json`), `capture`, `diff`, `export` (`--nll`),
 `wait [NODE]` (`--tcp`, `--exec`, `--file`, `--listening`, `--log`, `--fd-stable`),
-`ip` (`--iface`, `--cidr`),
+`ip` (`--iface`, `--cidr`), `conntrack [NODE]` (`--proto`, `--src`/`--dst`,
+`--sport`/`--dport`, `--mark`, `--zone`, `--status`, `--flush`),
 `ps [NODE]`, `kill PID…`, `stats [NODE]` (`--pid`, `--procs`, `--pidfile-glob`, `--watch`), `init`, `completions`,
 `logs` (`--follow`, `--tail`, `--pid`, `--stderr`),
 `pull`, `node add|rm|restart`, `link add|rm|set` (`--mtu`, `--qdisc`), `fmt` (`--check`, `-w`, `-`), `lint`

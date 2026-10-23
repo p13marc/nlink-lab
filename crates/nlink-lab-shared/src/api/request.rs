@@ -3,8 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    ApplyOptions, CaptureFilter, DeployOptions, Direction, ImpairmentSpec, LogStream, SourceBundle,
-    Topic, WaitSpec,
+    ApplyOptions, CaptureFilter, ConntrackQuery, DeployOptions, Direction, ImpairmentSpec,
+    LogStream, SourceBundle, Topic, WaitSpec,
 };
 
 /// A request: `{"method": "...", "params": {...}}`.
@@ -71,6 +71,15 @@ pub enum Request {
     },
     Stats {
         lab: String,
+    },
+    /// The tracked flows of a node, or of every node, that `query` selects
+    /// (#303; API 1.1).
+    Conntrack {
+        lab: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        node: Option<String>,
+        #[serde(default)]
+        query: ConntrackQuery,
     },
     ListOps,
     /// Follow an operation started earlier (by this or another client):
@@ -161,6 +170,15 @@ pub enum Request {
     },
 
     // ── runtime changes ──
+    /// Delete the tracked flows `query` selects, on a node or every node
+    /// (#303; API 1.1).
+    FlushConntrack {
+        lab: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        node: Option<String>,
+        #[serde(default)]
+        query: ConntrackQuery,
+    },
     Impair {
         lab: String,
         endpoint: String,
@@ -328,6 +346,8 @@ impl Request {
             | NodeAddresses { lab, .. }
             | ProcStat { lab, .. }
             | Stats { lab }
+            | Conntrack { lab, .. }
+            | FlushConntrack { lab, .. }
             | Apply { lab, .. }
             | CheckApply { lab, .. }
             | Verify { lab }
@@ -409,6 +429,7 @@ impl Request {
             | NodeAddresses { .. }
             | ProcStat { .. }
             | Stats { .. }
+            | Conntrack { .. }
             | ListOps
             | PlanDeploy { .. }
             | CheckApply { .. }
@@ -440,6 +461,7 @@ impl Request {
             Snapshot { .. }
             | DeleteSnapshot { .. }
             | CancelOp { .. }
+            | FlushConntrack { .. }
             | Impair { .. }
             | ClearImpairment { .. }
             | Partition { .. }

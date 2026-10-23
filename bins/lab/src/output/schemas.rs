@@ -64,6 +64,10 @@ pub fn all_schemas() -> Vec<(&'static str, schemars::Schema)> {
             output_schema_for::<Vec<crate::cmd::events::Event>>(),
         ),
         (
+            "conntrack",
+            output_schema_for::<super::Document<'static, crate::cmd::conntrack::ConntrackReport>>(),
+        ),
+        (
             "lint",
             output_schema_for::<super::Document<'static, crate::cmd::lint::LintReport<'static>>>(),
         ),

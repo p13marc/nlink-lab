@@ -176,6 +176,11 @@ async fn a_viewer_reads_but_does_not_operate() {
         },
         Request::Destroy { lab: "x".into() },
         Request::CancelOp { op: "op-1".into() },
+        Request::FlushConntrack {
+            lab: "x".into(),
+            node: None,
+            query: Default::default(),
+        },
     ] {
         match client.call(request).await.unwrap_err() {
             ClientError::Api(e) => {

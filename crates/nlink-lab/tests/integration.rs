@@ -4709,6 +4709,90 @@ link gw:wan1 -- s2:eth0 {{ 10.0.3.1/24 -- 10.0.3.10/24 }}
     lab.destroy().await.expect("destroy failed");
 }
 
+/// #303: a node's tracked flows are listed by a query (the flow as it
+/// began, a DNAT shown in its reply direction) and deleted by one: a flush
+/// by destination port deletes that flow and leaves the other.
+#[tokio::test]
+async fn conntrack_lists_and_flushes_what_a_query_selects() {
+    if !privileged("conntrack_lists_and_flushes_what_a_query_selects") {
+        return;
+    }
+    if !feature(
+        "conntrack_lists_and_flushes_what_a_query_selects",
+        "nf_conntrack_netlink",
+        has_kernel_module("nf_conntrack_netlink"),
+    ) {
+        return;
+    }
+    let lab_name = format!("ctcmd-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}"
+profile router {{ forward ipv4 }}
+node client {{ route default via 10.0.1.1 }}
+node gw : router {{
+  nat {{ dnat dst 10.0.1.1 udp dport 5000 to 10.0.2.10:5000 }}
+}}
+node server {{ route default via 10.0.2.1 }}
+link client:eth0 -- gw:lan0 {{ 10.0.1.10/24 -- 10.0.1.1/24 }}
+link gw:wan0 -- server:eth0 {{ 10.0.2.1/24 -- 10.0.2.10/24 }}
+"#
+    ))
+    .unwrap();
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let udp = |node: &str, bind: &str, to: &str| {
+        let (bind, to) = (bind.to_string(), to.to_string());
+        lab.ns_resolver_of(node)
+            .unwrap()
+            .netns()
+            .unwrap()
+            .run(move || {
+                let s = std::net::UdpSocket::bind(bind.as_str())?;
+                s.connect(to.as_str())?;
+                s.send(b"x")?;
+                Ok::<_, std::io::Error>(s)
+            })
+            .unwrap()
+            .unwrap()
+    };
+    // one flow through the DNAT, one to gw's own address
+    let (_a, _b) = (
+        udp("client", "0.0.0.0:41000", "10.0.1.1:5000"),
+        udp("client", "0.0.0.0:41001", "10.0.1.1:6000"),
+    );
+    let query = |dport: u16| nlink_lab::api::ConntrackQuery {
+        proto: Some("udp".into()),
+        dport: Some(dport),
+        ..Default::default()
+    };
+    let flows = lab.conntrack("gw", &query(5000)).await.unwrap();
+    assert_eq!(flows.len(), 1, "{flows:?}");
+    let f = &flows[0];
+    assert_eq!(
+        (f.orig.dst.as_deref(), f.reply.src.as_deref()),
+        (Some("10.0.1.1"), Some("10.0.2.10")),
+        "the DNAT shows in the reply direction: {f:?}"
+    );
+    assert!(f.status.iter().any(|s| s == "dnat"), "{f:?}");
+    let all = lab
+        .conntrack_of(Some("gw"), &Default::default())
+        .await
+        .unwrap();
+    assert!(all.len() >= 2, "{all:?}");
+
+    let gone = lab.flush_conntrack("gw", &query(5000)).await.unwrap();
+    assert_eq!(gone, 1);
+    assert!(lab.conntrack("gw", &query(5000)).await.unwrap().is_empty());
+    assert_eq!(
+        lab.conntrack("gw", &query(6000)).await.unwrap().len(),
+        1,
+        "the other flow stays"
+    );
+    lab.destroy().await.expect("destroy failed");
+}
+
 // ─── Plan 156 PR C — impair --show JSON view ────────────
 
 // Round-4 follow-up: `--show --json` returned `endpoints: {}` for any

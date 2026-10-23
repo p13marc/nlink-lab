@@ -50,6 +50,13 @@ pub async fn handle(req: &Request) -> Option<Result<Response>> {
             };
             report("proc_stat", &stats)
         }),
+        Request::Conntrack { lab, node, query } => match RunningLab::load(lab) {
+            Ok(r) => match r.conntrack_of(node.as_deref(), query).await {
+                Ok(flows) => report("conntrack", &flows),
+                Err(e) => Err(e),
+            },
+            Err(e) => Err(e),
+        },
         Request::Stats { lab } => {
             RunningLab::load(lab).and_then(|r| report("stats", &view::node_stats(&r, None)))
         }

@@ -1,11 +1,14 @@
 //! Integration tests for nlink-lab.
 //!
-//! These tests deploy real network namespaces and require root or CAP_NET_ADMIN.
-//! They are automatically skipped when run as a non-root user.
+//! These tests deploy real network namespaces and require root or
+//! CAP_NET_ADMIN + CAP_SYS_ADMIN. Without them each test fails, unless
+//! `NLINK_LAB_SKIP_ROOT_TESTS` is on; a missing kernel feature or tool
+//! skips, unless `NLINK_LAB_STRICT_FEATURES` names it (`test_helpers`).
 //!
 //! Run with: `sudo cargo test -p nlink-lab --test integration`
 
 use nlink_lab::lab_test;
+use nlink_lab::test_helpers::{feature, privileged};
 #[allow(unused_imports)]
 use nlink_lab::{Lab, Op, RunningLab};
 
@@ -118,8 +121,7 @@ async fn a_lab_test_of_a_prefixed_topology_gets_its_own_namespaces(lab: RunningL
 /// the other's, and one file per node was kept.
 #[tokio::test]
 async fn lab_capture_keeps_one_pcap_per_interface() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping lab_capture_keeps_one_pcap_per_interface: requires root");
+    if !privileged("lab_capture_keeps_one_pcap_per_interface") {
         return;
     }
     let lab_name = format!("cap2-{}", std::process::id());
@@ -427,8 +429,7 @@ async fn process_status_alive_only_filters_dead(mut lab: RunningLab) {
 /// `iperf3 -s -D` servers had piled up by the hundred.
 #[tokio::test]
 async fn destroy_stops_what_the_lab_left_running() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping destroy_stops_what_the_lab_left_running: requires root");
+    if !privileged("destroy_stops_what_the_lab_left_running") {
         return;
     }
     let topo = nlink_lab::parser::parse(&format!(
@@ -713,12 +714,10 @@ fn prefix_collision_topology() -> nlink_lab::Topology {
 
 #[tokio::test]
 async fn deploy_firewall() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping deploy_firewall: requires root");
+    if !privileged("deploy_firewall") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping deploy_firewall: nftables not functional on this kernel");
+    if !feature("deploy_firewall", "nftables", has_nftables()) {
         return;
     }
 
@@ -751,12 +750,10 @@ async fn deploy_firewall() {
 // mutations (the `apply_reconcile` diff was empty).
 #[tokio::test]
 async fn nftables_reapply_is_zero_ops() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping nftables_reapply_is_zero_ops: requires root");
+    if !privileged("nftables_reapply_is_zero_ops") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping nftables_reapply_is_zero_ops: nftables not functional");
+    if !feature("nftables_reapply_is_zero_ops", "nftables", has_nftables()) {
         return;
     }
 
@@ -830,12 +827,14 @@ fn collect_rule_handles(nft_output: &str) -> Vec<u32> {
 // additions being clobbered.
 #[tokio::test]
 async fn nftables_foreign_rule_survives_apply() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping nftables_foreign_rule_survives_apply: requires root");
+    if !privileged("nftables_foreign_rule_survives_apply") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping nftables_foreign_rule_survives_apply: nftables not functional");
+    if !feature(
+        "nftables_foreign_rule_survives_apply",
+        "nftables",
+        has_nftables(),
+    ) {
         return;
     }
 
@@ -911,12 +910,14 @@ async fn nftables_foreign_rule_survives_apply() {
 // in-place replace" claim of Plan 158a.
 #[tokio::test]
 async fn nftables_rule_edit_replaces_in_place() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping nftables_rule_edit_replaces_in_place: requires root");
+    if !privileged("nftables_rule_edit_replaces_in_place") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping nftables_rule_edit_replaces_in_place: nftables not functional");
+    if !feature(
+        "nftables_rule_edit_replaces_in_place",
+        "nftables",
+        has_nftables(),
+    ) {
         return;
     }
 
@@ -983,12 +984,14 @@ async fn nftables_rule_edit_replaces_in_place() {
 // (or shows the table empty).
 #[tokio::test]
 async fn nftables_remove_firewall_clears_table() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping nftables_remove_firewall_clears_table: requires root");
+    if !privileged("nftables_remove_firewall_clears_table") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping nftables_remove_firewall_clears_table: nftables not functional");
+    if !feature(
+        "nftables_remove_firewall_clears_table",
+        "nftables",
+        has_nftables(),
+    ) {
         return;
     }
 
@@ -1049,8 +1052,7 @@ async fn nftables_remove_firewall_clears_table() {
 // that the combination still deploys and reapplies cleanly.
 #[tokio::test]
 async fn network_config_coexists_with_macvlan() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping network_config_coexists_with_macvlan: requires root");
+    if !privileged("network_config_coexists_with_macvlan") {
         return;
     }
     // macvlan needs a real parent device on the host. Best-effort
@@ -1106,8 +1108,7 @@ async fn network_config_coexists_with_macvlan() {
 // addresses on VRF members go through Slice 1.
 #[tokio::test]
 async fn network_config_coexists_with_vrf() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping network_config_coexists_with_vrf: requires root");
+    if !privileged("network_config_coexists_with_vrf") {
         return;
     }
 
@@ -1142,8 +1143,7 @@ async fn network_config_coexists_with_vrf() {
 // namespace and verify the accessor returns Some(_).
 #[tokio::test]
 async fn ext_ack_surfaces_from_real_kernel_error() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping ext_ack_surfaces_from_real_kernel_error: requires root");
+    if !privileged("ext_ack_surfaces_from_real_kernel_error") {
         return;
     }
     let topo = nlink_lab::parser::parse_file(concat!(
@@ -1196,12 +1196,14 @@ async fn ext_ack_surfaces_from_real_kernel_error() {
 // NetworkConfig step 11c apply.
 #[tokio::test]
 async fn network_config_coexists_with_wireguard() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping network_config_coexists_with_wireguard: requires root");
+    if !privileged("network_config_coexists_with_wireguard") {
         return;
     }
-    if !has_wireguard() {
-        eprintln!("skipping network_config_coexists_with_wireguard: wireguard not functional");
+    if !feature(
+        "network_config_coexists_with_wireguard",
+        "wireguard",
+        has_wireguard(),
+    ) {
         return;
     }
 
@@ -1244,12 +1246,14 @@ async fn network_config_coexists_with_wireguard() {
 // zero kernel ops on a no-change apply.
 #[tokio::test]
 async fn nat_masquerade_reapply_is_zero_ops() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping nat_masquerade_reapply_is_zero_ops: requires root");
+    if !privileged("nat_masquerade_reapply_is_zero_ops") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping nat_masquerade_reapply_is_zero_ops: nftables not functional");
+    if !feature(
+        "nat_masquerade_reapply_is_zero_ops",
+        "nftables",
+        has_nftables(),
+    ) {
         return;
     }
 
@@ -1316,8 +1320,7 @@ async fn nat_masquerade_reapply_is_zero_ops() {
 // dummy is still present with the same address.
 #[tokio::test]
 async fn slice2_dummy_iface_reapply_is_zero_ops() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping slice2_dummy_iface_reapply_is_zero_ops: requires root");
+    if !privileged("slice2_dummy_iface_reapply_is_zero_ops") {
         return;
     }
     let topo = nlink_lab::Lab::new("slice2-dummy")
@@ -1371,8 +1374,7 @@ async fn slice2_dummy_iface_reapply_is_zero_ops() {
 // `network_config_vlan_parent_dummy_declared_first_regardless_of_hashmap_order`.
 #[tokio::test]
 async fn slice3_vlan_iface_reapply_is_zero_ops() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping slice3_vlan_iface_reapply_is_zero_ops: requires root");
+    if !privileged("slice3_vlan_iface_reapply_is_zero_ops") {
         return;
     }
     // Build a 2-node topology so step 5 creates a veth `eth0` on
@@ -1453,8 +1455,7 @@ async fn slice3_vlan_iface_reapply_is_zero_ops() {
 // End-to-end via examples/vrf-multitenant.nll.
 #[tokio::test]
 async fn slice4_vrf_reapply_is_zero_ops() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping slice4_vrf_reapply_is_zero_ops: requires root");
+    if !privileged("slice4_vrf_reapply_is_zero_ops") {
         return;
     }
     // Try to load the vrf kernel module — CI runner kernels may
@@ -1462,11 +1463,11 @@ async fn slice4_vrf_reapply_is_zero_ops() {
     // returns EOPNOTSUPP. Skip rather than failing the test on
     // an environment limitation.
     let _ = std::process::Command::new("modprobe").arg("vrf").status();
-    if !std::path::Path::new("/sys/module/vrf").exists() {
-        eprintln!(
-            "skipping slice4_vrf_reapply_is_zero_ops: kernel `vrf` \
-             module unavailable on this runner"
-        );
+    if !feature(
+        "slice4_vrf_reapply_is_zero_ops",
+        "vrf",
+        std::path::Path::new("/sys/module/vrf").exists(),
+    ) {
         return;
     }
     let topo = nlink_lab::parser::parse_file(concat!(
@@ -1529,8 +1530,7 @@ async fn slice4_vrf_reapply_is_zero_ops() {
 // End-to-end via examples/vxlan-overlay.nll.
 #[tokio::test]
 async fn slice4_vxlan_reapply_is_zero_ops() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping slice4_vxlan_reapply_is_zero_ops: requires root");
+    if !privileged("slice4_vxlan_reapply_is_zero_ops") {
         return;
     }
     let topo = nlink_lab::parser::parse_file(concat!(
@@ -1589,8 +1589,7 @@ async fn slice4_vxlan_reapply_is_zero_ops() {
 /// `IFLA_VXLAN_LOCAL6`/`GROUP6` (nlink #418).
 #[tokio::test]
 async fn vxlan_ipv6_underlay_deploys_and_forwards() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping vxlan_ipv6_underlay_deploys_and_forwards: requires root");
+    if !privileged("vxlan_ipv6_underlay_deploys_and_forwards") {
         return;
     }
     let lab_name = format!("vx6-{}", std::process::id());
@@ -1687,8 +1686,11 @@ impair r:vl0 delay 20ms
 fn recreate_modules_present(test: &str) -> bool {
     for m in ["vrf", "8021q"] {
         let _ = std::process::Command::new("modprobe").arg(m).status();
-        if !std::path::Path::new(&format!("/sys/module/{m}")).exists() {
-            eprintln!("skipping {test}: kernel `{m}` module unavailable");
+        if !feature(
+            test,
+            m,
+            std::path::Path::new(&format!("/sys/module/{m}")).exists(),
+        ) {
             return false;
         }
     }
@@ -1701,10 +1703,7 @@ fn recreate_modules_present(test: &str) -> bool {
 /// is declared and so put back; the VLAN keeps its VRF master.
 #[tokio::test]
 async fn apply_recreates_vlan_and_reinstalls_netem_and_vrf_route() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!(
-            "skipping apply_recreates_vlan_and_reinstalls_netem_and_vrf_route: requires root"
-        );
+    if !privileged("apply_recreates_vlan_and_reinstalls_netem_and_vrf_route") {
         return;
     }
     if !recreate_modules_present("apply_recreates_vlan_and_reinstalls_netem_and_vrf_route") {
@@ -1790,8 +1789,7 @@ async fn apply_recreates_vlan_and_reinstalls_netem_and_vrf_route() {
 /// this one does not is a link to remove, listed by `--check`.
 #[tokio::test]
 async fn apply_deletes_a_removed_vlan_and_check_lists_it() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping apply_deletes_a_removed_vlan_and_check_lists_it: requires root");
+    if !privileged("apply_deletes_a_removed_vlan_and_check_lists_it") {
         return;
     }
     if !recreate_modules_present("apply_deletes_a_removed_vlan_and_check_lists_it") {
@@ -1855,10 +1853,7 @@ link r:eth0 -- h:eth0
 /// VLAN-id change recreates the link, and after a hand edit and an apply.
 #[tokio::test]
 async fn declared_vlan_sysctl_survives_deploy_recreate_and_drift() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!(
-            "skipping declared_vlan_sysctl_survives_deploy_recreate_and_drift: requires root"
-        );
+    if !privileged("declared_vlan_sysctl_survives_deploy_recreate_and_drift") {
         return;
     }
     if !recreate_modules_present("declared_vlan_sysctl_survives_deploy_recreate_and_drift") {
@@ -1936,8 +1931,7 @@ link r:eth0 -- h:eth0
 /// crosses unfragmented.
 #[tokio::test]
 async fn network_mtu_reaches_bridge_and_members() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping network_mtu_reaches_bridge_and_members: requires root");
+    if !privileged("network_mtu_reaches_bridge_and_members") {
         return;
     }
     let lab_name = format!("nmtu-{}", std::process::id());
@@ -2006,8 +2000,7 @@ network lan {{
 /// the topology cannot declare — fails before anything changes.
 #[tokio::test]
 async fn apply_refused_recreate_changes_nothing() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping apply_refused_recreate_changes_nothing: requires root");
+    if !privileged("apply_refused_recreate_changes_nothing") {
         return;
     }
     if !recreate_modules_present("apply_refused_recreate_changes_nothing") {
@@ -2087,8 +2080,7 @@ async fn apply_refused_recreate_changes_nothing() {
 #[cfg(feature = "wireguard")]
 #[tokio::test]
 async fn wireguard_config_reapply_is_zero_ops() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping wireguard_config_reapply_is_zero_ops: requires root");
+    if !privileged("wireguard_config_reapply_is_zero_ops") {
         return;
     }
     // Pre-flight: ensure the wireguard kernel module + the
@@ -2097,11 +2089,11 @@ async fn wireguard_config_reapply_is_zero_ops() {
     let _ = std::process::Command::new("modprobe")
         .arg("wireguard")
         .status();
-    if !std::path::Path::new("/sys/module/wireguard").exists() {
-        eprintln!(
-            "skipping wireguard_config_reapply_is_zero_ops: \
-             kernel wireguard module unavailable on this runner"
-        );
+    if !feature(
+        "wireguard_config_reapply_is_zero_ops",
+        "wireguard",
+        std::path::Path::new("/sys/module/wireguard").exists(),
+    ) {
         return;
     }
     let wg_on_path = std::process::Command::new("which")
@@ -2109,11 +2101,7 @@ async fn wireguard_config_reapply_is_zero_ops() {
         .status()
         .map(|s| s.success())
         .unwrap_or(false);
-    if !wg_on_path {
-        eprintln!(
-            "skipping wireguard_config_reapply_is_zero_ops: \
-             `wg` binary not on PATH (install wireguard-tools)"
-        );
+    if !feature("wireguard_config_reapply_is_zero_ops", "wg", wg_on_path) {
         return;
     }
     let topo = nlink_lab::parser::parse_file(concat!(
@@ -2275,14 +2263,16 @@ async fn wireguard_config_reapply_is_zero_ops() {
 #[cfg(feature = "wireguard")]
 #[tokio::test]
 async fn multi_tenant_wan_tunnels_carry_their_customers() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping multi_tenant_wan_tunnels_carry_their_customers: requires root");
+    if !privileged("multi_tenant_wan_tunnels_carry_their_customers") {
         return;
     }
     for m in ["wireguard", "vrf"] {
         let _ = std::process::Command::new("modprobe").arg(m).status();
-        if !std::path::Path::new(&format!("/sys/module/{m}")).exists() {
-            eprintln!("skipping multi_tenant_wan_tunnels_carry_their_customers: no `{m}` module");
+        if !feature(
+            "multi_tenant_wan_tunnels_carry_their_customers",
+            m,
+            std::path::Path::new(&format!("/sys/module/{m}")).exists(),
+        ) {
             return;
         }
     }
@@ -2311,8 +2301,7 @@ async fn multi_tenant_wan_tunnels_carry_their_customers() {
 // namespace.
 #[tokio::test]
 async fn compute_layered_diff_on_unchanged_topology_is_empty() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping compute_layered_diff_on_unchanged_topology_is_empty: requires root");
+    if !privileged("compute_layered_diff_on_unchanged_topology_is_empty") {
         return;
     }
     let topo = nlink_lab::parser::parse_file(concat!(
@@ -2353,11 +2342,7 @@ async fn compute_layered_diff_on_unchanged_topology_is_empty() {
 // produce the same empty result.
 #[tokio::test]
 async fn compute_layered_diff_reports_non_empty_when_address_changes() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!(
-            "skipping compute_layered_diff_reports_non_empty_when_address_changes: \
-             requires root"
-        );
+    if !privileged("compute_layered_diff_reports_non_empty_when_address_changes") {
         return;
     }
     let topo = nlink_lab::parser::parse_file(concat!(
@@ -2424,8 +2409,7 @@ async fn compute_layered_diff_reports_non_empty_when_address_changes() {
 // regressions in `bins/lab/src/main.rs` can't slip past.
 #[tokio::test]
 async fn verify_json_emits_schema_v3_envelope() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping apply_check_json_emits_schema_v2_envelope: requires root");
+    if !privileged("verify_json_emits_schema_v3_envelope") {
         return;
     }
     let topo = nlink_lab::parser::parse_file(concat!(
@@ -2518,8 +2502,7 @@ async fn verify_json_emits_schema_v3_envelope() {
 // before/after the second apply.
 #[tokio::test]
 async fn network_config_reapply_is_zero_ops() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping network_config_reapply_is_zero_ops: requires root");
+    if !privileged("network_config_reapply_is_zero_ops") {
         return;
     }
 
@@ -2657,8 +2640,7 @@ async fn state_persistence(lab: RunningLab) {
 // old process and start the new one; removing the line stops it.
 #[tokio::test]
 async fn apply_restarts_edited_background_exec() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping apply_restarts_edited_background_exec: requires root");
+    if !privileged("apply_restarts_edited_background_exec") {
         return;
     }
     let src = r#"lab "apply-exec-edit"
@@ -2728,8 +2710,7 @@ node s { run ["sleep", "1000"] background }
 // namespace (member veths were already deleted).
 #[tokio::test]
 async fn apply_removed_network_deletes_bridge() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping apply_removed_network_deletes_bridge: requires root");
+    if !privileged("apply_removed_network_deletes_bridge") {
         return;
     }
     let src = r#"lab "apply-net-rm"
@@ -2789,8 +2770,7 @@ network dmz { subnet 10.2.0.0/24  members [b:eth1, c:eth0] }
 // Issue #86: `apply` runs the topology's `validate { … }` assertions.
 #[tokio::test]
 async fn apply_runs_validate_assertions() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping apply_runs_validate_assertions: requires root");
+    if !privileged("apply_runs_validate_assertions") {
         return;
     }
     let src = r#"lab "apply-assert"
@@ -2833,12 +2813,14 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
 // subtree holding its background processes; destroy removes it.
 #[tokio::test]
 async fn namespace_node_cpu_memory_limits_apply_via_cgroups() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping namespace_node_cpu_memory_limits_apply_via_cgroups: requires root");
+    if !privileged("namespace_node_cpu_memory_limits_apply_via_cgroups") {
         return;
     }
-    if !nlink_lab::cgroup::available() {
-        eprintln!("skipping: no cgroup v2");
+    if !feature(
+        "namespace_node_cpu_memory_limits_apply_via_cgroups",
+        "cgroup",
+        nlink_lab::cgroup::available(),
+    ) {
         return;
     }
     let src = r#"lab "cg"
@@ -2895,12 +2877,10 @@ node a { cpu 0.5  memory 64m  run ["sleep", "1000"] background }
 // purge covers every table it declares into, and the ones it did before.
 #[tokio::test]
 async fn apply_removes_vrf_route() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping apply_removes_vrf_route: requires root");
+    if !privileged("apply_removes_vrf_route") {
         return;
     }
-    if !has_kernel_module("vrf") {
-        eprintln!("skipping apply_removes_vrf_route: vrf kernel module not available");
+    if !feature("apply_removes_vrf_route", "vrf", has_kernel_module("vrf")) {
         return;
     }
     let src = r#"lab "apply-vrf-rm"
@@ -2992,12 +2972,10 @@ link pe:eth1 -- a:eth0 { 10.10.0.1/24 -- 10.10.0.10/24 }
 
 #[tokio::test]
 async fn deploy_vrf() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping deploy_vrf: requires root");
+    if !privileged("deploy_vrf") {
         return;
     }
-    if !has_kernel_module("vrf") {
-        eprintln!("skipping deploy_vrf: vrf kernel module not available");
+    if !feature("deploy_vrf", "vrf", has_kernel_module("vrf")) {
         return;
     }
 
@@ -3073,8 +3051,7 @@ async fn deploy_vrf() {
 
 #[lab_test("examples/wireguard-vpn.nll")]
 async fn deploy_wireguard(lab: RunningLab) {
-    if !has_wireguard() {
-        eprintln!("skipping deploy_wireguard: wireguard not functional");
+    if !feature("deploy_wireguard", "wireguard", has_wireguard()) {
         return;
     }
     assert_eq!(lab.topology().nodes.len(), 4);
@@ -3131,8 +3108,11 @@ async fn deploy_wireguard(lab: RunningLab) {
 
 #[lab_test("examples/vlan-trunk.nll")]
 async fn deploy_bridge_vlan(lab: RunningLab) {
-    if !has_bridge_vlan_filtering() {
-        eprintln!("skipping deploy_bridge_vlan: bridge VLAN filtering not functional");
+    if !feature(
+        "deploy_bridge_vlan",
+        "bridge-vlan-filtering",
+        has_bridge_vlan_filtering(),
+    ) {
         return;
     }
     assert_eq!(lab.topology().nodes.len(), 3);
@@ -3251,8 +3231,7 @@ fn discard_lab_state(name: &str) {
 
 #[tokio::test]
 async fn apply_add_node_and_link() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping apply_add_node_and_link: requires root");
+    if !privileged("apply_add_node_and_link") {
         return;
     }
 
@@ -3330,21 +3309,17 @@ async fn apply_add_node_and_link() {
 #[cfg(feature = "wireguard")]
 #[tokio::test]
 async fn apply_diff_phase6_configures_wireguard_for_added_node() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!(
-            "skipping apply_diff_phase6_configures_wireguard_for_added_node: \
-             requires root"
-        );
+    if !privileged("apply_diff_phase6_configures_wireguard_for_added_node") {
         return;
     }
     let _ = std::process::Command::new("modprobe")
         .arg("wireguard")
         .status();
-    if !std::path::Path::new("/sys/module/wireguard").exists() {
-        eprintln!(
-            "skipping apply_diff_phase6_configures_wireguard_for_added_node: \
-             wireguard kernel module unavailable"
-        );
+    if !feature(
+        "apply_diff_phase6_configures_wireguard_for_added_node",
+        "wireguard",
+        std::path::Path::new("/sys/module/wireguard").exists(),
+    ) {
         return;
     }
     let wg_on_path = std::process::Command::new("which")
@@ -3352,11 +3327,11 @@ async fn apply_diff_phase6_configures_wireguard_for_added_node() {
         .status()
         .map(|s| s.success())
         .unwrap_or(false);
-    if !wg_on_path {
-        eprintln!(
-            "skipping apply_diff_phase6_configures_wireguard_for_added_node: \
-             `wg` binary not on PATH"
-        );
+    if !feature(
+        "apply_diff_phase6_configures_wireguard_for_added_node",
+        "wg",
+        wg_on_path,
+    ) {
         return;
     }
 
@@ -3439,8 +3414,7 @@ async fn apply_diff_phase6_configures_wireguard_for_added_node() {
 
 #[tokio::test]
 async fn apply_remove_node() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping apply_remove_node: requires root");
+    if !privileged("apply_remove_node") {
         return;
     }
 
@@ -3497,8 +3471,7 @@ async fn apply_remove_node() {
 
 #[tokio::test]
 async fn apply_impairment_change() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping apply_impairment_change: requires root");
+    if !privileged("apply_impairment_change") {
         return;
     }
 
@@ -3682,12 +3655,10 @@ fn dns_topology() -> nlink_lab::Topology {
 
 #[tokio::test]
 async fn firewall_blocks_traffic() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping firewall_blocks_traffic: requires root");
+    if !privileged("firewall_blocks_traffic") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping firewall_blocks_traffic: nftables not functional");
+    if !feature("firewall_blocks_traffic", "nftables", has_nftables()) {
         return;
     }
 
@@ -3732,8 +3703,11 @@ async fn firewall_blocks_traffic() {
 
 #[lab_test("examples/vlan-trunk.nll")]
 async fn vlan_isolation(lab: RunningLab) {
-    if !has_bridge_vlan_filtering() {
-        eprintln!("skipping vlan_isolation: bridge VLAN filtering not functional");
+    if !feature(
+        "vlan_isolation",
+        "bridge-vlan-filtering",
+        has_bridge_vlan_filtering(),
+    ) {
         return;
     }
 
@@ -4143,8 +4117,7 @@ async fn loss_model_reaches_the_kernel_and_drops(lab: RunningLab) {
 /// instead of `bash -c 'echo > /dev/tcp/…'` and `ip route show` text.
 #[tokio::test]
 async fn tcp_connect_and_route_has_read_the_kernel() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping tcp_connect_and_route_has_read_the_kernel: requires root");
+    if !privileged("tcp_connect_and_route_has_read_the_kernel") {
         return;
     }
     let lab_name = format!("tcrh-{}", std::process::id());
@@ -4196,8 +4169,7 @@ validate {{
 /// stream nothing, with the namespaces kept alive behind `destroy`.
 #[tokio::test]
 async fn watch_reports_gone_when_the_lab_is_destroyed() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping watch_reports_gone_when_the_lab_is_destroyed: requires root");
+    if !privileged("watch_reports_gone_when_the_lab_is_destroyed") {
         return;
     }
     let lab_name = format!("wgone-{}", std::process::id());
@@ -4250,8 +4222,7 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
 /// does not have was an empty watch.
 #[tokio::test]
 async fn watch_reports_gone_when_the_lab_is_redeployed() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping watch_reports_gone_when_the_lab_is_redeployed: requires root");
+    if !privileged("watch_reports_gone_when_the_lab_is_redeployed") {
         return;
     }
     let lab_name = format!("wredo-{}", std::process::id());
@@ -4336,8 +4307,7 @@ fn accept_peer(
 /// own 8080.
 #[tokio::test]
 async fn nat_port_ranges_and_redirect_on_a_router() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping nat_port_ranges_and_redirect_on_a_router: requires root");
+    if !privileged("nat_port_ranges_and_redirect_on_a_router") {
         return;
     }
     let lab_name = format!("natr-{}", std::process::id());
@@ -4409,8 +4379,7 @@ link gw:wan0 -- server:eth0 {{ 10.0.2.1/24 -- 10.0.2.10/24 }}
 /// and a mark range install and read back as declared (converged).
 #[tokio::test]
 async fn firewall_rpf_negated_ranges_and_byte_limits() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping firewall_rpf_negated_ranges_and_byte_limits: requires root");
+    if !privileged("firewall_rpf_negated_ranges_and_byte_limits") {
         return;
     }
     let lab_name = format!("fw032-{}", std::process::id());
@@ -4642,12 +4611,14 @@ async fn ping6_ok(lab: &RunningLab, node: &str, target: &str, attempts: usize) -
 
 #[tokio::test]
 async fn ipv6_dual_stack_nat66_and_firewall() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping ipv6_dual_stack_nat66_and_firewall: requires root");
+    if !privileged("ipv6_dual_stack_nat66_and_firewall") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping ipv6_dual_stack_nat66_and_firewall: nftables not functional");
+    if !feature(
+        "ipv6_dual_stack_nat66_and_firewall",
+        "nftables",
+        has_nftables(),
+    ) {
         return;
     }
     let mut topo = nlink_lab::parser::parse_file("examples/ipv6-dual-stack.nll").unwrap();
@@ -4702,8 +4673,7 @@ async fn ipv6_dual_stack_nat66_and_firewall() {
 
 #[tokio::test]
 async fn mgmt_ipv6_host_reachable() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping mgmt_ipv6_host_reachable: requires root");
+    if !privileged("mgmt_ipv6_host_reachable") {
         return;
     }
     let lab_name = format!("mgmt6-{}", std::process::id());
@@ -4764,8 +4734,7 @@ link a:eth0 -- b:eth0 {{ fd00:1::1/64 -- fd00:1::2/64 }}
 
 #[tokio::test]
 async fn rate_limit_burst_applied() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping rate_limit_burst_applied: requires root");
+    if !privileged("rate_limit_burst_applied") {
         return;
     }
     let lab_name = format!("burst-{}", std::process::id());
@@ -4805,8 +4774,7 @@ rate a:eth0 egress 10mbit burst 64kbyte
 /// the other two running (#158).
 #[tokio::test]
 async fn rate_limit_removal_takes_ingress_and_ifb() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping rate_limit_removal_takes_ingress_and_ifb: requires root");
+    if !privileged("rate_limit_removal_takes_ingress_and_ifb") {
         return;
     }
     let lab_name = format!("rmrate-{}", std::process::id());
@@ -4880,8 +4848,7 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
 
 #[tokio::test]
 async fn qdisc_blocks_apply_replace_and_clear() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping qdisc_blocks_apply_replace_and_clear: requires root");
+    if !privileged("qdisc_blocks_apply_replace_and_clear") {
         return;
     }
     let lab_name = format!("qdisc-{}", std::process::id());
@@ -5072,8 +5039,7 @@ fn root_qdisc(lab: &RunningLab, node: &str, iface: &str) -> (String, u64) {
 /// that `--check` reports, and `apply` puts it back.
 #[tokio::test]
 async fn declared_tc_reapplies_as_nothing_and_repairs_drift() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping declared_tc_reapplies_as_nothing_and_repairs_drift: requires root");
+    if !privileged("declared_tc_reapplies_as_nothing_and_repairs_drift") {
         return;
     }
     let lab_name = format!("dtc-{}", std::process::id());
@@ -5134,8 +5100,7 @@ qdisc b:eth0 prio {{ bands 3 }}
 /// the partition, and heal finds the prio as it was.
 #[tokio::test]
 async fn partition_and_heal_keep_a_prio() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping partition_and_heal_keep_a_prio: requires root");
+    if !privileged("partition_and_heal_keep_a_prio") {
         return;
     }
     let lab_name = format!("pprio-{}", std::process::id());
@@ -5190,8 +5155,7 @@ qdisc a:eth0 prio {{ bands 3 }}
 /// Removing the matrix removes its tree.
 #[tokio::test]
 async fn endpoint_impair_is_the_default_of_a_pair_matrix() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping endpoint_impair_is_the_default_of_a_pair_matrix: requires root");
+    if !privileged("endpoint_impair_is_the_default_of_a_pair_matrix") {
         return;
     }
     let lab_name = format!("pdef-{}", std::process::id());
@@ -5248,8 +5212,7 @@ impair a:eth0 delay 100ms
 /// the old op had nothing to undo it with).
 #[tokio::test]
 async fn removing_a_pair_matrix_removes_its_tree() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping removing_a_pair_matrix_removes_its_tree: requires root");
+    if !privileged("removing_a_pair_matrix_removes_its_tree") {
         return;
     }
     let lab_name = format!("prm-{}", std::process::id());
@@ -5287,8 +5250,7 @@ network lan {{
 /// kernel's default, which is on (#173).
 #[tokio::test]
 async fn fq_codel_noecn_turns_ecn_off() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping fq_codel_noecn_turns_ecn_off: requires root");
+    if !privileged("fq_codel_noecn_turns_ecn_off") {
         return;
     }
     let lab_name = format!("noecn-{}", std::process::id());
@@ -5329,10 +5291,7 @@ qdisc b:eth0 fq_codel {{ limit 1000 }}
 /// `Sent` counter that never steps backwards.
 #[tokio::test]
 async fn changing_an_impairment_keeps_the_handle_and_the_counters() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!(
-            "skipping changing_an_impairment_keeps_the_handle_and_the_counters: requires root"
-        );
+    if !privileged("changing_an_impairment_keeps_the_handle_and_the_counters") {
         return;
     }
     let lab_name = format!("qreplace-{}", std::process::id());
@@ -5412,8 +5371,7 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24  delay {delay} rate 5mbit }}
 /// kernel calls — and keep its counters, which is the observable proof.
 #[tokio::test]
 async fn reapplying_a_network_impair_matrix_keeps_its_counters() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping reapplying_a_network_impair_matrix_keeps_its_counters: requires root");
+    if !privileged("reapplying_a_network_impair_matrix_keeps_its_counters") {
         return;
     }
     let lab_name = format!("permatrix-{}", std::process::id());
@@ -5477,8 +5435,7 @@ network lan {{
 
 #[tokio::test]
 async fn impair_persists_across_apply_and_snapshot_restore() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping impair_persists_across_apply_and_snapshot_restore: requires root");
+    if !privileged("impair_persists_across_apply_and_snapshot_restore") {
         return;
     }
     let lab_name = format!("snap-{}", std::process::id());
@@ -5611,8 +5568,7 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 delay 1ms }}
 
 #[tokio::test]
 async fn lifecycle_events_recorded_and_drift_streamed() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping lifecycle_events_recorded_and_drift_streamed: requires root");
+    if !privileged("lifecycle_events_recorded_and_drift_streamed") {
         return;
     }
     let lab_name = format!("events-{}", std::process::id());
@@ -5742,11 +5698,14 @@ fn has_local_image(image: &str) -> bool {
 /// node, a PID outside the node is refused rather than sampled.
 #[tokio::test]
 async fn proc_stat_on_a_container_node_reads_the_host_proc() {
-    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
-        eprintln!(
-            "skipping proc_stat_on_a_container_node_reads_the_host_proc: needs root and \
-             alpine:latest in the podman store"
-        );
+    if !privileged("proc_stat_on_a_container_node_reads_the_host_proc") {
+        return;
+    }
+    if !feature(
+        "proc_stat_on_a_container_node_reads_the_host_proc",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let lab_name = format!("psc-{}", std::process::id());
@@ -5918,8 +5877,14 @@ async fn exec_with_a_timeout_returns_large_output_and_keeps_its_deadline(lab: Ru
 /// interfaces.
 #[tokio::test]
 async fn a_container_whose_init_pid_was_reused_is_not_reached_through_it() {
-    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
-        eprintln!("skipping: needs root and alpine:latest in the podman store");
+    if !privileged("a_container_whose_init_pid_was_reused_is_not_reached_through_it") {
+        return;
+    }
+    if !feature(
+        "a_container_whose_init_pid_was_reused_is_not_reached_through_it",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let lab_name = format!("pid-reuse-{}", std::process::id());
@@ -5968,8 +5933,14 @@ link c:eth0 -- h:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
 /// missing when the links were brought up).
 #[tokio::test]
 async fn a_restarted_container_gets_its_ports_sysctls_and_runs_back() {
-    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
-        eprintln!("skipping: needs root and alpine:latest in the podman store");
+    if !privileged("a_restarted_container_gets_its_ports_sysctls_and_runs_back") {
+        return;
+    }
+    if !feature(
+        "a_restarted_container_gets_its_ports_sysctls_and_runs_back",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let lab_name = format!("rs-{}", std::process::id());
@@ -6037,8 +6008,14 @@ network lan {{
 /// declared value and every `key auto` interface was re-keyed.
 #[tokio::test]
 async fn a_restart_keeps_the_labs_runtime_impairments_and_keys() {
-    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
-        eprintln!("skipping: needs root and alpine:latest in the podman store");
+    if !privileged("a_restart_keeps_the_labs_runtime_impairments_and_keys") {
+        return;
+    }
+    if !feature(
+        "a_restart_keeps_the_labs_runtime_impairments_and_keys",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let lab_name = format!("rk-{}", std::process::id());
@@ -6141,12 +6118,14 @@ fn tcp_connect(lab: &RunningLab, node: &str, addr: &str, port: u16) -> (i32, std
 /// a port range and `!=` match what they say.
 #[tokio::test]
 async fn firewall_reject_is_a_reject_and_ranges_match() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping firewall_reject_is_a_reject_and_ranges_match: requires root");
+    if !privileged("firewall_reject_is_a_reject_and_ranges_match") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping firewall_reject_is_a_reject_and_ranges_match: no nftables");
+    if !feature(
+        "firewall_reject_is_a_reject_and_ranges_match",
+        "nftables",
+        has_nftables(),
+    ) {
         return;
     }
     let lab_name = format!("fwrj-{}", std::process::id());
@@ -6233,12 +6212,14 @@ link c:eth1 -- s:eth1 {{ 10.0.1.1/24 -- 10.0.1.2/24 }}
 /// keeps its handle.
 #[tokio::test]
 async fn firewall_policy_edit_applies_to_a_running_lab() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping firewall_policy_edit_applies_to_a_running_lab: requires root");
+    if !privileged("firewall_policy_edit_applies_to_a_running_lab") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping firewall_policy_edit_applies_to_a_running_lab: no nftables");
+    if !feature(
+        "firewall_policy_edit_applies_to_a_running_lab",
+        "nftables",
+        has_nftables(),
+    ) {
         return;
     }
     let lab_name = format!("fwpe-{}", std::process::id());
@@ -6303,12 +6284,14 @@ link c:eth0 -- s:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
 /// whose assertions cover both directions and the router itself).
 #[tokio::test]
 async fn firewall_forward_chain_filters_routed_traffic() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping firewall_forward_chain_filters_routed_traffic: requires root");
+    if !privileged("firewall_forward_chain_filters_routed_traffic") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping firewall_forward_chain_filters_routed_traffic: no nftables");
+    if !feature(
+        "firewall_forward_chain_filters_routed_traffic",
+        "nftables",
+        has_nftables(),
+    ) {
         return;
     }
     // 1. input-only firewall on a router: routing works
@@ -6386,12 +6369,14 @@ link r:eth1 -- b:eth0 {{ 10.0.2.1/24 -- 10.0.2.2/24 }}
 /// dynamic set it is kept.
 #[tokio::test]
 async fn firewall_sets_match_traffic_and_reconcile_elements() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping firewall_sets_match_traffic_and_reconcile_elements: requires root");
+    if !privileged("firewall_sets_match_traffic_and_reconcile_elements") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping firewall_sets_match_traffic_and_reconcile_elements: no nftables");
+    if !feature(
+        "firewall_sets_match_traffic_and_reconcile_elements",
+        "nftables",
+        has_nftables(),
+    ) {
         return;
     }
     let lab_name = format!("fwset-{}", std::process::id());
@@ -6529,12 +6514,14 @@ link c:eth3 -- s:eth3 {{ fd00:2::1/64 -- fd00:2::2/64 }}
 /// examples/firewall-sets.nll: its assertions pass and it converges.
 #[tokio::test]
 async fn firewall_sets_example_converges() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping firewall_sets_example_converges: requires root");
+    if !privileged("firewall_sets_example_converges") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping firewall_sets_example_converges: no nftables");
+    if !feature(
+        "firewall_sets_example_converges",
+        "nftables",
+        has_nftables(),
+    ) {
         return;
     }
     let topo = nlink_lab::parser::parse_file(concat!(
@@ -6561,12 +6548,14 @@ async fn firewall_sets_example_converges() {
 /// zeroed by every apply).
 #[tokio::test]
 async fn firewall_counters_limit_and_counter_assertions() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping firewall_counters_limit_and_counter_assertions: requires root");
+    if !privileged("firewall_counters_limit_and_counter_assertions") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping firewall_counters_limit_and_counter_assertions: no nftables");
+    if !feature(
+        "firewall_counters_limit_and_counter_assertions",
+        "nftables",
+        has_nftables(),
+    ) {
         return;
     }
     let lab_name = format!("fwctr-{}", std::process::id());
@@ -6679,12 +6668,14 @@ link c:eth0 -- s:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
 /// sees the probe in the counter, and it converges after counting.
 #[tokio::test]
 async fn firewall_observability_example_counts() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping firewall_observability_example_counts: requires root");
+    if !privileged("firewall_observability_example_counts") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping firewall_observability_example_counts: no nftables");
+    if !feature(
+        "firewall_observability_example_counts",
+        "nftables",
+        has_nftables(),
+    ) {
         return;
     }
     let topo = nlink_lab::parser::parse_file(concat!(
@@ -6714,12 +6705,14 @@ async fn firewall_observability_example_counts() {
 /// either: its anonymous set is left alone (nlink #459).
 #[tokio::test]
 async fn firewall_renames_and_foreign_inline_sets_apply() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping firewall_renames_and_foreign_inline_sets_apply: requires root");
+    if !privileged("firewall_renames_and_foreign_inline_sets_apply") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping firewall_renames_and_foreign_inline_sets_apply: no nftables");
+    if !feature(
+        "firewall_renames_and_foreign_inline_sets_apply",
+        "nftables",
+        has_nftables(),
+    ) {
         return;
     }
     let lab_name = format!("fwrn-{}", std::process::id());
@@ -6813,12 +6806,18 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
 /// nftables logger (`nf_log_syslog`): the kernel then refuses the batch.
 #[tokio::test]
 async fn firewall_log_installs_and_converges() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping firewall_log_installs_and_converges: requires root");
+    if !privileged("firewall_log_installs_and_converges") {
         return;
     }
-    if !has_nftables() || !has_kernel_module("nf_log_syslog") {
-        eprintln!("skipping firewall_log_installs_and_converges: no nftables logger");
+    if !feature(
+        "firewall_log_installs_and_converges",
+        "nftables",
+        has_nftables(),
+    ) || !feature(
+        "firewall_log_installs_and_converges",
+        "nf_log_syslog",
+        has_kernel_module("nf_log_syslog"),
+    ) {
         return;
     }
     let lab_name = format!("fwlog-{}", std::process::id());
@@ -6898,12 +6897,14 @@ fn nft_rule_packets(listing: &str, needle: &str) -> u64 {
 /// MTU allows.
 #[tokio::test]
 async fn firewall_marks_classify_and_mss_clamp_on_a_router() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping firewall_marks_classify_and_mss_clamp_on_a_router: requires root");
+    if !privileged("firewall_marks_classify_and_mss_clamp_on_a_router") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping firewall_marks_classify_and_mss_clamp_on_a_router: no nftables");
+    if !feature(
+        "firewall_marks_classify_and_mss_clamp_on_a_router",
+        "nftables",
+        has_nftables(),
+    ) {
         return;
     }
     let lab_name = format!("fwmk-{}", std::process::id());
@@ -7017,12 +7018,10 @@ qdisc r:wan0 prio {{ bands 3 }}
 /// interface.
 #[tokio::test]
 async fn nat_matches_interface_and_port() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping nat_matches_interface_and_port: requires root");
+    if !privileged("nat_matches_interface_and_port") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping nat_matches_interface_and_port: no nftables");
+    if !feature("nat_matches_interface_and_port", "nftables", has_nftables()) {
         return;
     }
     let lab_name = format!("natq-{}", std::process::id());
@@ -7100,12 +7099,14 @@ link r:wan1 -- d:eth0 {{ 10.0.3.1/24 -- 10.0.3.10/24 }}
 /// `bulk` counter through the DNAT, and it converges.
 #[tokio::test]
 async fn firewall_qos_example_classifies_and_converges() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping firewall_qos_example_classifies_and_converges: requires root");
+    if !privileged("firewall_qos_example_classifies_and_converges") {
         return;
     }
-    if !has_nftables() {
-        eprintln!("skipping firewall_qos_example_classifies_and_converges: no nftables");
+    if !feature(
+        "firewall_qos_example_classifies_and_converges",
+        "nftables",
+        has_nftables(),
+    ) {
         return;
     }
     let topo = nlink_lab::parser::parse_file(concat!(
@@ -7134,16 +7135,14 @@ async fn firewall_qos_example_classifies_and_converges() {
 /// 0.30 sends after every committed batch does not show up at all.
 #[tokio::test]
 async fn watch_types_set_elements_and_objects_and_drops_generations() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!(
-            "skipping watch_types_set_elements_and_objects_and_drops_generations: requires root"
-        );
+    if !privileged("watch_types_set_elements_and_objects_and_drops_generations") {
         return;
     }
-    if !has_nftables() {
-        eprintln!(
-            "skipping watch_types_set_elements_and_objects_and_drops_generations: no nftables"
-        );
+    if !feature(
+        "watch_types_set_elements_and_objects_and_drops_generations",
+        "nftables",
+        has_nftables(),
+    ) {
         return;
     }
     let lab_name = format!("wnft-{}", std::process::id());
@@ -7218,12 +7217,18 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
 
 #[tokio::test]
 async fn bond_options_and_qinq_vlan_apply() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping bond_options_and_qinq_vlan_apply: requires root");
+    if !privileged("bond_options_and_qinq_vlan_apply") {
         return;
     }
-    if !has_kernel_module("bonding") || !has_kernel_module("8021q") {
-        eprintln!("skipping bond_options_and_qinq_vlan_apply: bonding/8021q modules unavailable");
+    if !feature(
+        "bond_options_and_qinq_vlan_apply",
+        "bonding",
+        has_kernel_module("bonding"),
+    ) || !feature(
+        "bond_options_and_qinq_vlan_apply",
+        "8021q",
+        has_kernel_module("8021q"),
+    ) {
         return;
     }
     let lab_name = format!("bondq-{}", std::process::id());
@@ -7304,12 +7309,14 @@ async fn wait_route(lab: &RunningLab, node: &str, dest: &str, needle: &str, secs
 
 #[tokio::test]
 async fn frr_ospf_converges_and_apply_restarts_daemons() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping frr_ospf_converges_and_apply_restarts_daemons: requires root");
+    if !privileged("frr_ospf_converges_and_apply_restarts_daemons") {
         return;
     }
-    if !has_frr() {
-        eprintln!("skipping frr_ospf_converges_and_apply_restarts_daemons: frr not installed");
+    if !feature(
+        "frr_ospf_converges_and_apply_restarts_daemons",
+        "frr",
+        has_frr(),
+    ) {
         return;
     }
     let mut topo = nlink_lab::parser::parse_file("examples/frr-ospf.nll").unwrap();
@@ -7425,12 +7432,16 @@ async fn frr_ospf_converges_and_apply_restarts_daemons() {
 
 #[tokio::test]
 async fn frr_bgp_established() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping frr_bgp_established: requires root");
+    if !privileged("frr_bgp_established") {
         return;
     }
-    if !has_frr() || nlink_lab::frr::locate_daemon(nlink_lab::frr::Daemon::Bgpd).is_none() {
-        eprintln!("skipping frr_bgp_established: frr/bgpd not installed");
+    if !feature("frr_bgp_established", "frr", has_frr())
+        || !feature(
+            "frr_bgp_established",
+            "bgpd",
+            nlink_lab::frr::locate_daemon(nlink_lab::frr::Daemon::Bgpd).is_some(),
+        )
+    {
         return;
     }
     let mut topo = nlink_lab::parser::parse_file("examples/frr-bgp.nll").unwrap();
@@ -7459,10 +7470,7 @@ async fn frr_bgp_established() {
 
 #[tokio::test]
 async fn frr_missing_daemon_is_a_clear_error_before_any_namespace() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!(
-            "skipping frr_missing_daemon_is_a_clear_error_before_any_namespace: requires root"
-        );
+    if !privileged("frr_missing_daemon_is_a_clear_error_before_any_namespace") {
         return;
     }
     if has_frr() {
@@ -7497,11 +7505,11 @@ async fn frr_missing_daemon_is_a_clear_error_before_any_namespace() {
 
 // ─── Wi-Fi (mac80211_hwsim) ───────────────────────────────
 
-/// mac80211_hwsim can be loaded here. Probes without loading it: a plain
-/// `modprobe` would make the module's two default radios.
-fn hwsim_available() -> bool {
-    let root = unsafe { libc::geteuid() } == 0;
-    root && nlink_lab::wifi::has_hwsim()
+/// The test may run (the root gate) and mac80211_hwsim can be loaded here
+/// (a feature gate). Probes without loading it: a plain `modprobe` would
+/// make the module's two default radios.
+fn hwsim_available(test: &str) -> bool {
+    privileged(test) && feature(test, "mac80211_hwsim", nlink_lab::wifi::has_hwsim())
 }
 
 /// The wiphy names visible from `ns` (the root namespace for `None`).
@@ -7525,8 +7533,7 @@ async fn wiphys_in(ns: Option<&str>) -> Vec<String> {
 /// `destroy` deletes the radios.
 #[tokio::test]
 async fn wifi_mesh_radios_are_the_labs_and_join() {
-    if !hwsim_available() {
-        eprintln!("skipping wifi_mesh_radios_are_the_labs_and_join: needs root and mac80211_hwsim");
+    if !hwsim_available("wifi_mesh_radios_are_the_labs_and_join") {
         return;
     }
     let mut topo = nlink_lab::parser::parse_file(concat!(
@@ -7595,8 +7602,7 @@ async fn wifi_mesh_radios_are_the_labs_and_join() {
 /// on all three nodes — associate, and the stations reach the AP.
 #[tokio::test]
 async fn wifi_ap_and_stations_associate() {
-    if !hwsim_available() {
-        eprintln!("skipping wifi_ap_and_stations_associate: needs root and mac80211_hwsim");
+    if !hwsim_available("wifi_ap_and_stations_associate") {
         return;
     }
     let found = |bin: &str| {
@@ -7605,8 +7611,15 @@ async fn wifi_ap_and_stations_associate() {
             .split(':')
             .any(|d| std::path::Path::new(d).join(bin).exists())
     };
-    if !found("hostapd") || !found("wpa_supplicant") {
-        eprintln!("skipping wifi_ap_and_stations_associate: needs hostapd and wpa_supplicant");
+    if !feature(
+        "wifi_ap_and_stations_associate",
+        "hostapd",
+        found("hostapd"),
+    ) || !feature(
+        "wifi_ap_and_stations_associate",
+        "wpa_supplicant",
+        found("wpa_supplicant"),
+    ) {
         return;
     }
     let mut topo = nlink_lab::parser::parse_file(concat!(
@@ -7660,8 +7673,7 @@ async fn wifi_ap_and_stations_associate() {
 /// went with the old radios: the station never associated again.
 #[tokio::test]
 async fn an_apply_that_recreates_the_radios_restarts_their_daemons() {
-    if !hwsim_available() {
-        eprintln!("skipping: needs root and mac80211_hwsim");
+    if !hwsim_available("an_apply_that_recreates_the_radios_restarts_their_daemons") {
         return;
     }
     let found = |bin: &str| {
@@ -7670,8 +7682,15 @@ async fn an_apply_that_recreates_the_radios_restarts_their_daemons() {
             .split(':')
             .any(|d| std::path::Path::new(d).join(bin).exists())
     };
-    if !found("hostapd") || !found("wpa_supplicant") {
-        eprintln!("skipping: needs hostapd and wpa_supplicant");
+    if !feature(
+        "an_apply_that_recreates_the_radios_restarts_their_daemons",
+        "hostapd",
+        found("hostapd"),
+    ) || !feature(
+        "an_apply_that_recreates_the_radios_restarts_their_daemons",
+        "wpa_supplicant",
+        found("wpa_supplicant"),
+    ) {
         return;
     }
     let lab_name = format!("wrc-{}", std::process::id());
@@ -7737,8 +7756,18 @@ async fn apply_takes_a_written_wireguard_key_and_deletes_a_dropped_tunnel() {
         .arg("--version")
         .output()
         .is_ok_and(|o| o.status.success());
-    if unsafe { libc::geteuid() } != 0 || !has_wireguard() || !wg_tools {
-        eprintln!("skipping: needs root, the wireguard module and wireguard-tools");
+    if !privileged("apply_takes_a_written_wireguard_key_and_deletes_a_dropped_tunnel") {
+        return;
+    }
+    if !feature(
+        "apply_takes_a_written_wireguard_key_and_deletes_a_dropped_tunnel",
+        "wireguard",
+        has_wireguard(),
+    ) || !feature(
+        "apply_takes_a_written_wireguard_key_and_deletes_a_dropped_tunnel",
+        "wg",
+        wg_tools,
+    ) {
         return;
     }
     let genkey = || {
@@ -7817,8 +7846,7 @@ async fn apply_takes_a_written_wireguard_key_and_deletes_a_dropped_tunnel() {
 /// the `/etc/netns` overlay of every node it touched.
 #[tokio::test]
 async fn a_failed_apply_leaves_the_running_labs_processes_and_hosts_alone() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping: requires root");
+    if !privileged("a_failed_apply_leaves_the_running_labs_processes_and_hosts_alone") {
         return;
     }
     let lab_name = format!("rbk-{}", std::process::id());
@@ -7892,8 +7920,14 @@ link a:eth1 -- c:eth0 { 10.0.1.1/30 -- 10.0.1.2/30 }"#,
 /// told nobody.
 #[tokio::test]
 async fn a_scenario_acts_on_a_container_node_and_clears_like_impair() {
-    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
-        eprintln!("skipping: needs root and alpine:latest in the podman store");
+    if !privileged("a_scenario_acts_on_a_container_node_and_clears_like_impair") {
+        return;
+    }
+    if !feature(
+        "a_scenario_acts_on_a_container_node_and_clears_like_impair",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let lab_name = format!("scn-{}", std::process::id());
@@ -7953,8 +7987,14 @@ async fn benchmarks_read_any_unit_and_run_udp_at_the_rate_asked() {
         .arg("--version")
         .output()
         .is_ok_and(|o| o.status.success());
-    if unsafe { libc::geteuid() } != 0 || !iperf3 {
-        eprintln!("skipping: needs root and iperf3");
+    if !privileged("benchmarks_read_any_unit_and_run_udp_at_the_rate_asked") {
+        return;
+    }
+    if !feature(
+        "benchmarks_read_any_unit_and_run_udp_at_the_rate_asked",
+        "iperf3",
+        iperf3,
+    ) {
         return;
     }
     let lab_name = format!("bmk-{}", std::process::id());
@@ -7996,8 +8036,7 @@ benchmark "b" {{
 /// and destroy removes its namespace.
 #[tokio::test]
 async fn a_mgmt_subnet_connects_every_node() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping: requires root");
+    if !privileged("a_mgmt_subnet_connects_every_node") {
         return;
     }
     let lab_name = format!("mgm-{}", std::process::id());
@@ -8032,8 +8071,7 @@ async fn a_mgmt_subnet_connects_every_node() {
 /// no addresses, and an apply of the same file had no subnet for them.
 #[tokio::test]
 async fn an_auto_network_subnet_deploys_and_applies_as_nothing() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping: requires root");
+    if !privileged("an_auto_network_subnet_deploys_and_applies_as_nothing") {
         return;
     }
     let lab_name = format!("aut-{}", std::process::id());
@@ -8071,8 +8109,14 @@ async fn an_auto_network_subnet_deploys_and_applies_as_nothing() {
 /// the container alone; a missing one is said by name.
 #[tokio::test]
 async fn container_host_files_are_the_topology_files() {
-    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
-        eprintln!("skipping: needs root and alpine:latest in the podman store");
+    if !privileged("container_host_files_are_the_topology_files") {
+        return;
+    }
+    if !feature(
+        "container_host_files_are_the_topology_files",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let dir = tempfile::tempdir().unwrap();
@@ -8140,8 +8184,14 @@ link c:eth0 -- h:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
 /// that changed a `run` started the new command next to the old one.
 #[tokio::test]
 async fn container_processes_are_stopped_inside_the_container() {
-    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
-        eprintln!("skipping: needs root and alpine:latest in the podman store");
+    if !privileged("container_processes_are_stopped_inside_the_container") {
+        return;
+    }
+    if !feature(
+        "container_processes_are_stopped_inside_the_container",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let lab_name = format!("kct-{}", std::process::id());
@@ -8200,8 +8250,14 @@ link c:eth0 -- h:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
 /// client was killed, and the command ran on in the container.
 #[tokio::test]
 async fn an_exec_timeout_stops_the_command_in_the_container() {
-    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
-        eprintln!("skipping: needs root and alpine:latest in the podman store");
+    if !privileged("an_exec_timeout_stops_the_command_in_the_container") {
+        return;
+    }
+    if !feature(
+        "an_exec_timeout_stops_the_command_in_the_container",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let lab_name = format!("ket-{}", std::process::id());
@@ -8233,8 +8289,14 @@ node c image "alpine:latest" cmd ["sleep", "infinity"]
 /// the hostname was the container id instead of the node name.
 #[tokio::test]
 async fn container_options_reach_the_container() {
-    if unsafe { libc::geteuid() } != 0 || !has_local_image("alpine:latest") {
-        eprintln!("skipping: needs root and alpine:latest in the podman store");
+    if !privileged("container_options_reach_the_container") {
+        return;
+    }
+    if !feature(
+        "container_options_reach_the_container",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let lab_name = format!("kco-{}", std::process::id());
@@ -8308,8 +8370,7 @@ async fn container_options_reach_the_container() {
 async fn deploy_reports_progress_in_order() {
     use nlink_lab::api::{OpEvent, OpOutcome, OpPhase};
     use std::sync::{Arc, Mutex};
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping: needs root");
+    if !privileged("deploy_reports_progress_in_order") {
         return;
     }
     let src = std::fs::read_to_string(concat!(
@@ -8383,8 +8444,7 @@ async fn deploy_reports_progress_in_order() {
 async fn cancel_during_a_healthcheck_rolls_back() {
     use nlink_lab::api::{OpEvent, OpOutcome, OpPhase, WaitKind};
     use std::sync::{Arc, Mutex};
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping: needs root");
+    if !privileged("cancel_during_a_healthcheck_rolls_back") {
         return;
     }
     let name = format!("pcan-{}", std::process::id());
@@ -8524,8 +8584,7 @@ async fn wait_all_reports_progress_and_stops_on_cancel(lab: RunningLab) {
 /// action one more result; `keep_failed` leaves a failed lab deployed.
 #[tokio::test]
 async fn a_test_runs_scenarios_and_keeps_a_failed_lab() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping: needs root");
+    if !privileged("a_test_runs_scenarios_and_keeps_a_failed_lab") {
         return;
     }
     let dir = tempfile::tempdir().unwrap();

@@ -194,8 +194,7 @@ async fn no_daemon_is_an_error_to_retry() {
 async fn sessions_reach_a_real_lab() {
     use crate::backend::SessionItem;
     use nlink_lab_shared::api::DataStream;
-    if !nlink_lab::privileges::has_privileges() {
-        eprintln!("skipping sessions_reach_a_real_lab: requires root");
+    if !nlink_lab::test_helpers::privileged("sessions_reach_a_real_lab") {
         return;
     }
     state_root();
@@ -392,8 +391,7 @@ async fn sessions_reach_a_real_lab() {
 async fn workflows_reach_a_real_daemon() {
     use crate::backend::SessionItem;
     use nlink_lab_shared::api::{OpOutcome, OpPhase};
-    if !nlink_lab::privileges::has_privileges() {
-        eprintln!("skipping workflows_reach_a_real_daemon: requires root");
+    if !nlink_lab::test_helpers::privileged("workflows_reach_a_real_daemon") {
         return;
     }
     state_root();

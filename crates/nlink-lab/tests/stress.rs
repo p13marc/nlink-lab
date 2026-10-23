@@ -154,8 +154,7 @@ fn validator_perf_500_nodes() {
 #[tokio::test]
 #[ignore] // requires root — run with: sudo cargo test --test stress -- --ignored
 async fn deploy_50_node_ring() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping: requires root");
+    if !nlink_lab::test_helpers::privileged("deploy_50_node_ring") {
         return;
     }
 
@@ -200,8 +199,7 @@ async fn deploy_50_node_ring() {
 #[tokio::test]
 #[ignore]
 async fn parallel_dns_hosts_deploys_all_succeed() {
-    if unsafe { libc::geteuid() } != 0 {
-        eprintln!("skipping: requires root");
+    if !nlink_lab::test_helpers::privileged("parallel_dns_hosts_deploys_all_succeed") {
         return;
     }
     const N: usize = 6;

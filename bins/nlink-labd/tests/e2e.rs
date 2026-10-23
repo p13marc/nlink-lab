@@ -131,9 +131,8 @@ async fn gone_within(pid: u32, within: Duration) -> bool {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_daemon_serves_real_labs() {
-    // `just ci` runs it rootless; the privileged CI lane runs it as root
-    if !nlink_lab::privileges::has_privileges() {
-        eprintln!("skipping the_daemon_serves_real_labs: requires root");
+    // rootless lanes set NLINK_LAB_SKIP_ROOT_TESTS; the privileged one runs it
+    if !nlink_lab::test_helpers::privileged("the_daemon_serves_real_labs") {
         return;
     }
     let _serial = SERIAL.lock().await;
@@ -571,9 +570,8 @@ async fn get_impairments(
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_daemon_changes_labs() {
-    // `just ci` runs it rootless; the privileged CI lane runs it as root
-    if !nlink_lab::privileges::has_privileges() {
-        eprintln!("skipping the_daemon_changes_labs: requires root");
+    // rootless lanes set NLINK_LAB_SKIP_ROOT_TESTS; the privileged one runs it
+    if !nlink_lab::test_helpers::privileged("the_daemon_changes_labs") {
         return;
     }
     use nlink_lab_shared::api::{
@@ -1021,9 +1019,8 @@ async fn data_until(
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_daemon_runs_sessions() {
-    // `just ci` runs it rootless; the privileged CI lane runs it as root
-    if !nlink_lab::privileges::has_privileges() {
-        eprintln!("skipping the_daemon_runs_sessions: requires root");
+    // rootless lanes set NLINK_LAB_SKIP_ROOT_TESTS; the privileged one runs it
+    if !nlink_lab::test_helpers::privileged("the_daemon_runs_sessions") {
         return;
     }
     use nlink_lab_shared::api::{LogStream, WaitSpec};
@@ -1260,9 +1257,8 @@ const TELEMETRY: &str = "labd-e2e-telemetry";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_daemon_publishes_telemetry() {
-    // `just ci` runs it rootless; the privileged CI lane runs it as root
-    if !nlink_lab::privileges::has_privileges() {
-        eprintln!("skipping the_daemon_publishes_telemetry: requires root");
+    // rootless lanes set NLINK_LAB_SKIP_ROOT_TESTS; the privileged one runs it
+    if !nlink_lab::test_helpers::privileged("the_daemon_publishes_telemetry") {
         return;
     }
     let _serial = SERIAL.lock().await;

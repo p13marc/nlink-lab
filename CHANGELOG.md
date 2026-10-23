@@ -37,8 +37,28 @@ JSON Schema did not describe its JSON (nlink #876).
   its cascade under it, and what the diff cannot do comes last as `!`
   lines.
 
+- **`NLINK_LAB_SKIP_ROOT_TESTS=no` (or `off`, `FALSE`) no longer skips**
+  (#298). Only an empty value, `0` and `false` counted as off, so these
+  turned the skip on. Off is now an empty value, `0`, `false`, `no` or
+  `off` in any case, as nlink reads its test switches; anything else is on.
+
 ### Changed
 
+- **A test that needs root fails without it, everywhere** (#298, nlink
+  #885's lesson). `#[lab_test]` already did; the 92 hand-written root
+  tests of the integration suite, the daemon's end-to-end tests and the
+  app's real-lab tests returned early on a bare euid check and passed
+  green, so a lane that lost root passed every one without running it.
+  They go through `test_helpers::privileged(name)` now, the same gate:
+  run with root or CAP_NET_ADMIN + CAP_SYS_ADMIN, skip loudly when
+  `NLINK_LAB_SKIP_ROOT_TESTS` is on (ci.yml's rootless lanes and
+  `just ci` set it), fail otherwise.
+- **A missing kernel feature or tool can fail a lane** (#298):
+  `test_helpers::feature(name, what, present)` skips loudly, unless
+  `NLINK_LAB_STRICT_FEATURES` names `what` (or is `1` for all). The
+  integration lane names what its runner has (nftables, vrf, wireguard,
+  bridge VLAN filtering, bonding, `wg`, iperf3, FRR and bgpd), and its
+  module guard fails instead of warning.
 - **The `wireguard` layer is typed in `layered-diff.v3.schema.json`**
   (#297). It was free-form while nlink's schema described the Rust types
   rather than the JSON (a public key as 32 integers; nlink #876). A test

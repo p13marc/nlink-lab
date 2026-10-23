@@ -31,6 +31,10 @@ env:
   # test lanes building it in parallel took the runner VM down (#293).
   # A panic still has its line numbers.
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  # These lanes run without CAP_NET_ADMIN/CAP_SYS_ADMIN (even as the
+  # container's root): a test that deploys a lab skips here, loudly. Unset,
+  # it fails instead (#298); the privileged lane is integration.yml.
+  NLINK_LAB_SKIP_ROOT_TESTS: "1"
 
 jobs:
   fmt:

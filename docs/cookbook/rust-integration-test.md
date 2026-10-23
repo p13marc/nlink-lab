@@ -58,13 +58,13 @@ Deploying needs root (or `CAP_NET_ADMIN`). If you're not root, the
 test **fails** with
 
 ```text
-#[lab_test] 'ping_works' needs root or CAP_NET_ADMIN+CAP_SYS_ADMIN; run under sudo, or set NLINK_LAB_SKIP_ROOT_TESTS=1 to skip
+test 'ping_works' needs root or CAP_NET_ADMIN+CAP_SYS_ADMIN; run under sudo, or set NLINK_LAB_SKIP_ROOT_TESTS=1 to skip
 ```
 
 rather than quietly passing — a green run with zero coverage is
 worse than a red one. For a job that intentionally runs
 unprivileged, set `NLINK_LAB_SKIP_ROOT_TESTS=1`: the tests then
-print a `*** SKIPPING #[lab_test] … ***` line to stderr and return.
+print a `*** SKIPPING test '…' ***` line to stderr and return.
 To actually run them, use a privileged runner or `sudo cargo test`.
 
 ## Forms

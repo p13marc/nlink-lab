@@ -23,6 +23,15 @@ env:
   # debug info is most of target/ and of the linker's memory (#293)
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
+  # A test whose kernel feature or tool is missing skips, unless this names
+  # it: then it fails, so a runner that lost a module or a package turns
+  # the lane red instead of passing every test that needs it (#298). What
+  # the runner has: the modules the guard step checks (the VM preloads
+  # them, myserver setup/ci-integration.conf) and the packages installed
+  # below. Every step also unsets NLINK_LAB_SKIP_ROOT_TESTS, so a test that
+  # needs root fails without it.
+  NLINK_LAB_STRICT_FEATURES: nftables,vrf,wireguard,bridge-vlan-filtering,bonding,wg,iperf3,frr,bgpd
+
 jobs:
   integration:
     runs-on: integration
@@ -44,9 +53,11 @@ jobs:
           cache-targets: false
       - name: Guard that kernel modules are preloaded on the runner VM
         run: |
-          for m in nf_tables vrf wireguard bridge; do
-            test -d "/sys/module/$m" || echo "::warning::module $m not loaded; dependent tests will skip"
+          missing=0
+          for m in nf_tables vrf wireguard bridge bonding; do
+            test -d "/sys/module/$m" || { echo "::error::module $m not loaded on the runner VM"; missing=1; }
           done
+          exit $missing
       - run: cargo build --bin nlink-lab
       # Gating since wave 3 of the deep-analysis series: 62/62 pass on a
       # Debian 13 host once iproute2/nftables/iputils are installed and
@@ -76,7 +87,7 @@ jobs:
         run: |
           bin=$(cargo test -p nlink-lab-gui --no-run --message-format=json 2>/dev/null | grep -oP '"executable":"\K[^"]*/deps/nlink_lab_gui-[^"]+' | head -1)
           test -n "$bin" || { echo "::error::desktop app test binary not found"; exit 1; }
-          sudo -E env "PATH=$PATH:/usr/sbin:/sbin" "$bin" --exact daemon_tests::sessions_reach_a_real_lab daemon_tests::workflows_reach_a_real_daemon
+          sudo -E env "PATH=$PATH:/usr/sbin:/sbin" NLINK_LAB_SKIP_ROOT_TESTS= "$bin" --exact daemon_tests::sessions_reach_a_real_lab daemon_tests::workflows_reach_a_real_daemon
       - name: No lab debris left behind
         if: always()
         run: |

@@ -65,6 +65,7 @@ pub mod benchmark;
 pub mod builder;
 pub mod capture;
 pub mod cgroup;
+pub(crate) mod conntrack;
 pub mod container;
 pub mod deploy;
 pub mod diff;

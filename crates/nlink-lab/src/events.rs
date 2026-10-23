@@ -44,6 +44,9 @@ pub enum LifecycleKind {
     Applied {
         ops: usize,
         removed: usize,
+        /// Tracked flows deleted because a NAT rule changed (#303).
+        #[serde(default, skip_serializing_if = "is_zero")]
+        conntrack_deleted: usize,
     },
     ApplyFailed {
         error: String,
@@ -124,7 +127,18 @@ impl LifecycleEvent {
         use LifecycleKind as K;
         let detail = match &self.kind {
             K::Deployed { nodes, links } => format!("{nodes} node(s), {links} link(s)"),
-            K::Applied { ops, removed } => format!("{ops} op(s), {removed} removal(s)"),
+            K::Applied {
+                ops,
+                removed,
+                conntrack_deleted: 0,
+            } => format!("{ops} op(s), {removed} removal(s)"),
+            K::Applied {
+                ops,
+                removed,
+                conntrack_deleted,
+            } => format!(
+                "{ops} op(s), {removed} removal(s), {conntrack_deleted} NAT flow(s) deleted"
+            ),
             K::ApplyFailed { error } => format!("error: {error}"),
             K::Destroyed => String::new(),
             K::Spawned { node, pid, cmd } => format!("{node} pid {pid}: {cmd}"),
@@ -187,6 +201,10 @@ fn describe_impairment(imp: &crate::types::Impairment) -> String {
 }
 
 /// Current time as RFC 3339 UTC (the `ts` every record carries).
+fn is_zero(n: &usize) -> bool {
+    *n == 0
+}
+
 pub fn now_iso8601() -> String {
     crate::deploy::now_iso8601()
 }

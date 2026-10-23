@@ -255,6 +255,9 @@ pub struct ApplyReport {
     pub removed: usize,
     /// One-line descriptions, in execution order.
     pub applied: Vec<String>,
+    /// Tracked flows deleted after the apply because a NAT rule it added,
+    /// removed or changed matches them (#303).
+    pub conntrack_deleted: usize,
 }
 
 /// `desired` with its `subnet auto/N` networks given the running lab's
@@ -308,6 +311,11 @@ pub struct ApplyOptions {
     /// on the topology's `impair` declarations instead of keeping the
     /// live values (#59).
     pub reset_impairments: bool,
+    /// Keep the tracked flows of the NAT rules the apply changes (#303).
+    /// Without it they are deleted once the apply has committed, so their
+    /// next packet is translated by the new rules rather than keep the
+    /// translation it began with.
+    pub keep_conntrack: bool,
 }
 
 /// A running lab's topology with what runtime commands added to it: the
@@ -507,10 +515,11 @@ async fn apply_ctx(
     let _lock = state::lock(running.name())?;
     let (inputs, overlay, cur_plan, des_plan) = apply_plans(running, desired, opts)?;
     let diff = Plan::diff(&cur_plan, &des_plan);
-    let report = ApplyReport {
+    let mut report = ApplyReport {
         ops: diff.ops.len(),
         removed: diff.ops.iter().filter(|o| o.is_removal()).count(),
         applied: diff.ops.iter().map(|o| o.describe()).collect(),
+        ..Default::default()
     };
     tracing::info!("apply: {} op(s), {} removal(s)", report.ops, report.removed);
     ctx.emit(nlink_lab_shared::api::OpPhase::Planned {
@@ -546,11 +555,15 @@ async fn apply_ctx(
         return Err(e);
     }
     journal.discard();
+    if !opts.keep_conntrack {
+        report.conntrack_deleted = forget_nat_flows(running, &cur_plan, &des_plan, ctx).await;
+    }
     crate::events::record(
         running.name(),
         crate::events::LifecycleKind::Applied {
             ops: report.ops,
             removed: report.removed,
+            conntrack_deleted: report.conntrack_deleted,
         },
     );
 
@@ -603,6 +616,72 @@ async fn apply_ctx(
     Ok(report)
 }
 
+/// After an apply commits, delete the tracked flows that the NAT rules it
+/// added, removed or changed match (#303), on every node it reconciled
+/// that has its namespace on both sides (a new node has no flows; a gone
+/// one took them along). Best effort: a node it cannot clean is a warning,
+/// and the apply stands. How many flows went.
+async fn forget_nat_flows(
+    running: &RunningLab,
+    current: &Plan,
+    desired: &Plan,
+    ctx: &crate::ops::OpCtx,
+) -> usize {
+    let nat_of = |plan: &'_ Plan| -> BTreeMap<String, Vec<crate::types::NatRule>> {
+        plan.ops
+            .iter()
+            .filter_map(|op| match op {
+                Op::Stack { node, cfg } => Some((
+                    node.clone(),
+                    cfg.nat
+                        .as_ref()
+                        .map(|n| n.rules.clone())
+                        .unwrap_or_default(),
+                )),
+                _ => None,
+            })
+            .collect()
+    };
+    let (before, after) = (nat_of(current), nat_of(desired));
+    let mut gone = 0;
+    for (node, new_rules) in &after {
+        let Some(old_rules) = before.get(node) else {
+            continue;
+        };
+        let changed = crate::conntrack::changed_rules(old_rules, new_rules);
+        if changed.is_empty() {
+            continue;
+        }
+        let forgotten = async {
+            let conn: Connection<nlink::netlink::Netfilter> = node_handle_for(running, node)?
+                .connection()
+                .map_err(|e| Error::nlink(format!("conntrack connection on '{node}'"), e))?;
+            crate::conntrack::forget_flows(&conn, &changed)
+                .await
+                .map_err(|e| Error::nlink(format!("conntrack on '{node}'"), e))
+        }
+        .await;
+        match forgotten {
+            Ok(n) => {
+                if n > 0 {
+                    tracing::info!(node = %node, flows = n, "NAT changed: tracked flows deleted");
+                }
+                gone += n;
+            }
+            Err(e) => {
+                tracing::warn!("{e}");
+                ctx.log(
+                    "warn",
+                    format!(
+                        "{e}: flows that began before this apply keep their old NAT translation"
+                    ),
+                );
+            }
+        }
+    }
+    gone
+}
+
 /// Restore a lab to a [`Snapshot`](crate::state::Snapshot) (#59): apply
 /// the snapshot's topology (dropping the current runtime impairments),
 /// then put back the snapshot's runtime impairments and partitions.
@@ -625,6 +704,7 @@ pub async fn restore_with(
 ) -> Result<ApplyReport> {
     let opts = ApplyOptions {
         reset_impairments: true,
+        ..Default::default()
     };
     // With reset the plan replaces every runtime impairment and every
     // partition by the snapshot topology's declarations, and the
@@ -757,6 +837,7 @@ async fn reattach_ctx(
         ops: diff.ops.len(),
         removed: diff.ops.iter().filter(|o| o.is_removal()).count(),
         applied: diff.ops.iter().map(|o| o.describe()).collect(),
+        ..Default::default()
     };
     tracing::info!(
         "reattach '{node}': {} link end(s), {} op(s)",
@@ -805,6 +886,7 @@ async fn reattach_ctx(
         crate::events::LifecycleKind::Applied {
             ops: report.ops,
             removed: report.removed,
+            conntrack_deleted: 0,
         },
     );
     Ok(report)
@@ -1533,6 +1615,7 @@ link r2:eth1 -- host:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
         // --reset-impairments: the topology wins again.
         let reset = ApplyOptions {
             reset_impairments: true,
+            ..Default::default()
         };
         let o = overlay_live_impairments(&running, &topo, &reset);
         assert!(
@@ -1644,6 +1727,7 @@ link r2:eth1 -- host:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
 
         let reset = ApplyOptions {
             reset_impairments: true,
+            ..Default::default()
         };
         assert!(parts(&topo, &reset).is_empty());
         let gone = crate::parser::parse("lab \"t\"\nnode a\nnode b\n").unwrap();

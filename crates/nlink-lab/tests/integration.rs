@@ -5701,10 +5701,11 @@ async fn proc_stat_on_a_container_node_reads_the_host_proc() {
     if !privileged("proc_stat_on_a_container_node_reads_the_host_proc") {
         return;
     }
-    if !has_local_image("alpine:latest") {
-        eprintln!(
-            "skipping proc_stat_on_a_container_node_reads_the_host_proc: needs alpine:latest in the podman store"
-        );
+    if !feature(
+        "proc_stat_on_a_container_node_reads_the_host_proc",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let lab_name = format!("psc-{}", std::process::id());
@@ -5879,10 +5880,11 @@ async fn a_container_whose_init_pid_was_reused_is_not_reached_through_it() {
     if !privileged("a_container_whose_init_pid_was_reused_is_not_reached_through_it") {
         return;
     }
-    if !has_local_image("alpine:latest") {
-        eprintln!(
-            "skipping a_container_whose_init_pid_was_reused_is_not_reached_through_it: needs alpine:latest in the podman store"
-        );
+    if !feature(
+        "a_container_whose_init_pid_was_reused_is_not_reached_through_it",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let lab_name = format!("pid-reuse-{}", std::process::id());
@@ -5934,10 +5936,11 @@ async fn a_restarted_container_gets_its_ports_sysctls_and_runs_back() {
     if !privileged("a_restarted_container_gets_its_ports_sysctls_and_runs_back") {
         return;
     }
-    if !has_local_image("alpine:latest") {
-        eprintln!(
-            "skipping a_restarted_container_gets_its_ports_sysctls_and_runs_back: needs alpine:latest in the podman store"
-        );
+    if !feature(
+        "a_restarted_container_gets_its_ports_sysctls_and_runs_back",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let lab_name = format!("rs-{}", std::process::id());
@@ -6008,10 +6011,11 @@ async fn a_restart_keeps_the_labs_runtime_impairments_and_keys() {
     if !privileged("a_restart_keeps_the_labs_runtime_impairments_and_keys") {
         return;
     }
-    if !has_local_image("alpine:latest") {
-        eprintln!(
-            "skipping a_restart_keeps_the_labs_runtime_impairments_and_keys: needs alpine:latest in the podman store"
-        );
+    if !feature(
+        "a_restart_keeps_the_labs_runtime_impairments_and_keys",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let lab_name = format!("rk-{}", std::process::id());
@@ -7919,10 +7923,11 @@ async fn a_scenario_acts_on_a_container_node_and_clears_like_impair() {
     if !privileged("a_scenario_acts_on_a_container_node_and_clears_like_impair") {
         return;
     }
-    if !has_local_image("alpine:latest") {
-        eprintln!(
-            "skipping a_scenario_acts_on_a_container_node_and_clears_like_impair: needs alpine:latest in the podman store"
-        );
+    if !feature(
+        "a_scenario_acts_on_a_container_node_and_clears_like_impair",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let lab_name = format!("scn-{}", std::process::id());
@@ -8107,10 +8112,11 @@ async fn container_host_files_are_the_topology_files() {
     if !privileged("container_host_files_are_the_topology_files") {
         return;
     }
-    if !has_local_image("alpine:latest") {
-        eprintln!(
-            "skipping container_host_files_are_the_topology_files: needs alpine:latest in the podman store"
-        );
+    if !feature(
+        "container_host_files_are_the_topology_files",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let dir = tempfile::tempdir().unwrap();
@@ -8181,10 +8187,11 @@ async fn container_processes_are_stopped_inside_the_container() {
     if !privileged("container_processes_are_stopped_inside_the_container") {
         return;
     }
-    if !has_local_image("alpine:latest") {
-        eprintln!(
-            "skipping container_processes_are_stopped_inside_the_container: needs alpine:latest in the podman store"
-        );
+    if !feature(
+        "container_processes_are_stopped_inside_the_container",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let lab_name = format!("kct-{}", std::process::id());
@@ -8246,10 +8253,11 @@ async fn an_exec_timeout_stops_the_command_in_the_container() {
     if !privileged("an_exec_timeout_stops_the_command_in_the_container") {
         return;
     }
-    if !has_local_image("alpine:latest") {
-        eprintln!(
-            "skipping an_exec_timeout_stops_the_command_in_the_container: needs alpine:latest in the podman store"
-        );
+    if !feature(
+        "an_exec_timeout_stops_the_command_in_the_container",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let lab_name = format!("ket-{}", std::process::id());
@@ -8284,10 +8292,11 @@ async fn container_options_reach_the_container() {
     if !privileged("container_options_reach_the_container") {
         return;
     }
-    if !has_local_image("alpine:latest") {
-        eprintln!(
-            "skipping container_options_reach_the_container: needs alpine:latest in the podman store"
-        );
+    if !feature(
+        "container_options_reach_the_container",
+        "podman-alpine",
+        has_local_image("alpine:latest"),
+    ) {
         return;
     }
     let lab_name = format!("kco-{}", std::process::id());

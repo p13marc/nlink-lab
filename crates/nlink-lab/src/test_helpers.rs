@@ -647,6 +647,25 @@ mod tests {
         assert!(!feature_required(Some("vrfs"), "vrf"));
     }
 
+    /// Every feature the integration lane requires is one a test gates
+    /// on: a name no `feature()` call passes (a typo, a renamed gate)
+    /// would silently not be required.
+    #[test]
+    fn the_integration_lanes_strict_features_are_gated_on() {
+        let workflow = include_str!("../../../.forgejo/workflows/integration.yml");
+        let tests = include_str!("../tests/integration.rs");
+        let list = workflow
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("NLINK_LAB_STRICT_FEATURES:"))
+            .expect("the integration lane sets NLINK_LAB_STRICT_FEATURES");
+        for name in list.split(',').map(str::trim) {
+            assert!(
+                tests.contains(&format!("\"{name}\"")),
+                "integration.yml requires '{name}', which no test gates on"
+            );
+        }
+    }
+
     #[test]
     fn a_present_feature_runs_and_a_missing_one_skips_unless_required() {
         assert!(feature("t", "vrf", true));

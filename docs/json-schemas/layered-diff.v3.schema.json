@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "nlink-lab apply --dry-run / --check / verify --json (v3)",
+  "title": "nlink-lab apply --dry-run / verify --json (v3)",
   "description": "The `apply --dry-run --json` / `verify --json`\nenvelope (schema v3, `docs/json-schemas/layered-diff.v3.schema.json`).",
   "type": "object",
   "properties": {
@@ -44,7 +44,7 @@
       }
     },
     "schema_version": {
-      "description": "Schema marker: `3`. v3 dropped the v1 `diff` / `layered_summary`\nfields (Plan 160 / 0.7.0) — use `topology` / `network` /\n`nftables` / `wireguard` / `removals`. `topology` and `wireguard`\nwere added later and are additive, so the marker did not move.",
+      "description": "Schema marker: `3`. v3 dropped the v1 `diff` / `layered_summary`\nfields (Plan 160 / 0.7.0) — use `topology` / `network` /\n`nftables` / `wireguard` / `removals`. `topology` and `wireguard`\nwere added later and are additive, so the marker did not move. The\n`network` and `nftables` values are nlink's own diffs, whose shape\nfollows nlink (0.33 made `nftables` `{blocked, changes, generation}`);\nthe envelope did not change, so neither did the marker.",
       "type": "integer",
       "format": "uint32",
       "minimum": 0
@@ -54,9 +54,11 @@
       "$ref": "#/$defs/TopologyDiff"
     },
     "wireguard": {
-      "description": "Typed per-node `WireguardConfigDiff`: peers, keys, endpoints and\nallowed-ips that differ from the declared tunnels (public keys\nonly; private and preshared keys as presence flags). Empty map\nelided. Additive, so the marker stays `3`. Free-form in the\nschema: nlink 0.32 derives one that does not match the JSON (keys\nas byte arrays, presence flags as keys; marcpardo/nlink#876).",
+      "description": "Typed per-node `WireguardConfigDiff`: peers, keys, endpoints and\nallowed-ips that differ from the declared tunnels (public keys\nonly; private and preshared keys as presence flags). Empty map\nelided. Additive, so the marker stays `3`.",
       "type": "object",
-      "additionalProperties": true
+      "additionalProperties": {
+        "$ref": "#/$defs/WireguardConfigDiff"
+      }
     }
   },
   "required": [
@@ -185,6 +187,270 @@
       "required": [
         "dev",
         "address"
+      ]
+    },
+    "AllowedIp": {
+      "description": "An allowed IP range for a WireGuard peer.",
+      "type": "object",
+      "properties": {
+        "addr": {
+          "description": "IP address (network portion).",
+          "type": "string",
+          "format": "ip"
+        },
+        "cidr": {
+          "description": "CIDR prefix length.",
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "addr",
+        "cidr"
+      ]
+    },
+    "BaseChain": {
+      "description": "A base chain: its type and hook, its priority, and its default policy\n(#708).\n\nIt is built from a hook its type has, so a `nat` chain on forward, a\n`route` chain off output, and an ingress chain without a device cannot\nbe written:\n\n```\nuse nlink::netlink::nftables::{BaseChain, FilterHook, NatHook, Policy, Priority};\n\nlet input = BaseChain::filter(FilterHook::Input, Priority::Filter).policy(Policy::Drop);\nlet snat = BaseChain::nat(NatHook::Postrouting, Priority::SrcNat);\nlet reroute = BaseChain::route(Priority::Mangle);\nlet ingress = BaseChain::filter(FilterHook::ingress([\"eth0\", \"eth1\"]), Priority::Filter);\nassert_eq!(ingress.devices(), [\"eth0\", \"eth1\"]);\n```\n\nWhat depends on the table's family is checked when the family is\nknown, before anything is sent ([`check_family`](Self::check_family)):\nthe hooks a family has, `nat` and `route` chains only in ip, ip6 and\ninet tables, and a `nat` chain's priority above conntrack's.",
+      "type": "object",
+      "properties": {
+        "devices": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "hook": {
+          "$ref": "#/$defs/Hook"
+        },
+        "policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Policy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "priority": {
+          "$ref": "#/$defs/Priority"
+        },
+        "type": {
+          "$ref": "#/$defs/ChainType"
+        }
+      },
+      "required": [
+        "type",
+        "hook",
+        "priority"
+      ]
+    },
+    "Blocked": {
+      "description": "What the diff cannot do, or leaves alone so as not to break what it\ndoes not own (#708). An entry that [`refuses`](Self::refuses) makes\n[`apply`](super::NftablesDiff::apply) fail before it writes anything; the\nothers are said and skipped.",
+      "oneOf": [
+        {
+          "description": "Table flags the kernel does not change on a live table: only\ndormant can, and persist or owner needs the table deleted with what\nit holds, which the diff will not do (#479). Refuses.",
+          "type": "object",
+          "properties": {
+            "family": {
+              "description": "The table's family.",
+              "$ref": "#/$defs/Family"
+            },
+            "from": {
+              "description": "Its flags.",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "const": "table-flags"
+            },
+            "table": {
+              "description": "The table.",
+              "type": "string"
+            },
+            "to": {
+              "description": "The declared flags.",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "family",
+            "table",
+            "from",
+            "to"
+          ]
+        },
+        {
+          "description": "A table to recreate, holding rules nlink did not write: deleting it\nwould delete them. Refuses.",
+          "type": "object",
+          "properties": {
+            "family": {
+              "description": "The table's family.",
+              "$ref": "#/$defs/Family"
+            },
+            "kind": {
+              "type": "string",
+              "const": "table-recreate"
+            },
+            "reason": {
+              "description": "Why it is recreated.",
+              "type": "string"
+            },
+            "rules": {
+              "description": "The rules it would delete.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NftRule"
+              }
+            },
+            "table": {
+              "description": "The table.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "family",
+            "table",
+            "reason",
+            "rules"
+          ]
+        },
+        {
+          "description": "A chain to recreate, holding rules nlink did not write, which it\ncould not put back (#478). Refuses; an\n[`exclusive`](super::DeclaredChainBuilder::exclusive) chain deletes\nthem instead.",
+          "type": "object",
+          "properties": {
+            "chain": {
+              "description": "The chain.",
+              "type": "string"
+            },
+            "family": {
+              "description": "The table's family.",
+              "$ref": "#/$defs/Family"
+            },
+            "kind": {
+              "type": "string",
+              "const": "chain-recreate"
+            },
+            "reason": {
+              "description": "Why it is recreated: what cannot change on the live chain.",
+              "type": "string"
+            },
+            "rules": {
+              "description": "The rules it would delete.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NftRule"
+              }
+            },
+            "table": {
+              "description": "The table.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "family",
+            "table",
+            "chain",
+            "reason",
+            "rules"
+          ]
+        },
+        {
+          "description": "A set, object or flowtable to recreate that a rule nlink did not\nwrite uses: the kernel would refuse to delete it (`EBUSY`) and fail\nthe whole batch. Refuses.",
+          "type": "object",
+          "properties": {
+            "item": {
+              "description": "What is recreated.",
+              "$ref": "#/$defs/NftItem"
+            },
+            "kind": {
+              "type": "string",
+              "const": "bound"
+            },
+            "rules": {
+              "description": "The rules that use it.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NftRule"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "item",
+            "rules"
+          ]
+        },
+        {
+          "description": "An undeclared chain, set, flowtable or object in a managed table,\nleft in place because a rule that stays, one nlink does not manage,\nuses it (#459). Kept: deleting it would fail every apply.",
+          "type": "object",
+          "properties": {
+            "item": {
+              "description": "What is kept.",
+              "$ref": "#/$defs/NftItem"
+            },
+            "kind": {
+              "type": "string",
+              "const": "in-use"
+            },
+            "rules": {
+              "description": "The rules that use it.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NftRule"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "item",
+            "rules"
+          ]
+        },
+        {
+          "description": "An object of a type nlink does not model, in a managed table: it\ncannot say what it is, so it does not delete it. Kept.",
+          "type": "object",
+          "properties": {
+            "family": {
+              "description": "The table's family.",
+              "$ref": "#/$defs/Family"
+            },
+            "kind": {
+              "type": "string",
+              "const": "unmodelled-object"
+            },
+            "name": {
+              "description": "The object.",
+              "type": "string"
+            },
+            "object-type": {
+              "description": "Its `NFT_OBJECT_*` type.",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "table": {
+              "description": "The table.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "family",
+            "table",
+            "name",
+            "object-type"
+          ]
+        }
       ]
     },
     "Blocker": {
@@ -713,45 +979,32 @@
         "integer"
       ]
     },
+    "ChainKind": {
+      "description": "What a chain is (#708): one only a `jump` or `goto` enters, or one\nhooked into the packet path.\n\nA regular chain has no hook, type, priority or policy, so it cannot be\ngiven one. A base chain has them all, in a [`BaseChain`].",
+      "oneOf": [
+        {
+          "description": "Entered only by a `jump` or a `goto`.",
+          "type": "string",
+          "const": "regular"
+        },
+        {
+          "description": "Hooked into the packet path.",
+          "type": "object",
+          "properties": {
+            "base": {
+              "$ref": "#/$defs/BaseChain"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "base"
+          ]
+        }
+      ]
+    },
     "ChainName": {
       "description": "A validated nftables chain name.\n\nChain identity in nftables is a `(family, table_name, chain_name)`\ntriple, all case-sensitive. The kernel enforces\n`NFT_NAME_MAXLEN = 256` (per\n`include/uapi/linux/netfilter/nf_tables.h`) and rejects interior\nNULs (the attribute is a NUL-terminated C string at the wire layer).\n\nConstruction validates:\n- Non-empty.\n- No interior NUL bytes (`\\0`).\n- At most 255 bytes (one byte reserved for the NUL terminator).\n\nRound-trip note: `ChainName` is `Display` for natural use in\nlog messages and `AsRef<str>` so it slots into existing\n`&str`-shaped APIs.",
       "type": "string"
-    },
-    "ChainRecreate": {
-      "description": "A chain the diff deletes and creates again, with its declared rules put\nback in declared order (#478).\n\n`nf_tables_updchain` refuses a different hook, priority or type, and a\nhook on a regular chain, with `EEXIST`; and nothing turns a base chain\ninto a regular one. So these changes were sent as an update the kernel\nalways refused, and a base chain declared as a regular one stayed a base\nchain with an empty diff. A base chain cannot be a jump target, so only\nits own rules depend on it.",
-      "type": "object",
-      "properties": {
-        "blocked_by": {
-          "description": "Rules in the chain that nlink did not write, which it could not put\nback. Non-empty means the apply refuses, with\n[`ErrorDetail::NotSupported`](crate::ErrorDetail::NotSupported), rather than\ndelete them. An [`exclusive`](super::DeclaredChainBuilder::exclusive)\nchain deletes them instead.",
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "chain": {
-          "description": "The chain as declared.",
-          "$ref": "#/$defs/DeclaredChain"
-        },
-        "family": {
-          "description": "Owning family.",
-          "$ref": "#/$defs/Family"
-        },
-        "reason": {
-          "description": "What changed: `hook input -> forward`, `priority 0 -> -10`, …",
-          "type": "string"
-        },
-        "table": {
-          "description": "Owning table.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "table",
-        "family",
-        "chain",
-        "reason",
-        "blocked_by"
-      ]
     },
     "ChainType": {
       "description": "Chain type string for the kernel.",
@@ -760,6 +1013,650 @@
         "filter",
         "nat",
         "route"
+      ]
+    },
+    "Change": {
+      "description": "One change the diff makes, to a `T` (#708): what the kernel holds\n(`from`) and what it will hold (`to`).\n\nA recreate is a delete and an add the kernel cannot make an update: a\nset's key, a chain's hook. It says why, and carries what it takes with\nit, the cascade: the rules moved out of the way and put back, the\nelements the new set gets. What a cascade holds is not listed again at\nthe top.",
+      "oneOf": [
+        {
+          "description": "Something the kernel does not hold.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "add"
+            }
+          },
+          "$ref": "#/$defs/NftTable",
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Something the declaration does not hold.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "remove"
+            }
+          },
+          "$ref": "#/$defs/NftTable",
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Changed in place.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "description": "What the kernel holds.",
+              "$ref": "#/$defs/NftTable"
+            },
+            "op": {
+              "type": "string",
+              "const": "update"
+            },
+            "to": {
+              "description": "What it will hold: `from` with what the update sends. An update\nsends what changed, so the rest stays as the kernel has it; a\nchain or a rule sends itself whole, so it is the declaration's.",
+              "$ref": "#/$defs/NftTable"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to"
+          ]
+        },
+        {
+          "description": "Deleted and created again.",
+          "type": "object",
+          "properties": {
+            "cascade": {
+              "description": "What goes with it.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NftChange"
+              }
+            },
+            "from": {
+              "description": "What the kernel holds.",
+              "$ref": "#/$defs/NftTable"
+            },
+            "op": {
+              "type": "string",
+              "const": "recreate"
+            },
+            "reason": {
+              "description": "Why it cannot change in place.",
+              "type": "string"
+            },
+            "to": {
+              "description": "What it will hold.",
+              "$ref": "#/$defs/NftTable"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to",
+            "reason",
+            "cascade"
+          ]
+        }
+      ]
+    },
+    "Change2": {
+      "description": "One change the diff makes, to a `T` (#708): what the kernel holds\n(`from`) and what it will hold (`to`).\n\nA recreate is a delete and an add the kernel cannot make an update: a\nset's key, a chain's hook. It says why, and carries what it takes with\nit, the cascade: the rules moved out of the way and put back, the\nelements the new set gets. What a cascade holds is not listed again at\nthe top.",
+      "oneOf": [
+        {
+          "description": "Something the kernel does not hold.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "add"
+            }
+          },
+          "$ref": "#/$defs/NftChain",
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Something the declaration does not hold.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "remove"
+            }
+          },
+          "$ref": "#/$defs/NftChain",
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Changed in place.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "description": "What the kernel holds.",
+              "$ref": "#/$defs/NftChain"
+            },
+            "op": {
+              "type": "string",
+              "const": "update"
+            },
+            "to": {
+              "description": "What it will hold: `from` with what the update sends. An update\nsends what changed, so the rest stays as the kernel has it; a\nchain or a rule sends itself whole, so it is the declaration's.",
+              "$ref": "#/$defs/NftChain"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to"
+          ]
+        },
+        {
+          "description": "Deleted and created again.",
+          "type": "object",
+          "properties": {
+            "cascade": {
+              "description": "What goes with it.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NftChange"
+              }
+            },
+            "from": {
+              "description": "What the kernel holds.",
+              "$ref": "#/$defs/NftChain"
+            },
+            "op": {
+              "type": "string",
+              "const": "recreate"
+            },
+            "reason": {
+              "description": "Why it cannot change in place.",
+              "type": "string"
+            },
+            "to": {
+              "description": "What it will hold.",
+              "$ref": "#/$defs/NftChain"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to",
+            "reason",
+            "cascade"
+          ]
+        }
+      ]
+    },
+    "Change3": {
+      "description": "One change the diff makes, to a `T` (#708): what the kernel holds\n(`from`) and what it will hold (`to`).\n\nA recreate is a delete and an add the kernel cannot make an update: a\nset's key, a chain's hook. It says why, and carries what it takes with\nit, the cascade: the rules moved out of the way and put back, the\nelements the new set gets. What a cascade holds is not listed again at\nthe top.",
+      "oneOf": [
+        {
+          "description": "Something the kernel does not hold.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "add"
+            }
+          },
+          "$ref": "#/$defs/NftRule",
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Something the declaration does not hold.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "remove"
+            }
+          },
+          "$ref": "#/$defs/NftRule",
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Changed in place.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "description": "What the kernel holds.",
+              "$ref": "#/$defs/NftRule"
+            },
+            "op": {
+              "type": "string",
+              "const": "update"
+            },
+            "to": {
+              "description": "What it will hold: `from` with what the update sends. An update\nsends what changed, so the rest stays as the kernel has it; a\nchain or a rule sends itself whole, so it is the declaration's.",
+              "$ref": "#/$defs/NftRule"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to"
+          ]
+        },
+        {
+          "description": "Deleted and created again.",
+          "type": "object",
+          "properties": {
+            "cascade": {
+              "description": "What goes with it.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NftChange"
+              }
+            },
+            "from": {
+              "description": "What the kernel holds.",
+              "$ref": "#/$defs/NftRule"
+            },
+            "op": {
+              "type": "string",
+              "const": "recreate"
+            },
+            "reason": {
+              "description": "Why it cannot change in place.",
+              "type": "string"
+            },
+            "to": {
+              "description": "What it will hold.",
+              "$ref": "#/$defs/NftRule"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to",
+            "reason",
+            "cascade"
+          ]
+        }
+      ]
+    },
+    "Change4": {
+      "description": "One change the diff makes, to a `T` (#708): what the kernel holds\n(`from`) and what it will hold (`to`).\n\nA recreate is a delete and an add the kernel cannot make an update: a\nset's key, a chain's hook. It says why, and carries what it takes with\nit, the cascade: the rules moved out of the way and put back, the\nelements the new set gets. What a cascade holds is not listed again at\nthe top.",
+      "oneOf": [
+        {
+          "description": "Something the kernel does not hold.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "add"
+            }
+          },
+          "$ref": "#/$defs/NftSet",
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Something the declaration does not hold.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "remove"
+            }
+          },
+          "$ref": "#/$defs/NftSet",
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Changed in place.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "description": "What the kernel holds.",
+              "$ref": "#/$defs/NftSet"
+            },
+            "op": {
+              "type": "string",
+              "const": "update"
+            },
+            "to": {
+              "description": "What it will hold: `from` with what the update sends. An update\nsends what changed, so the rest stays as the kernel has it; a\nchain or a rule sends itself whole, so it is the declaration's.",
+              "$ref": "#/$defs/NftSet"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to"
+          ]
+        },
+        {
+          "description": "Deleted and created again.",
+          "type": "object",
+          "properties": {
+            "cascade": {
+              "description": "What goes with it.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NftChange"
+              }
+            },
+            "from": {
+              "description": "What the kernel holds.",
+              "$ref": "#/$defs/NftSet"
+            },
+            "op": {
+              "type": "string",
+              "const": "recreate"
+            },
+            "reason": {
+              "description": "Why it cannot change in place.",
+              "type": "string"
+            },
+            "to": {
+              "description": "What it will hold.",
+              "$ref": "#/$defs/NftSet"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to",
+            "reason",
+            "cascade"
+          ]
+        }
+      ]
+    },
+    "Change5": {
+      "description": "One change the diff makes, to a `T` (#708): what the kernel holds\n(`from`) and what it will hold (`to`).\n\nA recreate is a delete and an add the kernel cannot make an update: a\nset's key, a chain's hook. It says why, and carries what it takes with\nit, the cascade: the rules moved out of the way and put back, the\nelements the new set gets. What a cascade holds is not listed again at\nthe top.",
+      "oneOf": [
+        {
+          "description": "Something the kernel does not hold.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "add"
+            }
+          },
+          "$ref": "#/$defs/NftElements",
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Something the declaration does not hold.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "remove"
+            }
+          },
+          "$ref": "#/$defs/NftElements",
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Changed in place.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "description": "What the kernel holds.",
+              "$ref": "#/$defs/NftElements"
+            },
+            "op": {
+              "type": "string",
+              "const": "update"
+            },
+            "to": {
+              "description": "What it will hold: `from` with what the update sends. An update\nsends what changed, so the rest stays as the kernel has it; a\nchain or a rule sends itself whole, so it is the declaration's.",
+              "$ref": "#/$defs/NftElements"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to"
+          ]
+        },
+        {
+          "description": "Deleted and created again.",
+          "type": "object",
+          "properties": {
+            "cascade": {
+              "description": "What goes with it.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NftChange"
+              }
+            },
+            "from": {
+              "description": "What the kernel holds.",
+              "$ref": "#/$defs/NftElements"
+            },
+            "op": {
+              "type": "string",
+              "const": "recreate"
+            },
+            "reason": {
+              "description": "Why it cannot change in place.",
+              "type": "string"
+            },
+            "to": {
+              "description": "What it will hold.",
+              "$ref": "#/$defs/NftElements"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to",
+            "reason",
+            "cascade"
+          ]
+        }
+      ]
+    },
+    "Change6": {
+      "description": "One change the diff makes, to a `T` (#708): what the kernel holds\n(`from`) and what it will hold (`to`).\n\nA recreate is a delete and an add the kernel cannot make an update: a\nset's key, a chain's hook. It says why, and carries what it takes with\nit, the cascade: the rules moved out of the way and put back, the\nelements the new set gets. What a cascade holds is not listed again at\nthe top.",
+      "oneOf": [
+        {
+          "description": "Something the kernel does not hold.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "add"
+            }
+          },
+          "$ref": "#/$defs/NftObject",
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Something the declaration does not hold.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "remove"
+            }
+          },
+          "$ref": "#/$defs/NftObject",
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Changed in place.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "description": "What the kernel holds.",
+              "$ref": "#/$defs/NftObject"
+            },
+            "op": {
+              "type": "string",
+              "const": "update"
+            },
+            "to": {
+              "description": "What it will hold: `from` with what the update sends. An update\nsends what changed, so the rest stays as the kernel has it; a\nchain or a rule sends itself whole, so it is the declaration's.",
+              "$ref": "#/$defs/NftObject"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to"
+          ]
+        },
+        {
+          "description": "Deleted and created again.",
+          "type": "object",
+          "properties": {
+            "cascade": {
+              "description": "What goes with it.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NftChange"
+              }
+            },
+            "from": {
+              "description": "What the kernel holds.",
+              "$ref": "#/$defs/NftObject"
+            },
+            "op": {
+              "type": "string",
+              "const": "recreate"
+            },
+            "reason": {
+              "description": "Why it cannot change in place.",
+              "type": "string"
+            },
+            "to": {
+              "description": "What it will hold.",
+              "$ref": "#/$defs/NftObject"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to",
+            "reason",
+            "cascade"
+          ]
+        }
+      ]
+    },
+    "Change7": {
+      "description": "One change the diff makes, to a `T` (#708): what the kernel holds\n(`from`) and what it will hold (`to`).\n\nA recreate is a delete and an add the kernel cannot make an update: a\nset's key, a chain's hook. It says why, and carries what it takes with\nit, the cascade: the rules moved out of the way and put back, the\nelements the new set gets. What a cascade holds is not listed again at\nthe top.",
+      "oneOf": [
+        {
+          "description": "Something the kernel does not hold.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "add"
+            }
+          },
+          "$ref": "#/$defs/NftFlowtable",
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Something the declaration does not hold.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "remove"
+            }
+          },
+          "$ref": "#/$defs/NftFlowtable",
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Changed in place.",
+          "type": "object",
+          "properties": {
+            "from": {
+              "description": "What the kernel holds.",
+              "$ref": "#/$defs/NftFlowtable"
+            },
+            "op": {
+              "type": "string",
+              "const": "update"
+            },
+            "to": {
+              "description": "What it will hold: `from` with what the update sends. An update\nsends what changed, so the rest stays as the kernel has it; a\nchain or a rule sends itself whole, so it is the declaration's.",
+              "$ref": "#/$defs/NftFlowtable"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to"
+          ]
+        },
+        {
+          "description": "Deleted and created again.",
+          "type": "object",
+          "properties": {
+            "cascade": {
+              "description": "What goes with it.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NftChange"
+              }
+            },
+            "from": {
+              "description": "What the kernel holds.",
+              "$ref": "#/$defs/NftFlowtable"
+            },
+            "op": {
+              "type": "string",
+              "const": "recreate"
+            },
+            "reason": {
+              "description": "Why it cannot change in place.",
+              "type": "string"
+            },
+            "to": {
+              "description": "What it will hold.",
+              "$ref": "#/$defs/NftFlowtable"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to",
+            "reason",
+            "cascade"
+          ]
+        }
       ]
     },
     "ClassRepr": {
@@ -1090,78 +1987,6 @@
         }
       ]
     },
-    "DeclaredChain": {
-      "description": "A declared chain — name + optional base-chain hook spec.\nNon-base (regular) chains omit the hook fields.",
-      "type": "object",
-      "properties": {
-        "chain-type": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ChainType"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "comment": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "devices": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "exclusive": {
-          "type": "boolean"
-        },
-        "hook": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Hook"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "name": {
-          "type": "string"
-        },
-        "policy": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Policy"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "priority": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Priority"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "name",
-        "hook",
-        "priority",
-        "policy",
-        "chain-type",
-        "exclusive"
-      ]
-    },
     "DeclaredFdb": {
       "description": "A declared FDB entry (#516): a static or local entry in a bridge, or a\nVXLAN remote. See [`NetworkConfig::fdb`].",
       "type": "object",
@@ -1201,44 +2026,6 @@
       "required": [
         "dev",
         "mac"
-      ]
-    },
-    "DeclaredFlowtable": {
-      "description": "A declared flowtable inside a table.",
-      "type": "object",
-      "properties": {
-        "devs": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "family": {
-          "$ref": "#/$defs/Family"
-        },
-        "flags": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "name": {
-          "type": "string"
-        },
-        "priority": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "table": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "family",
-        "table",
-        "name",
-        "devs",
-        "priority",
-        "flags"
       ]
     },
     "DeclaredLink": {
@@ -2338,22 +3125,6 @@
         "id"
       ]
     },
-    "DeclaredObject": {
-      "description": "A declared named stateful object — a counter, quota or limit.\n\nReconciled by name and type. Only the configuration is compared, never\nthe live state, so a counter keeps counting and a quota keeps what it has\nused across applies. A changed quota is updated in place and keeps its\nconsumption. A limit cannot be updated (the kernel accepts the message\nand changes nothing), so a changed limit is deleted and recreated, and\nthe rules using it move out of the way and back to their places.",
-      "type": "object",
-      "properties": {
-        "config": {
-          "$ref": "#/$defs/ObjectConfig"
-        },
-        "name": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "config"
-      ]
-    },
     "DeclaredQdisc": {
       "description": "Declared qdisc configuration.",
       "type": "object",
@@ -2547,200 +3318,98 @@
         "action"
       ]
     },
-    "DeclaredRule2": {
-      "description": "A declared rule — owning table + chain + the typed `Rule`\nbody. Optional `handle_key` for stable diff identity across\nreapplies.\n\nWithout a `handle_key`, the diff derives one from the rule's chain,\nbody and comment (#389), so the rule converges like a keyed one; but\na change to its body gives it a new key, which is a delete and an add\nrather than an in-place replace. Give a rule that will change a key\nwith `DeclaredTableBuilder::rule_keyed`.",
+    "DeclaredWgPeer": {
+      "description": "A declared WireGuard peer. Plan 196.",
       "type": "object",
       "properties": {
-        "chain": {
-          "type": "string"
-        },
-        "family": {
-          "$ref": "#/$defs/Family"
-        },
-        "handle-key": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "table": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "table",
-        "chain",
-        "family",
-        "handle-key"
-      ]
-    },
-    "DeclaredSet": {
-      "description": "A declared named set — name, key type, flags, optional size and\ntimeouts, and its declared elements.\n\nReconciled by **name** (created if absent in the kernel, deleted\nif removed from the config). A changed `key_type` or `flags` cannot\nbe applied to an existing set, so the set is deleted and recreated\nwith its declared elements. A changed `size`, `timeout` or\n`gc_interval` is applied in place (kernel 6.5+). The declared\n`elements` are reconciled per the set's [`SetElementMode`]: by default\nexactly for a plain set — missing keys added, undeclared ones removed —\nand only added for a set rules write to ([`DeclaredSetBuilder::dynamic`])\nor whose elements time out, so that what the packet path put there\nstays.",
-      "type": "object",
-      "properties": {
-        "comment": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "data-type": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SetDataType"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "element-mode": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SetElementMode"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "elements": {
+        "allowed-ips": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/SetElement"
+            "$ref": "#/$defs/AllowedIp"
           }
         },
-        "flags": {
-          "$ref": "#/$defs/SetFlags"
-        },
-        "gc-interval": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Duration2"
-            },
-            {
-              "type": "null"
-            }
+        "endpoint": {
+          "type": [
+            "string",
+            "null"
           ]
         },
-        "key-type": {
-          "$ref": "#/$defs/SetKeyType"
+        "endpoint-policy": {
+          "description": "Whether the endpoint is kept to, or set once (#529).",
+          "$ref": "#/$defs/EndpointPolicy"
         },
-        "name": {
-          "type": "string"
-        },
-        "policy": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SetPolicy"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "size": {
+        "persistent-keepalive-secs": {
+          "description": "Serialized as whole seconds (`persistent-keepalive-secs`).",
           "type": [
             "integer",
             "null"
           ],
-          "format": "uint32",
+          "format": "uint16",
+          "maximum": 65535,
           "minimum": 0
         },
-        "statements": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ElementStatement"
-          }
+        "preshared-key-set": {
+          "description": "Serialized as a presence boolean (`preshared-key-set`) —\nsecret material never leaves the process via serde.",
+          "type": "boolean"
         },
-        "timeout": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Duration2"
-            },
-            {
-              "type": "null"
-            }
-          ]
+        "public-key": {
+          "type": "string"
         }
       },
       "required": [
-        "name",
-        "key-type",
-        "flags",
-        "size",
-        "timeout",
-        "gc-interval",
-        "element-mode",
-        "data-type",
-        "elements"
+        "public-key",
+        "preshared-key-set",
+        "endpoint",
+        "persistent-keepalive-secs",
+        "allowed-ips",
+        "endpoint-policy"
       ]
     },
-    "DeclaredTable": {
-      "description": "A declared table — name, family, flags, and nested chains +\nrules + flowtables.",
+    "DeviceChanges": {
+      "description": "What changed on a single device. Plan 196.",
       "type": "object",
       "properties": {
-        "chains": {
+        "fwmark-set": {
+          "description": "`fwmark` differs from the kernel's current.",
+          "type": "boolean"
+        },
+        "listen-port-set": {
+          "description": "`listen_port` differs from the kernel's current.",
+          "type": "boolean"
+        },
+        "peers-to-add": {
+          "description": "Peers in the config but not in the kernel.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/DeclaredChain"
+            "$ref": "#/$defs/DeclaredWgPeer"
           }
         },
-        "comment": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "family": {
-          "$ref": "#/$defs/Family"
-        },
-        "flags": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "flowtables": {
+        "peers-to-modify": {
+          "description": "Per-peer mutations.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/DeclaredFlowtable"
+            "$ref": "#/$defs/KeyedPeerChanges"
           }
         },
-        "mode": {
-          "$ref": "#/$defs/TableMode"
-        },
-        "name": {
-          "type": "string"
-        },
-        "objects": {
+        "peers-to-remove": {
+          "description": "Peers in the kernel but not in the config.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/DeclaredObject"
+            "type": "string"
           }
         },
-        "rules": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/DeclaredRule2"
-          }
-        },
-        "sets": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/DeclaredSet"
-          }
+        "private-key-set": {
+          "description": "The declared `private_key` differs from the kernel's, compared\nX25519-clamped as the kernel stores it (#410). `WG_CMD_GET_DEVICE`\nreturns the key to privileged callers (`CAP_NET_ADMIN`).",
+          "type": "boolean"
         }
       },
       "required": [
-        "name",
-        "family",
-        "flags",
-        "mode",
-        "chains",
-        "rules",
-        "flowtables",
-        "sets",
-        "objects"
+        "private-key-set",
+        "listen-port-set",
+        "fwmark-set",
+        "peers-to-add",
+        "peers-to-modify",
+        "peers-to-remove"
       ]
     },
     "Duration": {
@@ -2831,6 +3500,21 @@
           "required": [
             "connlimit"
           ]
+        }
+      ]
+    },
+    "EndpointPolicy": {
+      "description": "How a declared peer's endpoint is kept to (#529).",
+      "oneOf": [
+        {
+          "description": "The endpoint is the declared one: a peer that roamed is put back.",
+          "type": "string",
+          "const": "enforce"
+        },
+        {
+          "description": "The endpoint is set when the peer is added, and then left to the\npeer: one that roamed — its handshakes now come from elsewhere —\nkeeps where it went.",
+          "type": "string",
+          "const": "initial-only"
         }
       ]
     },
@@ -3416,35 +4100,6 @@
         "elements"
       ]
     },
-    "FlowtableUpdate": {
-      "description": "A flowtable changed in place: devices added and removed, flags set\n(#479). A new priority or hardware-offload setting cannot be changed on\na live flowtable, so that is a delete and add instead\n([`NftablesDiff::flowtables_to_delete`] and\n[`NftablesDiff::flowtables_to_add`] both name it).",
-      "type": "object",
-      "properties": {
-        "add_devs": {
-          "description": "Devices to add to it.",
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "flowtable": {
-          "description": "The flowtable as declared.",
-          "$ref": "#/$defs/DeclaredFlowtable"
-        },
-        "remove_devs": {
-          "description": "Devices to take off it.",
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      },
-      "required": [
-        "flowtable",
-        "add_devs",
-        "remove_devs"
-      ]
-    },
     "FqCodelRepr": {
       "type": "object",
       "properties": {
@@ -3567,7 +4222,7 @@
       "additionalProperties": false
     },
     "Hook": {
-      "description": "Netfilter hook point.\n\n**Plan 211 M1 (0.19) breaking change**: `Ingress` was split into\n`NetdevIngress` and `InetIngress` because the kernel hook\nnumbers differ by family. Pre-0.19 the singular `Ingress`\nalways encoded `0`, which was correct only for\n`Family::Netdev` / `Family::Bridge` (`NF_NETDEV_INGRESS = 0`).\nOn `Family::Inet`/`Ipv4`/`Ipv6`, ingress is\n`NF_INET_INGRESS = 5`, so the old encoding installed the\nchain on `Prerouting` instead — silent wrong-hook attachment.\n\n`NetdevEgress` is also new (`NF_NETDEV_EGRESS = 1`).\n\nMigration: callers must pick the variant matching the chain's\nfamily. Use [`Hook::is_valid_for_family`] to validate at\nbuild time.",
+      "description": "Netfilter hook point.\n\nIts number depends on the family (`NF_INET_*`, `NF_NETDEV_*`,\n`NF_ARP_*`), so it is sent through [`number`](Self::number).\n[`Ingress`](Self::Ingress) is `NF_INET_INGRESS = 5` in an inet table and\n`NF_NETDEV_INGRESS = 0` in a netdev one.\n\n0.19 split a family-blind `Ingress`, which always encoded `0` and so put\nan inet chain on prerouting, into `NetdevIngress` and `InetIngress`\n(Plan 211 M1). Since `number` takes the family, one `Ingress` is right\nin both again (#708), and the split variants are deprecated.\n\nA base chain is built as a [`BaseChain`], whose hooks are\n[`FilterHook`] and [`NatHook`]; this type names the hook of one.",
       "oneOf": [
         {
           "type": "string",
@@ -3580,19 +4235,32 @@
           ]
         },
         {
-          "description": "Ingress hook for `Family::Netdev` / `Family::Bridge`.\nEncodes `NF_NETDEV_INGRESS = 0`.",
+          "description": "Ingress hook for `Family::Netdev`. Encodes `NF_NETDEV_INGRESS = 0`.",
           "type": "string",
-          "const": "netdev_ingress"
+          "const": "netdev_ingress",
+          "deprecated": true
         },
         {
-          "description": "Ingress hook for `Family::Inet` / `Family::Ipv4` /\n`Family::Ipv6`. Encodes `NF_INET_INGRESS = 5`. Available\nsince kernel 5.10.",
+          "description": "Ingress hook for `Family::Inet`. Encodes `NF_INET_INGRESS = 5`.",
           "type": "string",
-          "const": "inet_ingress"
+          "const": "inet_ingress",
+          "deprecated": true
         },
         {
-          "description": "Egress hook for `Family::Netdev`. Encodes\n`NF_NETDEV_EGRESS = 1`. Available since kernel 5.16.",
+          "description": "Egress hook for `Family::Netdev`. Encodes `NF_NETDEV_EGRESS = 1`.",
           "type": "string",
-          "const": "netdev_egress"
+          "const": "netdev_egress",
+          "deprecated": true
+        },
+        {
+          "description": "The ingress hook: `NF_INET_INGRESS` in an inet table (kernel 5.10+),\n`NF_NETDEV_INGRESS` in a netdev one. It takes a device.",
+          "type": "string",
+          "const": "ingress"
+        },
+        {
+          "description": "The egress hook of a netdev table (`NF_NETDEV_EGRESS`, kernel\n5.16+). It takes a device.",
+          "type": "string",
+          "const": "egress"
         }
       ]
     },
@@ -3948,142 +4616,20 @@
         }
       ]
     },
-    "KeptInUse": {
-      "description": "An undeclared chain, set, flowtable or object in a managed table that\n[`NftablesDiff`] leaves in place, because a rule that stays — one nlink\ndoes not manage — still uses it.\n\nThe kernel refuses to delete what a rule uses (`EBUSY`), and one refused\nmessage fails the whole batch, so deleting it would fail every apply until\nsomeone removed the rule by hand (#459).",
-      "oneOf": [
-        {
-          "description": "A chain a kept rule jumps or goes to.",
-          "type": "object",
-          "properties": {
-            "chain": {
-              "type": "object",
-              "properties": {
-                "family": {
-                  "description": "Owning family.",
-                  "$ref": "#/$defs/Family"
-                },
-                "name": {
-                  "description": "Chain name.",
-                  "type": "string"
-                },
-                "table": {
-                  "description": "Owning table.",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "table",
-                "family",
-                "name"
-              ]
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "chain"
-          ]
+    "KeyedPeerChanges": {
+      "description": "One `peers-to-modify` entry as it serializes. The schema is derived\nfrom this type too, so the two cannot disagree (#876).",
+      "type": "object",
+      "properties": {
+        "changes": {
+          "$ref": "#/$defs/PeerChanges"
         },
-        {
-          "description": "A named set or map a kept rule looks up or updates.",
-          "type": "object",
-          "properties": {
-            "set": {
-              "type": "object",
-              "properties": {
-                "family": {
-                  "description": "Owning family.",
-                  "$ref": "#/$defs/Family"
-                },
-                "name": {
-                  "description": "Set name.",
-                  "type": "string"
-                },
-                "table": {
-                  "description": "Owning table.",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "table",
-                "family",
-                "name"
-              ]
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "set"
-          ]
-        },
-        {
-          "description": "A flowtable a kept rule offloads to (`flow add @ft`).",
-          "type": "object",
-          "properties": {
-            "flowtable": {
-              "type": "object",
-              "properties": {
-                "family": {
-                  "description": "Owning family.",
-                  "$ref": "#/$defs/Family"
-                },
-                "name": {
-                  "description": "Flowtable name.",
-                  "type": "string"
-                },
-                "table": {
-                  "description": "Owning table.",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "table",
-                "family",
-                "name"
-              ]
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "flowtable"
-          ]
-        },
-        {
-          "description": "A named object a kept rule references.",
-          "type": "object",
-          "properties": {
-            "object": {
-              "type": "object",
-              "properties": {
-                "family": {
-                  "description": "Owning family.",
-                  "$ref": "#/$defs/Family"
-                },
-                "name": {
-                  "description": "Object name.",
-                  "type": "string"
-                },
-                "object_type": {
-                  "description": "Object type.",
-                  "$ref": "#/$defs/ObjectType"
-                },
-                "table": {
-                  "description": "Owning table.",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "table",
-                "family",
-                "name",
-                "object_type"
-              ]
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "object"
-          ]
+        "public-key": {
+          "type": "string"
         }
+      },
+      "required": [
+        "public-key",
+        "changes"
       ]
     },
     "LacpRate": {
@@ -4775,36 +5321,6 @@
         "value"
       ]
     },
-    "MoveReason": {
-      "description": "Why the diff deletes a rule and puts it back.",
-      "oneOf": [
-        {
-          "description": "It references a set this diff deletes and recreates; the kernel\nrefuses to delete a set a rule is bound to (`EBUSY`).",
-          "type": "string",
-          "const": "BoundToRecreatedSet"
-        },
-        {
-          "description": "It uses a named object this diff deletes and recreates (a limit\nwhose rate changed); same `EBUSY`.",
-          "type": "string",
-          "const": "BoundToRecreatedObject"
-        },
-        {
-          "description": "It offloads to a flowtable this diff deletes and recreates (its\npriority or hardware offload changed); same `EBUSY` (#479).",
-          "type": "string",
-          "const": "BoundToRecreatedFlowtable"
-        },
-        {
-          "description": "It is installed out of declared order.",
-          "type": "string",
-          "const": "Reorder"
-        },
-        {
-          "description": "Its chain is deleted and created again, because what changed — the\nhook, priority, type or device, or whether it is a base chain at\nall — cannot be changed on a live chain (#478).",
-          "type": "string",
-          "const": "ChainRecreated"
-        }
-      ]
-    },
     "MssClamp": {
       "description": "`clamp mss N` or `clamp mss pmtu`.",
       "oneOf": [
@@ -5467,6 +5983,581 @@
         "reason"
       ]
     },
+    "NftChain": {
+      "description": "A chain: regular or base, and its comment.",
+      "type": "object",
+      "properties": {
+        "comment": {
+          "description": "Its comment.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "family": {
+          "description": "Its table's family.",
+          "$ref": "#/$defs/Family"
+        },
+        "kind": {
+          "description": "What it is, with a base chain's devices sorted. `None` for a base\nchain of a hook or type nlink has no name for.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChainKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "table": {
+          "description": "Its table.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "family",
+        "table",
+        "name",
+        "kind",
+        "comment"
+      ]
+    },
+    "NftChange": {
+      "description": "A change to one object of the ruleset (#708).",
+      "oneOf": [
+        {
+          "description": "A table: its flags and comment.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "table"
+            }
+          },
+          "$ref": "#/$defs/Change",
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "A chain.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "chain"
+            }
+          },
+          "$ref": "#/$defs/Change2",
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "A rule.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "rule"
+            }
+          },
+          "$ref": "#/$defs/Change3",
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "A set or map.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "set"
+            }
+          },
+          "$ref": "#/$defs/Change4",
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Elements of a set or map, added or removed.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "elements"
+            }
+          },
+          "$ref": "#/$defs/Change5",
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "A named object.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "object"
+            }
+          },
+          "$ref": "#/$defs/Change6",
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "A flowtable.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "flowtable"
+            }
+          },
+          "$ref": "#/$defs/Change7",
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "NftElements": {
+      "description": "Elements of a set or map.",
+      "type": "object",
+      "properties": {
+        "elements": {
+          "description": "The elements.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SetElement"
+          }
+        },
+        "family": {
+          "description": "The set's table's family.",
+          "$ref": "#/$defs/Family"
+        },
+        "set": {
+          "description": "The set.",
+          "type": "string"
+        },
+        "table": {
+          "description": "The set's table.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "family",
+        "table",
+        "set",
+        "elements"
+      ]
+    },
+    "NftFlowtable": {
+      "description": "A flowtable.",
+      "type": "object",
+      "properties": {
+        "devices": {
+          "description": "Its devices, sorted.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "family": {
+          "description": "Its table's family.",
+          "$ref": "#/$defs/Family"
+        },
+        "flags": {
+          "description": "`NFT_FLOWTABLE_*`.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "priority": {
+          "description": "Its priority.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "table": {
+          "description": "Its table.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "family",
+        "table",
+        "name",
+        "devices",
+        "priority",
+        "flags"
+      ]
+    },
+    "NftItem": {
+      "description": "A chain, set, flowtable or object a [`Blocked`] entry is about (#708).",
+      "oneOf": [
+        {
+          "description": "A chain.",
+          "type": "object",
+          "properties": {
+            "family": {
+              "description": "Owning family.",
+              "$ref": "#/$defs/Family"
+            },
+            "name": {
+              "description": "Chain name.",
+              "type": "string"
+            },
+            "table": {
+              "description": "Owning table.",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "chain"
+            }
+          },
+          "required": [
+            "type",
+            "table",
+            "family",
+            "name"
+          ]
+        },
+        {
+          "description": "A named set or map.",
+          "type": "object",
+          "properties": {
+            "family": {
+              "description": "Owning family.",
+              "$ref": "#/$defs/Family"
+            },
+            "name": {
+              "description": "Set name.",
+              "type": "string"
+            },
+            "table": {
+              "description": "Owning table.",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "set"
+            }
+          },
+          "required": [
+            "type",
+            "table",
+            "family",
+            "name"
+          ]
+        },
+        {
+          "description": "A flowtable.",
+          "type": "object",
+          "properties": {
+            "family": {
+              "description": "Owning family.",
+              "$ref": "#/$defs/Family"
+            },
+            "name": {
+              "description": "Flowtable name.",
+              "type": "string"
+            },
+            "table": {
+              "description": "Owning table.",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "flowtable"
+            }
+          },
+          "required": [
+            "type",
+            "table",
+            "family",
+            "name"
+          ]
+        },
+        {
+          "description": "A named object.",
+          "type": "object",
+          "properties": {
+            "family": {
+              "description": "Owning family.",
+              "$ref": "#/$defs/Family"
+            },
+            "name": {
+              "description": "Object name.",
+              "type": "string"
+            },
+            "object_type": {
+              "description": "Object type.",
+              "$ref": "#/$defs/ObjectType"
+            },
+            "table": {
+              "description": "Owning table.",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "object"
+            }
+          },
+          "required": [
+            "type",
+            "table",
+            "family",
+            "name",
+            "object_type"
+          ]
+        }
+      ]
+    },
+    "NftObject": {
+      "description": "A named counter, quota, limit, conntrack helper or secmark.",
+      "type": "object",
+      "properties": {
+        "config": {
+          "description": "Its configuration, without what the packet path has done to it.",
+          "$ref": "#/$defs/ObjectConfig"
+        },
+        "family": {
+          "description": "Its table's family.",
+          "$ref": "#/$defs/Family"
+        },
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "table": {
+          "description": "Its table.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "family",
+        "table",
+        "name",
+        "config"
+      ]
+    },
+    "NftRule": {
+      "description": "A rule: where it is, or where it goes, and its body.",
+      "type": "object",
+      "properties": {
+        "chain": {
+          "description": "Its chain.",
+          "type": "string"
+        },
+        "family": {
+          "description": "Its table's family.",
+          "$ref": "#/$defs/Family"
+        },
+        "handle": {
+          "description": "Its kernel handle: where it is. `None` for a rule not yet added.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RuleHandle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "key": {
+          "description": "nlink's key for it, if nlink wrote it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "nft": {
+          "description": "The body as `nft -s list` prints it, or `None` where nlink cannot\nprint it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "placement": {
+          "description": "Where it goes. `None` for a rule that stays where it is.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RulePlacement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "table": {
+          "description": "Its table.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "family",
+        "table",
+        "chain",
+        "key",
+        "handle",
+        "placement",
+        "nft"
+      ]
+    },
+    "NftSet": {
+      "description": "A set or map: its key, data, flags and settings. Its elements are a\nchange of their own, [`NftElements`].",
+      "type": "object",
+      "properties": {
+        "comment": {
+          "description": "Its comment.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "data": {
+          "description": "What a map maps to; `None` for a set.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SetDataType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "family": {
+          "description": "Its table's family.",
+          "$ref": "#/$defs/Family"
+        },
+        "flags": {
+          "description": "Its flags, as the kernel keeps them.",
+          "$ref": "#/$defs/SetFlags"
+        },
+        "gc-interval": {
+          "description": "Its garbage collection interval.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Duration2"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "key-type": {
+          "description": "Its key.",
+          "$ref": "#/$defs/SetKeyType"
+        },
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "policy": {
+          "description": "What the kernel picks its backend for.",
+          "$ref": "#/$defs/SetPolicy"
+        },
+        "size": {
+          "description": "Its size, if it has one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "statements": {
+          "description": "The statements each element carries.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ElementStatement"
+          }
+        },
+        "table": {
+          "description": "Its table.",
+          "type": "string"
+        },
+        "timeout": {
+          "description": "Its elements' default timeout.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Duration2"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unread": {
+          "description": "What nlink could not read: an object type or a statement it has no\nname for.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "family",
+        "table",
+        "name",
+        "key-type",
+        "flags",
+        "data",
+        "size",
+        "timeout",
+        "gc-interval",
+        "policy",
+        "statements",
+        "comment",
+        "unread"
+      ]
+    },
+    "NftTable": {
+      "description": "A table: its flags and comment. Its contents are changes of their own.",
+      "type": "object",
+      "properties": {
+        "comment": {
+          "description": "Its comment.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "family": {
+          "description": "Its family.",
+          "$ref": "#/$defs/Family"
+        },
+        "flags": {
+          "description": "`NFT_TABLE_F_*`.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "family",
+        "name",
+        "flags",
+        "comment"
+      ]
+    },
     "NftablesChange": {
       "description": "A change to the per-node nftables ruleset (firewall + NAT).\n\n`desired_*` carries the rules that should be live after\nreconcile; `None` means \"remove the ruleset entirely on this\nnode\" (translates to `del_table`).",
       "type": "object",
@@ -5506,108 +6597,21 @@
       ]
     },
     "NftablesDiff": {
-      "description": "The result of comparing a declared [`NftablesConfig`] against\nthe kernel's current state. Apply via\n[`Self::apply`](super::NftablesDiff::apply).\n\n`is_empty()` returns true when declared and current already\nagree (idempotent reapply).",
+      "description": "The result of comparing a declared [`NftablesConfig`] against the\nkernel's current state (#708): its [`changes`](Self::changes), each with\nwhat the kernel holds and what it will hold, and what it cannot or will\nnot do, [`blocked`](Self::blocked). Apply with\n[`apply`](Self::apply).\n\n`is_empty()` returns true when declared and current already agree\n(idempotent reapply).",
       "type": "object",
       "properties": {
-        "chains-to-add": {
-          "description": "Chains to create — (owning table, owning family, chain).",
+        "blocked": {
+          "description": "What the diff cannot do, or leaves alone so as not to break what it\ndoes not own (#708): table flags the kernel will not change, a\nrecreate that would delete rules nlink did not write, an item one of\nthose rules uses. One that [`refuses`](Blocked::refuses) makes the\napply fail before it writes anything, and counts as a change; the\nothers are not changes, and nothing in them is sent. The apply's\nerror is the first that refuses, in the order the diff found them;\nthe diff's `Display` says every one.",
           "type": "array",
           "items": {
-            "type": "array",
-            "maxItems": 3,
-            "minItems": 3,
-            "prefixItems": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/Family"
-              },
-              {
-                "$ref": "#/$defs/DeclaredChain"
-              }
-            ]
+            "$ref": "#/$defs/Blocked"
           }
         },
-        "chains-to-delete": {
-          "description": "Chains to delete — (table, family, name).",
+        "changes": {
+          "description": "The diff (#708): each table, chain, rule, set, element batch,\nobject and flowtable it adds, removes, updates or recreates, with\nwhat the kernel holds and what it will hold. A recreate carries what\ngoes with it. [`apply`](Self::apply) sends a batch plan kept\nprivate. Every build checks that these changes are that plan, each\nentry once: a debug build panics on a miss, a release build logs it.",
           "type": "array",
           "items": {
-            "type": "array",
-            "maxItems": 3,
-            "minItems": 3,
-            "prefixItems": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/Family"
-              },
-              {
-                "type": "string"
-              }
-            ]
-          }
-        },
-        "chains-to-modify": {
-          "description": "Chains whose policy drifted — (owning table, owning family, chain).\nApplied as `NFT_MSG_NEWCHAIN`, which the kernel treats as an update\nfor an existing chain. What an update cannot change is in\n[`Self::chains_to_recreate`].\n\nUntil 0.25 a chain's diff identity was its **name alone**: none of\n`hook` / `priority` / `policy` / `chain_type` / `device` were compared,\neven though `DeclaredChain` carries all five and `ChainInfo` parses all\nfive back. So flipping a declared firewall from `policy(Accept)` to\n`policy(Drop)` produced an empty diff and a no-op apply — the operator\nbelieved the box was default-deny while it stayed default-allow (#200).",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "maxItems": 3,
-            "minItems": 3,
-            "prefixItems": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/Family"
-              },
-              {
-                "$ref": "#/$defs/DeclaredChain"
-              }
-            ]
-          }
-        },
-        "chains-to-recreate": {
-          "description": "Chains to delete and create again, with their declared rules, in\n[`Self::rules_to_move`] and [`Self::rules_to_add`] (#478). A refused\none ([`ChainRecreate::is_refused`]) makes the apply fail instead.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ChainRecreate"
-          }
-        },
-        "flowtables-to-add": {
-          "description": "Flowtables to add.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/DeclaredFlowtable"
-          }
-        },
-        "flowtables-to-delete": {
-          "description": "Flowtables to delete — (family, table, name). A flowtable also in\n[`Self::flowtables_to_add`] is recreated, its rules moved out of the\nway first.",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "maxItems": 3,
-            "minItems": 3,
-            "prefixItems": [
-              {
-                "$ref": "#/$defs/Family"
-              },
-              {
-                "type": "string"
-              },
-              {
-                "type": "string"
-              }
-            ]
-          }
-        },
-        "flowtables-to-update": {
-          "description": "Flowtables whose devices or counter flag changed, updated in place\n(#479).",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/FlowtableUpdate"
+            "$ref": "#/$defs/NftChange"
           }
         },
         "generation": {
@@ -5618,327 +6622,11 @@
           ],
           "format": "uint32",
           "minimum": 0
-        },
-        "kept-in-use": {
-          "description": "Undeclared chains, sets, flowtables and objects the diff does **not** delete,\nbecause a rule that stays still uses them — see [`KeptInUse`]. Not a\nchange: [`is_empty`](Self::is_empty) and\n[`change_count`](Self::change_count) ignore it, and nothing in it is\nsent to the kernel.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/KeptInUse"
-          }
-        },
-        "objects-to-add": {
-          "description": "Stateful objects to create — (owning table, owning family, object).\nA changed limit is here and in `objects_to_delete`.",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "maxItems": 3,
-            "minItems": 3,
-            "prefixItems": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/Family"
-              },
-              {
-                "$ref": "#/$defs/DeclaredObject"
-              }
-            ]
-          }
-        },
-        "objects-to-delete": {
-          "description": "Stateful objects to delete — (table, family, name, type).",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "maxItems": 4,
-            "minItems": 4,
-            "prefixItems": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/Family"
-              },
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/ObjectType"
-              }
-            ]
-          }
-        },
-        "objects-to-update": {
-          "description": "Quotas whose size or `over` changed — updated in place, keeping\nwhat they have used.",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "maxItems": 3,
-            "minItems": 3,
-            "prefixItems": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/Family"
-              },
-              {
-                "$ref": "#/$defs/DeclaredObject"
-              }
-            ]
-          }
-        },
-        "rules-to-add": {
-          "description": "Rules to add, each with its placement in the chain.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/RuleAdd"
-          }
-        },
-        "rules-to-delete": {
-          "description": "Rules to delete — `(table, family, chain, kernel_handle)`.\nChain is carried explicitly because the kernel rejects a\n`NFT_MSG_DELRULE` with an empty `NFTA_RULE_CHAIN` even when\n`NFTA_RULE_HANDLE` is supplied (returns `ENOENT`); the\nearlier (table, family, handle) shape relied on a kernel\nbehavior that doesn't actually hold. Plan 178 closeout.",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "maxItems": 4,
-            "minItems": 4,
-            "prefixItems": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/Family"
-              },
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/RuleHandle"
-              }
-            ]
-          }
-        },
-        "rules-to-move": {
-          "description": "Declared rules to delete and put back in place.\n\nRules installed out of declared order move to their place. And a set\nwhose key type or flags changed is deleted and recreated, as is a\nlimit object whose rate changed; the kernel refuses to delete either\nwhile a rule still references it (`EBUSY`). So every keyed rule\nreferencing it is deleted ahead of it and re-added after the new\none, immediately before the next rule in the chain that survives, so\nchain order — which is policy — is unchanged.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/RuleMove"
-          }
-        },
-        "rules-to-replace": {
-          "description": "Rules to replace in-place. Each entry is\n`(table, family, chain, kernel_handle, replacement)` —\nemits `NFT_MSG_NEWRULE | NLM_F_REPLACE | NFTA_RULE_HANDLE`\nso the kernel atomically swaps the rule body at that\nhandle (preserves position, no flush).\n\nPopulated by [`NftablesConfig::diff`] when a declared\nkeyed rule matches a kernel rule by `NFTA_RULE_USERDATA`\ncomment but the expression bytes differ. Plan 157b v2.",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "maxItems": 5,
-            "minItems": 5,
-            "prefixItems": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/Family"
-              },
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/RuleHandle"
-              },
-              {
-                "$ref": "#/$defs/DeclaredRule2"
-              }
-            ]
-          }
-        },
-        "set-elements-to-add": {
-          "description": "Set elements to add: the declared elements not yet in the kernel\nset.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/SetElementsChange"
-          }
-        },
-        "set-elements-to-remove": {
-          "description": "Set elements to remove: the kernel elements not declared (full\nelement reconcile).",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/SetElementsChange"
-          }
-        },
-        "sets-to-add": {
-          "description": "Sets to create — (owning table, owning family, set).",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "maxItems": 3,
-            "minItems": 3,
-            "prefixItems": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/Family"
-              },
-              {
-                "$ref": "#/$defs/DeclaredSet"
-              }
-            ]
-          }
-        },
-        "sets-to-delete": {
-          "description": "Sets to delete — (table, family, name).",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "maxItems": 3,
-            "minItems": 3,
-            "prefixItems": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/Family"
-              },
-              {
-                "type": "string"
-              }
-            ]
-          }
-        },
-        "sets-to-update": {
-          "description": "Sets whose declared size, timeout or GC interval differs from the\nkernel's — (owning table, owning family, set). Applied in place\n(`NFT_MSG_NEWSET` without `NLM_F_EXCL`, kernel 6.5+), keeping the\nset's elements and the rules bound to it, in a batch\n[`apply`](Self::apply) commits ahead of everything else: the kernel\nchecks element adds against the size the set has *before* the\ncommit, so a grown set could not take its new elements in the same\nbatch. An update overwrites the timeout and GC interval with what it\ncarries, so the set here carries the kernel's where the declaration\nhas none.",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "maxItems": 3,
-            "minItems": 3,
-            "prefixItems": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/$defs/Family"
-              },
-              {
-                "$ref": "#/$defs/DeclaredSet"
-              }
-            ]
-          }
-        },
-        "tables-refused": {
-          "description": "Table flag changes the kernel refuses on a live table — `(family,\nname, why)`. Only `NFT_TABLE_F_DORMANT` can change; turning persist\nor owner on or off needs the table deleted with everything in it,\nwhich the diff will not do. The apply fails on the first, with\n[`ErrorDetail::NotSupported`](crate::ErrorDetail::NotSupported) (#479).",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "maxItems": 3,
-            "minItems": 3,
-            "prefixItems": [
-              {
-                "$ref": "#/$defs/Family"
-              },
-              {
-                "type": "string"
-              },
-              {
-                "type": "string"
-              }
-            ]
-          }
-        },
-        "tables-to-add": {
-          "description": "Tables to create.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/DeclaredTable"
-          }
-        },
-        "tables-to-delete": {
-          "description": "Tables to delete (family, name).",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "maxItems": 2,
-            "minItems": 2,
-            "prefixItems": [
-              {
-                "$ref": "#/$defs/Family"
-              },
-              {
-                "type": "string"
-              }
-            ]
-          }
-        },
-        "tables-to-modify": {
-          "description": "Tables whose flags drifted — `(family, name, declared_flags)`. Applied\nas `NFT_MSG_NEWTABLE`, which the kernel treats as an update.\n\nSeparate from [`Self::tables_to_add`] because every table in *that*\ncollection has its whole contents (chains, rules, sets, flowtables)\ninstalled wholesale — routing an existing table through it would re-add\neverything it already has.\n\n`DeclaredTable::flags` (`.persist(true)`, `NFT_TABLE_F_DORMANT`) used to\nbe applied only on create, so toggling a flag on an existing table\nproduced an empty diff and a no-op apply (#208).",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "maxItems": 3,
-            "minItems": 3,
-            "prefixItems": [
-              {
-                "$ref": "#/$defs/Family"
-              },
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer",
-                "format": "uint32",
-                "minimum": 0
-              }
-            ]
-          }
-        },
-        "tables-to-recreate": {
-          "description": "Tables deleted and created again, with everything declared in them —\n`(family, name, why)`: a changed comment, with\n[`NftDiffOptions::recreate_on_comment_change`] (#703). Each is also\nin [`Self::tables_to_add`].",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "maxItems": 3,
-            "minItems": 3,
-            "prefixItems": [
-              {
-                "$ref": "#/$defs/Family"
-              },
-              {
-                "type": "string"
-              },
-              {
-                "type": "string"
-              }
-            ]
-          }
         }
       },
       "required": [
-        "tables-to-add",
-        "tables-to-modify",
-        "tables-to-delete",
-        "tables-refused",
-        "tables-to-recreate",
-        "chains-to-add",
-        "chains-to-modify",
-        "chains-to-delete",
-        "chains-to-recreate",
-        "rules-to-add",
-        "rules-to-delete",
-        "rules-to-replace",
-        "rules-to-move",
-        "flowtables-to-add",
-        "flowtables-to-delete",
-        "flowtables-to-update",
-        "sets-to-add",
-        "sets-to-delete",
-        "sets-to-update",
-        "set-elements-to-add",
-        "set-elements-to-remove",
-        "objects-to-add",
-        "objects-to-update",
-        "objects-to-delete",
-        "kept-in-use",
+        "blocked",
+        "changes",
         "generation"
       ]
     },
@@ -6053,6 +6741,46 @@
             "type": "string"
           }
         }
+      ]
+    },
+    "PeerChanges": {
+      "description": "What changed on a single peer. Plan 196.",
+      "type": "object",
+      "properties": {
+        "allowed-ips-added": {
+          "description": "The prefixes declared that the peer does not hold (#529).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AllowedIp"
+          }
+        },
+        "allowed-ips-removed": {
+          "description": "The prefixes the peer holds that are no longer declared (#529).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AllowedIp"
+          }
+        },
+        "allowed-ips-set": {
+          "type": "boolean"
+        },
+        "endpoint-set": {
+          "type": "boolean"
+        },
+        "persistent-keepalive-set": {
+          "type": "boolean"
+        },
+        "preshared-key-set": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "preshared-key-set",
+        "endpoint-set",
+        "persistent-keepalive-set",
+        "allowed-ips-set",
+        "allowed-ips-added",
+        "allowed-ips-removed"
       ]
     },
     "Percent": {
@@ -6273,7 +7001,7 @@
       "additionalProperties": false
     },
     "Priority": {
-      "description": "Chain priority (determines ordering).",
+      "description": "Chain priority (determines ordering).\n\nTwo priorities are equal when they are the same number:\n`Priority::Custom(0) == Priority::Filter`.",
       "oneOf": [
         {
           "type": "string",
@@ -7051,72 +7779,11 @@
         }
       ]
     },
-    "RuleAdd": {
-      "description": "A declared rule to add, and where it goes.",
-      "type": "object",
-      "properties": {
-        "placement": {
-          "description": "Where it goes.",
-          "$ref": "#/$defs/RulePlacement"
-        },
-        "rule": {
-          "description": "The rule.",
-          "$ref": "#/$defs/DeclaredRule2"
-        }
-      },
-      "required": [
-        "rule",
-        "placement"
-      ]
-    },
     "RuleHandle": {
       "description": "Kernel-assigned rule handle (`NFTA_RULE_HANDLE`).",
       "type": "integer",
       "format": "uint64",
       "minimum": 0
-    },
-    "RuleMove": {
-      "description": "A rule the diff deletes and re-inserts, keeping (or restoring) its place\nin the chain.",
-      "type": "object",
-      "properties": {
-        "chain": {
-          "description": "Chain.",
-          "type": "string"
-        },
-        "family": {
-          "description": "Owning family.",
-          "$ref": "#/$defs/Family"
-        },
-        "from": {
-          "description": "Kernel handle of the rule being deleted.",
-          "$ref": "#/$defs/RuleHandle"
-        },
-        "placement": {
-          "description": "Where the re-inserted rule goes.",
-          "$ref": "#/$defs/RulePlacement"
-        },
-        "reason": {
-          "description": "Why it moves.",
-          "$ref": "#/$defs/MoveReason"
-        },
-        "rule": {
-          "description": "The rule to re-insert.",
-          "$ref": "#/$defs/DeclaredRule2"
-        },
-        "table": {
-          "description": "Owning table.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "table",
-        "family",
-        "chain",
-        "from",
-        "placement",
-        "rule",
-        "reason"
-      ]
     },
     "RulePlacement": {
       "description": "Where an added or moved rule goes in its chain. Rule order is policy\n(first match wins), so the diff says exactly where each rule lands.",
@@ -7124,135 +7791,34 @@
         {
           "description": "At the end of the chain.",
           "type": "string",
-          "const": "Append"
+          "const": "append"
         },
         {
           "description": "Immediately before the rule with this handle.",
           "type": "object",
           "properties": {
-            "Before": {
+            "before": {
               "$ref": "#/$defs/RuleHandle"
             }
           },
           "additionalProperties": false,
           "required": [
-            "Before"
+            "before"
           ]
         },
         {
           "description": "Immediately after the rule with this handle.",
           "type": "object",
           "properties": {
-            "After": {
+            "after": {
               "$ref": "#/$defs/RuleHandle"
             }
           },
           "additionalProperties": false,
           "required": [
-            "After"
+            "after"
           ]
         }
-      ]
-    },
-    "Set": {
-      "description": "Set builder.",
-      "type": "object",
-      "properties": {
-        "comment": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "data_type": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SetDataType"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "family": {
-          "$ref": "#/$defs/Family"
-        },
-        "flags": {
-          "$ref": "#/$defs/SetFlags"
-        },
-        "gc_interval": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Duration2"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "key_type": {
-          "$ref": "#/$defs/SetKeyType"
-        },
-        "name": {
-          "type": "string"
-        },
-        "owned": {
-          "description": "Tag it as the declarative apply's own (#527).",
-          "type": "boolean"
-        },
-        "policy": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SetPolicy"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "size": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0
-        },
-        "statements": {
-          "description": "What every element gets (#703).",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ElementStatement"
-          }
-        },
-        "table": {
-          "type": "string"
-        },
-        "timeout": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Duration2"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "table",
-        "name",
-        "family",
-        "key_type",
-        "flags",
-        "size",
-        "timeout",
-        "gc_interval",
-        "data_type",
-        "comment",
-        "owned",
-        "policy",
-        "statements"
       ]
     },
     "SetDataType": {
@@ -7454,42 +8020,6 @@
         }
       ]
     },
-    "SetElementMode": {
-      "description": "How a declared set's elements are reconciled with the kernel's.",
-      "oneOf": [
-        {
-          "description": "The set holds the declared elements and nothing else: undeclared\nelements are removed. The default for a set nothing else writes to.",
-          "type": "string",
-          "const": "exact"
-        },
-        {
-          "description": "The declared elements are added if missing; elements the declaration\ndoes not name are left. The default for a dynamic set\n(`NFT_SET_EVAL`) and one whose elements time out (`NFT_SET_TIMEOUT`):\ntheir elements come from the packet path, and removing them on every\napply would undo what the rules did.",
-          "type": "string",
-          "const": "ensure"
-        }
-      ]
-    },
-    "SetElementsChange": {
-      "description": "Elements to add to, or remove from, one set — with the [`Set`] they\nbelong to, since how an element is written depends on the set.",
-      "type": "object",
-      "properties": {
-        "elements": {
-          "description": "The elements.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/SetElement"
-          }
-        },
-        "set": {
-          "description": "The set.",
-          "$ref": "#/$defs/Set"
-        }
-      },
-      "required": [
-        "set",
-        "elements"
-      ]
-    },
     "SetFlags": {
       "description": "Set flags — `NFTA_SET_FLAGS`, the `NFT_SET_*` bits, in the shape of\n[`CtState`] and [`TcpFlags`]. Combine with `|`.",
       "type": "integer",
@@ -7578,6 +8108,37 @@
           "additionalProperties": false,
           "required": [
             "concat"
+          ]
+        },
+        {
+          "description": "A key type nlink has no name for, as the kernel reports it (#708):\nnft's datatype id and the key's length. Read back from a set nft\nmade (`type ifname`); declared, it is sent as it is.",
+          "type": "object",
+          "properties": {
+            "other": {
+              "type": "object",
+              "properties": {
+                "len": {
+                  "description": "The key's length in bytes, `NFTA_SET_KEY_LEN`.",
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "type_id": {
+                  "description": "The nft datatype id, `NFTA_SET_KEY_TYPE`.",
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "type_id",
+                "len"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "other"
           ]
         }
       ]
@@ -7754,21 +8315,6 @@
         "added",
         "changed",
         "removed"
-      ]
-    },
-    "TableMode": {
-      "description": "Who else may put things in a declared table (#527).",
-      "oneOf": [
-        {
-          "description": "The config owns the table: a chain, set, object or flowtable it does\nnot declare is deleted. Rules another tool wrote are still left\nalone, unless the chain is\n[`exclusive`](DeclaredChainBuilder::exclusive).",
-          "type": "string",
-          "const": "owned"
-        },
-        {
-          "description": "Others put things in the table too: of the chains, sets and objects\nthe config does not declare, only the ones nlink's apply created —\nit tags them in their userdata — are deleted, and no undeclared\nflowtable is (a flowtable has no userdata to tag).",
-          "type": "string",
-          "const": "shared"
-        }
       ]
     },
     "TbfRepr": {
@@ -8260,6 +8806,40 @@
           "type": "string",
           "const": "dot1ad"
         }
+      ]
+    },
+    "WireguardConfigDiff": {
+      "description": "Plan 196 — diff between a [`WireguardConfig`] and the\ncurrent kernel state.\n\n`#[non_exhaustive]` since 0.24 (#165): new change categories\n(e.g. device bootstrap, #169) can appear without a major bump.\nConstruct via [`WireguardConfig::diff`], not literally.\n\nWith the `serde` feature the diff serializes to JSON for typed\ndrift reporting. **No key material is ever serialized**: public\nkeys render as base64, preshared/private keys as presence\nbooleans.",
+      "type": "object",
+      "properties": {
+        "devices-to-add": {
+          "description": "Declared devices that don't exist in the kernel (#169).\nCreate them via [`WireguardConfig::ensure_devices`] (or a\n`NetworkConfig`/`Stack` declaring the links), then diff again.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "devices-to-modify": {
+          "description": "Devices that need at least one mutation: device-\nlevel field change OR a peer add/modify/remove.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/DeviceChanges"
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "devices-to-modify",
+        "devices-to-add"
       ]
     },
     "XmitHashPolicy": {

@@ -2,17 +2,7 @@
 
 use super::{DryRunReport, ValidateReport};
 
-/// The schema of what nlink-lab *prints* as `T`: generated for the
-/// serialize contract, so a field it leaves out when empty
-/// (`skip_serializing_if`) is not required. `schema_for!` describes what
-/// deserializes, which required every elided layer of the `apply --check`
-/// envelope.
-pub fn output_schema_for<T: schemars::JsonSchema>() -> schemars::Schema {
-    schemars::generate::SchemaSettings::draft2020_12()
-        .for_serialize()
-        .into_generator()
-        .into_root_schema_for::<T>()
-}
+pub use nlink_lab::ops::view::output_schema_for;
 
 /// Every JSON schema `docs-gen --schemas` writes: file stem → schema.
 pub fn all_schemas() -> Vec<(&'static str, schemars::Schema)> {

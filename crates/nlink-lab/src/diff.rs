@@ -437,10 +437,8 @@ pub struct LayeredDiff {
         std::collections::BTreeMap<String, nlink::netlink::nftables::config::NftablesDiff>,
     /// nlink's `WireguardConfigDiff` per node: a peer, key, endpoint or
     /// allowed-ips that differs from the declared tunnel. Keys never
-    /// appear in it, only public keys and presence flags. Free-form in
-    /// the schema until nlink's matches its JSON (marcpardo/nlink#876).
+    /// appear in it, only public keys and presence flags.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    #[schemars(with = "std::collections::BTreeMap<String, serde_json::Value>")]
     pub wireguard: std::collections::BTreeMap<String, WireguardConfigDiff>,
 }
 

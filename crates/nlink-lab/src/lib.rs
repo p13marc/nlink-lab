@@ -94,6 +94,8 @@ pub mod pty;
 pub mod render;
 pub mod running;
 pub mod scenario;
+#[cfg(test)]
+pub(crate) mod schema_check;
 pub mod state;
 pub mod subnet_pool;
 pub mod templates;

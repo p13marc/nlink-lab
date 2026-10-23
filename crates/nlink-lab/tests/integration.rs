@@ -9,6 +9,19 @@ use nlink_lab::lab_test;
 #[allow(unused_imports)]
 use nlink_lab::{Lab, Op, RunningLab};
 
+/// The JSON Schema check `src/` tests use (nlink's, see the module doc).
+#[allow(dead_code)]
+#[path = "../src/schema_check.rs"]
+mod schema_check;
+
+/// Panics unless the `verify --json` report of `layered` matches the
+/// schema `docs-gen` publishes for it.
+fn assert_report_matches_schema(lab: &str, layered: &nlink_lab::diff::LayeredDiff) {
+    use nlink_lab::ops::view::{DryRunReport, output_schema_for};
+    let report = DryRunReport::new(lab, layered, &[]);
+    schema_check::assert_matches_schema(&report, output_schema_for::<DryRunReport<'static>>());
+}
+
 /// Check whether a kernel module is available (loaded or loadable).
 fn has_kernel_module(name: &str) -> bool {
     // Check if already loaded
@@ -889,13 +902,13 @@ async fn nftables_foreign_rule_survives_apply() {
     lab.destroy().await.expect("destroy failed");
 }
 
-// Plan 158a — editing a rule in place must reuse `rules_to_replace`
-// (kernel-side `NEWRULE | NLM_F_REPLACE | NFTA_RULE_HANDLE`),
-// not delete+rebuild. We can't probe the wire from the test, but
-// we CAN assert that unchanged rules keep their handles across an
-// edit — the diff path only re-issues handles for actually
-// changed rules. Combined with the foreign-rule test, this
-// guards the "atomic in-place replace" claim of Plan 158a.
+// Plan 158a — editing a rule in place must be a replace (nlink's
+// `Change::Update` with no placement: kernel-side `NEWRULE |
+// NLM_F_REPLACE | NFTA_RULE_HANDLE`), not delete+rebuild. The test
+// asserts that unchanged rules keep their handles across an edit —
+// the diff path only re-issues handles for actually changed rules.
+// Combined with the foreign-rule test, this guards the "atomic
+// in-place replace" claim of Plan 158a.
 #[tokio::test]
 async fn nftables_rule_edit_replaces_in_place() {
     if unsafe { libc::geteuid() } != 0 {
@@ -2209,11 +2222,41 @@ async fn wireguard_config_reapply_is_zero_ops() {
         layered.to_string().contains("WireguardConfigDiff (gw-a"),
         "{layered}"
     );
+    // its public key is base64 in the JSON, and so in the schema (nlink #876)
+    assert_report_matches_schema(lab.name(), &layered);
     nlink_lab::apply(&mut lab, &topo)
         .await
         .expect("apply after a hand-removed peer failed");
     let back = lab.exec("gw-a", "wg", &["show", "wg0", "peers"]).unwrap();
     assert_eq!(back.stdout.trim(), peer, "the peer is not restored");
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo)
+        .await
+        .expect("compute_layered_diff failed");
+    assert!(layered.is_empty(), "not converged:\n{layered}");
+
+    // A peer changed by hand is a `peers-to-modify` entry, whose keepalive
+    // and preshared-key flag nlink 0.32's schema described as a `Duration`
+    // and a key (nlink #876).
+    let set = lab
+        .exec(
+            "gw-a",
+            "wg",
+            &["set", "wg0", "peer", &peer, "persistent-keepalive", "17"],
+        )
+        .unwrap();
+    assert_eq!(set.exit_code, 0, "{}", set.stderr);
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo)
+        .await
+        .expect("compute_layered_diff failed");
+    let json = serde_json::to_value(&layered.wireguard).unwrap();
+    assert!(
+        json.to_string().contains("peers-to-modify"),
+        "the keepalive should be a modified peer: {json:#}"
+    );
+    assert_report_matches_schema(lab.name(), &layered);
+    nlink_lab::apply(&mut lab, &topo)
+        .await
+        .expect("apply after a hand-changed keepalive failed");
     let layered = nlink_lab::compute_layered_diff(&lab, &topo)
         .await
         .expect("compute_layered_diff failed");

@@ -369,12 +369,15 @@ pub fn node_stats(running: &RunningLab, only: Option<&str>) -> Vec<NodeStats> {
 /// The `apply --dry-run --json` / `verify --json`
 /// envelope (schema v3, `docs/json-schemas/layered-diff.v3.schema.json`).
 #[derive(serde::Serialize, schemars::JsonSchema)]
-#[schemars(title = "nlink-lab apply --dry-run / --check / verify --json (v3)")]
+#[schemars(title = "nlink-lab apply --dry-run / verify --json (v3)")]
 pub struct DryRunReport<'a> {
     /// Schema marker: `3`. v3 dropped the v1 `diff` / `layered_summary`
     /// fields (Plan 160 / 0.7.0) — use `topology` / `network` /
     /// `nftables` / `wireguard` / `removals`. `topology` and `wireguard`
-    /// were added later and are additive, so the marker did not move.
+    /// were added later and are additive, so the marker did not move. The
+    /// `network` and `nftables` values are nlink's own diffs, whose shape
+    /// follows nlink (0.33 made `nftables` `{blocked, changes, generation}`);
+    /// the envelope did not change, so neither did the marker.
     pub schema_version: u32,
     pub lab: &'a str,
     pub no_op: bool,
@@ -395,11 +398,8 @@ pub struct DryRunReport<'a> {
     /// Typed per-node `WireguardConfigDiff`: peers, keys, endpoints and
     /// allowed-ips that differ from the declared tunnels (public keys
     /// only; private and preshared keys as presence flags). Empty map
-    /// elided. Additive, so the marker stays `3`. Free-form in the
-    /// schema: nlink 0.32 derives one that does not match the JSON (keys
-    /// as byte arrays, presence flags as keys; marcpardo/nlink#876).
+    /// elided. Additive, so the marker stays `3`.
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    #[schemars(with = "std::collections::BTreeMap<String, serde_json::Value>")]
     pub wireguard: &'a std::collections::BTreeMap<String, crate::diff::WireguardConfigDiff>,
     /// Removal ops from the plan diff (deleted nodes, links, VRF-table
     /// routes, …), one description per op. Elided when empty.
@@ -440,6 +440,18 @@ impl<'a> DryRunReport<'a> {
         self.ops = ops;
         self
     }
+}
+
+/// The schema of what nlink-lab *prints* as `T` (`docs-gen --schemas`,
+/// `docs/json-schemas/`): generated for the serialize contract, so a field
+/// it leaves out when empty (`skip_serializing_if`) is not required.
+/// `schema_for!` describes what deserializes, which required every elided
+/// layer of the dry-run envelope.
+pub fn output_schema_for<T: schemars::JsonSchema>() -> schemars::Schema {
+    schemars::generate::SchemaSettings::draft2020_12()
+        .for_serialize()
+        .into_generator()
+        .into_root_schema_for::<T>()
 }
 
 /// The plan's removals and its other work, one description per op: what
@@ -515,6 +527,93 @@ fn event_line(line: &str, kinds: &[String]) -> Option<serde_json::Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The `verify --json` / `apply --dry-run --json` report matches the
+    /// schema `docs-gen` publishes for it, every layer filled in. The
+    /// WireGuard layer's schema did not match its JSON until nlink 0.33
+    /// (marcpardo/nlink#876), and nlink 0.33 reshaped the nftables layer
+    /// (`{blocked, changes, generation}`); `integration.rs` checks a real
+    /// WireGuard peer diff the same way.
+    #[test]
+    fn a_dry_run_report_matches_its_schema() {
+        use crate::schema_check::{assert_every_root_property_populated, assert_matches_schema};
+        use nlink::netlink::nftables::config::NftDiffOptions;
+
+        let parse = |src: &str| crate::parser::parse(src).unwrap();
+        let before = parse(
+            r#"lab "s"
+node fw {
+  firewall {
+    set mgmt port [22, 8000-8999]
+    input policy accept {
+      accept tcp dport 22
+      drop tcp dport 23
+      reject with tcp-reset tcp dport @mgmt
+      accept udp dport 53
+      accept tcp dport 443
+    }
+  }
+}
+"#,
+        );
+        // a policy, three rules edited in place, one gone, one added, and
+        // a set whose key changes (a recreate, with its cascade)
+        let after = parse(
+            r#"lab "s"
+node fw {
+  firewall {
+    set mgmt ipv4 [10.0.0.1]
+    input policy drop {
+      accept tcp dport 2222
+      drop tcp dport 24
+      drop src @mgmt
+      accept udp dport 5353
+    }
+  }
+}
+"#,
+        );
+        let plan = |t: &crate::types::Topology| {
+            let fw = t.effective_firewall(&t.nodes["fw"]);
+            crate::deploy::plan::nftables::topology_to_nftables_config(fw.as_deref(), None).unwrap()
+        };
+        let nftables = plan(&after)
+            .diff_against(&plan(&before), &NftDiffOptions::default())
+            .unwrap();
+        assert!(nftables.sets().next().is_some(), "{nftables}");
+
+        let mut network = crate::diff::ConfigDiff::default();
+        network.links_missing.push("eth9".into());
+        network.vrf_strict_mode = Some(true);
+        let mut wireguard = crate::diff::WireguardConfigDiff::default();
+        wireguard.devices_to_add.push("wg0".into());
+        let layered = crate::diff::LayeredDiff {
+            topology: crate::diff::diff_topologies(&before, &after),
+            network: [("fw".to_string(), network)].into(),
+            nftables: [("fw".to_string(), nftables)].into(),
+            wireguard: [("fw".to_string(), wireguard)].into(),
+        };
+        let removals = ["remove node old".to_string()];
+        let ops = ["restart process on fw".to_string()];
+        let report = DryRunReport::new("s", &layered, &removals).with_ops(&ops);
+
+        let schema = output_schema_for::<DryRunReport<'static>>();
+        assert_every_root_property_populated(&report, schema.clone());
+        assert_matches_schema(&report, schema.clone());
+
+        // the check reaches into nlink's layers: a change it cannot be fails
+        let mut bad = serde_json::to_value(&report).unwrap();
+        bad["nftables"]["fw"]["changes"][0]["op"] = "rename".into();
+        bad["wireguard"]["fw"]["devices-to-add"][0] = 7.into();
+        let errors = crate::schema_check::violations(&serde_json::to_value(schema).unwrap(), &bad);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("$.nftables.fw.changes[0]"))
+                && errors.iter().any(|e| e.contains("$.wireguard.fw")),
+            "{errors:?}"
+        );
+    }
 
     #[test]
     fn subnets_are_network_addresses() {

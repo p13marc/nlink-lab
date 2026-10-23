@@ -141,20 +141,20 @@ releases; breaking changes are flagged in the CHANGELOG with a
 migration note. Built on
 [`nlink`](https://git.marcpardo.eu/marcpardo/nlink) 0.33.
 
-Current release: **0.14.0** (2026-10-18) — the redesign release.
-The CLI is regrouped into 39 commands with one vocabulary (`-L`
-or a current lab, durations with units, `--format`, live
-progress, exit 64 for usage errors); state lives in one root,
-`/var/lib/nlink-lab`; a host daemon, `nlink-labd`, serves every
-lab over a unix socket and Zenoh; and the desktop app edits,
-deploys and changes labs through it. It breaks scripts on
-purpose: the CHANGELOG's Migration section maps every old command
-and flag to its new form, and a removed command says what
-replaced it.
+Current release: **0.15.0** (2026-10-23) — the firewall and
+conntrack release. NLL's firewall matches `tcp flags`, `ct status`,
+`ct direction`, `ct zone`, `pkttype` and `l4proto`, and compares
+ports, marks and zones with `< > <= >=`; `nlink-lab conntrack`
+lists and flushes a lab's tracked flows (the daemon serves it too);
+and an `apply` that changes a NAT rule moves the flows it matched to
+the new translation. Built on nlink 0.33. The `nftables` part of
+`verify --json` and `apply --dry-run --json` changed shape: the
+CHANGELOG's Migration section has it.
 
-0.13.0 was the loss release (`loss-correlation` lowers a small
-loss rate; netem's loss models write bursty loss). Earlier
-releases are in the [CHANGELOG](CHANGELOG.md), newest first.
+0.14.0 was the redesign release (one CLI vocabulary, one state
+root, the `nlink-labd` host daemon, a desktop app that changes
+labs). Earlier releases are in the [CHANGELOG](CHANGELOG.md),
+newest first.
 
 ## Requirements
 

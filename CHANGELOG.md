@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-23
+
+The firewall and conntrack release. NLL's firewall gains `tcp flags`,
+`ct status`, `ct direction`, `ct zone`, `pkttype`, `l4proto` and the
+ordered compares `< > <= >=` (#302). A new command,
+`nlink-lab conntrack [NODE]`, lists a lab's tracked flows and
+`--flush`es them by a query, and the daemon serves both (API 1.1).
+An `apply` that changes a NAT rule now deletes the flows that rule
+matched, so they take the new translation (#303). nftables diffs
+show each change as nft writes it, and what nlink would refuse is
+refused before anything changes (#300). Three things change for a
+script or a running lab: the `nftables` part of `verify --json` and
+`apply --dry-run --json`, the conntrack cleanup on `apply`
+(`--keep-conntrack` keeps the old behaviour), and how a port range is
+installed. The Migration section has the details.
+
 Built on **nlink 0.33** (#297). It finished nlink's nftables redesign
 (nlink #708) and fixed two things nlink-lab reported: the reconciles
 could not be spawned (nlink #879, #877 here), and the WireGuard diff's

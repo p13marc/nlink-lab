@@ -46,6 +46,7 @@ What's actually running.
 | Command | What |
 |---------|------|
 | [`ip`](ip.md) | Show node IP addresses |
+| [`conntrack`](conntrack.md) | List a lab's tracked flows, or delete them (`--flush`) |
 | [`render`](render.md) | Lower an NLL to flat NLL / JSON, or a diagram (`--diagram dot\|mermaid\|ascii`) |
 | [`diff`](diff.md) | Diff two NLL topologies |
 | [`diagnose`](diagnose.md) | Per-lab health checks |

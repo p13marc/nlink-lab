@@ -410,6 +410,42 @@
           ]
         },
         {
+          "description": "The tracked flows of a node, or of every node, that `query` selects\n(#303; API 1.1).",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "conntrack"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                },
+                "node": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "query": {
+                  "$ref": "#/$defs/ConntrackQuery",
+                  "default": {}
+                }
+              },
+              "required": [
+                "lab",
+                "query"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
           "type": "object",
           "properties": {
             "method": {
@@ -936,6 +972,42 @@
               },
               "required": [
                 "op"
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "description": "Delete the tracked flows `query` selects, on a node or every node\n(#303; API 1.1).",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "flush_conntrack"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "lab": {
+                  "type": "string"
+                },
+                "node": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "query": {
+                  "$ref": "#/$defs/ConntrackQuery",
+                  "default": {}
+                }
+              },
+              "required": [
+                "lab",
+                "query"
               ]
             }
           },
@@ -1766,6 +1838,79 @@
           "type": "boolean"
         },
         "vlan_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      }
+    },
+    "ConntrackQuery": {
+      "description": "What a conntrack listing or flush selects (#303): every field it sets\nmust hold. Addresses and ports are the flow's original direction, as it\nbegan (before NAT).",
+      "type": "object",
+      "properties": {
+        "dport": {
+          "description": "The destination port (with `proto` tcp or udp).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "dst": {
+          "description": "The destination, an address or a CIDR.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mark": {
+          "description": "The connection mark.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "proto": {
+          "description": "`tcp`, `udp`, `icmp`, `icmpv6`, `sctp`, … or a protocol number.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sport": {
+          "description": "The source port (with `proto` tcp or udp).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "src": {
+          "description": "The source, an address or a CIDR.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "Status bits the flow has, nft's names: `snat`, `dnat`, `assured`,\n`seen-reply`, `confirmed`, `expected`, `dying`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "zone": {
+          "description": "The conntrack zone.",
           "type": [
             "integer",
             "null"

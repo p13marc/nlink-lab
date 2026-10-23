@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Document",
+  "description": "What `--json` prints for a [`Report`]: its fields after a\n`schema_version`.",
+  "type": "object",
+  "properties": {
+    "deleted": {
+      "description": "Flows deleted per node (with `--flush`).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "type": "integer",
+        "format": "uint",
+        "minimum": 0
+      }
+    },
+    "flows": {
+      "description": "The flows selected (a listing; absent after `--flush`).",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/ConntrackFlow"
+      }
+    },
+    "lab": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "schema_version",
+    "lab"
+  ],
+  "$defs": {
+    "ConntrackFlow": {
+      "description": "One tracked flow (#303).",
+      "type": "object",
+      "properties": {
+        "family": {
+          "description": "`ipv4` or `ipv6`.",
+          "type": "string"
+        },
+        "mark": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "node": {
+          "description": "The node whose conntrack table holds it.",
+          "type": "string"
+        },
+        "orig": {
+          "description": "The direction it began in.",
+          "$ref": "#/$defs/FlowTuple"
+        },
+        "proto": {
+          "description": "`tcp`, `udp`, `icmp`, … or the protocol number.",
+          "type": "string"
+        },
+        "reply": {
+          "description": "The direction its replies take; where it differs from `orig`\nswapped, NAT translated it.",
+          "$ref": "#/$defs/FlowTuple"
+        },
+        "state": {
+          "description": "A TCP flow's state: `established`, `time_wait`, …",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "Status bits, nft's names.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "timeout": {
+          "description": "Seconds before it expires.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "zone": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "node",
+        "family",
+        "proto",
+        "orig",
+        "reply"
+      ]
+    },
+    "FlowTuple": {
+      "description": "One direction of a tracked flow.",
+      "type": "object",
+      "properties": {
+        "dport": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "dst": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sport": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "src": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

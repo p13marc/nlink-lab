@@ -65,6 +65,16 @@ JSON Schema did not describe its JSON (nlink #876).
 
 ### Added
 
+- **`nlink-lab conntrack [NODE]`** (#303): a lab's tracked flows, its
+  nodes' conntrack tables, filtered by `--proto`, `--src`/`--dst` (an
+  address or a CIDR, the flow as it began), `--sport`/`--dport`,
+  `--mark`, `--zone` and `--status` (`snat`, `dnat`, `assured`, …). A
+  table shows each flow and, for a translated one, where its replies
+  come from; `--json` is `docs/json-schemas/conntrack.schema.json`.
+  `--flush` deletes what the filters select, each flow by its tuple,
+  zone and id, and says how many went per node. The daemon serves both,
+  `conntrack` to viewers and `flush_conntrack` to operators: API 1.1,
+  feature `conntrack` (a minor bump: a 1.0 client still connects).
 - **More firewall matches, and ordered compares** (#302), on nlink 0.33's
   `Match`:
   - `tcp flags syn,ack` (any of them), `tcp flags != syn`, and nft's mask

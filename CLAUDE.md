@@ -427,7 +427,9 @@ A declared link whose kind parameters change (VLAN id, VNI, bond mode, VRF
 table…) is recreated by nlink inside Stack, which puts its declared Tc and
 routes back (and keeps undeclared Tc, `preserve_undeclared_tc`); `apply` runs a
 read-only preflight so a recreate nlink would refuse fails before anything
-changes. Every
+changes, and another of each reconciled node's nftables so what nlink 0.33's
+`NftablesDiff::blocked` refuses (a set a hand-added rule uses, recreated)
+fails before the first stage too (`preflight_nftables`). Every
 netlink resource still commits through nlink's declarative
 `NetworkConfig` / `NftablesConfig` / `WireguardConfig`, planned and
 applied per node as one `nlink::facade::Stack` (`apply_reconcile_in`;

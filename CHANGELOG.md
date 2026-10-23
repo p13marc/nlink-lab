@@ -49,6 +49,36 @@ JSON Schema did not describe its JSON (nlink #876).
   turned the skip on. Off is now an empty value, `0`, `false`, `no` or
   `off` in any case, as nlink reads its test switches; anything else is on.
 
+### Added
+
+- **Drift events say the rule** (#300). A rule added or deleted behind
+  the lab's back used to show as its handle (`new_nft_rule chain=input
+  handle=9 …`); it now ends with the rule as `nft -s list` prints it
+  (`…: tcp dport 22 accept`), and its JSON record carries it as `nft`. The
+  daemon forwards it, and the app's timeline shows drift as the CLI does
+  rather than as the event's JSON.
+- **`verify` and `apply --dry-run` show what nftables keeps** (#300): a
+  set the topology dropped that a hand-added rule still uses, or an
+  object of a type nlink does not model, is a `!` line under its node
+  (`blocked` in the JSON). It is not drift: the exit code and
+  `change_count` do not count it.
+- **The app's plan lists each nftables change** (#300): a rule as nft
+  prints it, an edit as before and after, a recreate with its reason,
+  and what blocks a change, where it used to count array keys.
+
+### Fixed
+
+- **An nftables change nlink refuses is refused before anything
+  changes** (#300). nlink 0.33 refuses up front what its diff cannot do
+  (a set recreated for a new key while a rule nlink-lab did not write
+  uses it; nlink 0.32 failed at commit with `EBUSY`), but inside the
+  stack stage, after the apply's earlier stages had run and had to be
+  rolled back. `apply` now diffs the nftables of every node it
+  reconciles before its first stage, read-only, and refuses with nlink's
+  reason; nothing runs, nothing is rolled back.
+- **The nftables part of a text diff had two headers** (#300):
+  `NftablesDiff (node, N changes):` and nlink's own count line under it.
+
 ### Changed
 
 - **The firewall and NAT planner builds rules as data** (#299): each NLL

@@ -85,8 +85,13 @@ pub enum WatchEventKind {
     /// A kernel object came, changed or went: nlink's stable projection
     /// of the RTNETLINK or nftables message, tagged by `object` with an
     /// `action` (#195). Under its own key because it has a `family` of
-    /// its own (`inet`, `inet6`, …).
-    Event { event: EventView },
+    /// its own (`inet`, `inet6`, …). A rule comes with `nft`, the rule as
+    /// `nft -s list` prints it (nlink 0.33, #300), when nlink can print it.
+    Event {
+        event: EventView,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        nft: Option<String>,
+    },
     /// The node's subscription ended — a stream error its resync does not
     /// recover from — and is subscribed again in `retry_in_ms` (#175).
     /// Changes made in between are not seen.
@@ -103,17 +108,22 @@ impl WatchEventKind {
     /// for the subscription. `nlink-lab events --kind` filters on it.
     pub fn name(&self) -> String {
         match self {
-            WatchEventKind::Event { event } => view_name(event),
+            WatchEventKind::Event { event, .. } => view_name(event),
             WatchEventKind::Ended { .. } => "ended".into(),
             WatchEventKind::Gone => "gone".into(),
         }
     }
 
     /// Its fields as `key=value`, in key order: a view's own fields
-    /// (not its tags), or why a subscription ended.
+    /// (not its tags), then a rule as nft prints it; or why a subscription
+    /// ended.
     pub fn detail(&self) -> String {
         match self {
-            WatchEventKind::Event { event } => view_fields(event),
+            WatchEventKind::Event {
+                event,
+                nft: Some(rule),
+            } => format!("{}: {rule}", view_fields(event)),
+            WatchEventKind::Event { event, nft: None } => view_fields(event),
             WatchEventKind::Ended {
                 reason,
                 retry_in_ms,
@@ -180,13 +190,17 @@ impl WatchEvent {
     }
 }
 
-/// The view of an nftables event, or `None` for a generation event:
-/// nlink delivers one after every committed batch, nlink-lab's own
-/// applies included, so it is not drift.
-fn nftables_view(ev: &NftablesEvent) -> Option<EventView> {
+/// The view of an nftables event, and a rule as nft prints it; `None`
+/// for a generation event: nlink delivers one after every committed
+/// batch, nlink-lab's own applies included, so it is not drift.
+fn nftables_view(ev: &NftablesEvent) -> Option<WatchEventKind> {
+    let nft = match ev {
+        NftablesEvent::NewRule(rule) | NftablesEvent::DelRule(rule) => rule.nft_syntax_stateless(),
+        _ => None,
+    };
     match EventView::from(ev) {
         EventView::NftGen { .. } => None,
-        view => Some(view),
+        event => Some(WatchEventKind::Event { event, nft }),
     }
 }
 
@@ -503,7 +517,7 @@ async fn run_route_subscription(
             ResyncedEvent::Marker(_) => continue,
             _ => continue,
         };
-        let kind = WatchEventKind::Event { event };
+        let kind = WatchEventKind::Event { event, nft: None };
         let watch_ev = WatchEvent {
             node: node.to_owned(),
             family: WatchFamily::Route,
@@ -571,10 +585,9 @@ async fn run_nftables_subscription(
             ResyncedEvent::Marker(_) => continue,
             _ => continue,
         };
-        let Some(event) = event else {
+        let Some(kind) = event else {
             continue;
         };
-        let kind = WatchEventKind::Event { event };
         let watch_ev = WatchEvent {
             node: node.to_owned(),
             family: WatchFamily::Nftables,
@@ -752,6 +765,7 @@ mod tests {
             "r1",
             WatchFamily::Route,
             WatchEventKind::Event {
+                nft: None,
                 event: EventView::Route {
                     action: Action::Del,
                     family: "inet".into(),
@@ -810,6 +824,7 @@ mod tests {
             WatchFamily::Route,
             WatchEventKind::Event {
                 event: link("eth1"),
+                nft: None,
             },
         );
         assert_eq!(
@@ -834,12 +849,34 @@ mod tests {
                     handle: 4,
                     counter: Some((3, 180)),
                 },
+                nft: None,
             },
         );
         assert_eq!(
             rule.render_line(),
             "[fw/nftables] new_nft_rule chain=input counter=[3,180] family=inet handle=4 table=nlink-lab"
         );
+        // a rule nlink can print comes with its text (#300)
+        let mut added = rule.clone();
+        added.kind = WatchEventKind::Event {
+            event: EventView::NftRule {
+                action: Action::New,
+                family: "inet".into(),
+                table: "nlink-lab".into(),
+                chain: "input".into(),
+                handle: 4,
+                counter: None,
+            },
+            nft: Some("tcp dport 22 counter accept".into()),
+        };
+        assert_eq!(
+            added.render_line(),
+            "[fw/nftables] new_nft_rule chain=input family=inet handle=4 table=nlink-lab: tcp dport 22 counter accept"
+        );
+        let v = serde_json::to_value(&added).unwrap();
+        assert_eq!(v["nft"], "tcp dport 22 counter accept", "{v}");
+        let back: WatchEvent = serde_json::from_value(v).unwrap();
+        assert_eq!(back.kind, added.kind);
         assert_eq!(
             event("x", WatchFamily::Route, WatchEventKind::Gone).render_line(),
             "[x/route] namespace gone; watch stopped"

@@ -180,10 +180,51 @@ pub fn runtime(value: &serde_json::Value) -> EventLine {
     }
 }
 
+/// A drift event (the `drift` topic): what changed in a node behind the
+/// lab's back, named and with its fields as `events --source drift`
+/// prints it, a rule as nft prints it (#300).
+pub fn drift(node: &str, detail: &serde_json::Value) -> EventLine {
+    let text = match serde_json::from_value::<nlink_lab::WatchEvent>(detail.clone()) {
+        Ok(ev) => format!("{node}: {} {}", ev.kind.name(), ev.kind.detail())
+            .trim_end()
+            .to_string(),
+        Err(_) => format!("{node}: {detail}"),
+    };
+    EventLine {
+        time: String::new(),
+        kind: "drift".into(),
+        text,
+        tone: Tone::Warn,
+        touches: Touches::default(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// A drift line says what changed, and a rule as nft prints it, not
+    /// the event's JSON.
+    #[test]
+    fn drift_lines() {
+        let rule = json!({
+            "node": "fw", "family": "nftables", "kind": "event",
+            "event": {"object": "nft_rule", "action": "new", "family": "inet",
+                      "table": "nlink-lab", "chain": "input", "handle": 9},
+            "nft": "tcp dport 22 accept"
+        });
+        let l = drift("fw", &rule);
+        assert_eq!(l.kind, "drift");
+        assert_eq!(
+            l.text,
+            "fw: new_nft_rule chain=input family=inet handle=9 table=nlink-lab: tcp dport 22 accept"
+        );
+        assert_eq!(l.tone, Tone::Warn);
+        // something this build cannot read: shown as it is
+        let l = drift("fw", &json!({"kind": "teleported"}));
+        assert_eq!(l.text, r#"fw: {"kind":"teleported"}"#);
+    }
 
     #[test]
     fn lifecycle_lines() {

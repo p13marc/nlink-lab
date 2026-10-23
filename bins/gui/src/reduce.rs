@@ -1096,13 +1096,7 @@ fn lab_note(app: &mut App, lab: &str, n: Notification) -> Vec<Effect> {
             event_line(app, lab, line)
         }
         Notification::Drift { node, detail, .. } => {
-            let line = crate::live::EventLine {
-                time: String::new(),
-                kind: "drift".into(),
-                text: format!("{node}: {detail}"),
-                tone: crate::live::Tone::Warn,
-                touches: Default::default(),
-            };
+            let line = crate::live::drift(&node, &detail);
             event_line(app, lab, line)
         }
         Notification::LabsChanged { .. } | Notification::OpProgress { .. } => vec![],

@@ -216,6 +216,10 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     if (dry_run) && layered_is_empty {
         if !ctx.quiet {
             println!("No changes to apply.");
+            if let Some(layered) = layered_view.as_ref().filter(|l| l.has_blocked()) {
+                println!("nftables keeps what nlink cannot change:");
+                crate::output::print_layered(layered, &[]);
+            }
         }
         return Ok(());
     }

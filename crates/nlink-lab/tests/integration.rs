@@ -884,6 +884,12 @@ async fn nftables_foreign_rule_survives_apply() {
         before.stdout
     );
 
+    // The diff leaves it out: nothing to change (#300).
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo)
+        .await
+        .expect("compute_layered_diff failed");
+    assert!(layered.is_empty(), "{layered}");
+
     // Re-apply the same topology. The diff path must not touch
     // the foreign rule.
     nlink_lab::apply(&mut lab, &topo)
@@ -953,6 +959,22 @@ async fn nftables_rule_edit_replaces_in_place() {
     {
         first.match_expr = Some("tcp dport 81".to_string());
     }
+
+    // nlink 0.33 says so: one rule, updated in place (no placement), to
+    // the edit as nft prints it (#300)
+    let layered = nlink_lab::compute_layered_diff(&lab, &edited)
+        .await
+        .expect("compute_layered_diff failed");
+    let rules: Vec<_> = layered.nftables["server"].rules().collect();
+    assert!(
+        matches!(
+            rules.as_slice(),
+            [nlink::netlink::nftables::config::Change::Update { to, .. }]
+                if to.placement.is_none()
+                    && to.nft.as_deref().is_some_and(|t| t.starts_with("tcp dport 81"))
+        ),
+        "{layered}"
+    );
 
     nlink_lab::apply(&mut lab, &edited)
         .await
@@ -6798,6 +6820,146 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     assert!(
         rs.contains("4001"),
         "the hand-added rule must be left alone: {rs}"
+    );
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// #300: nlink 0.33 refuses an nftables change that a rule nlink-lab did
+/// not write is in the way of — a set recreated for a new key while the
+/// rule uses it — and the apply is refused before anything changes: the
+/// earlier stages (a sysctl here) do not run, so nothing is rolled back.
+/// A set the topology drops while such a rule uses it is kept, and the
+/// diff says so without counting it as drift.
+#[tokio::test]
+async fn nftables_refusals_are_refused_before_anything_changes() {
+    if !privileged("nftables_refusals_are_refused_before_anything_changes") {
+        return;
+    }
+    if !feature(
+        "nftables_refusals_are_refused_before_anything_changes",
+        "nftables",
+        has_nftables(),
+    ) {
+        return;
+    }
+    let lab_name = format!("fwref-{}", std::process::id());
+    let src = |set: &str, rule: &str, with_sysctl: bool| {
+        let sysctl = if with_sysctl {
+            r#"sysctl "net.ipv4.ip_nonlocal_bind" "1""#
+        } else {
+            ""
+        };
+        format!(
+            r#"
+lab "{lab_name}"
+node a
+node b {{
+  {sysctl}
+  firewall {{
+    {set}
+    input policy accept {{
+      {rule}
+    }}
+  }}
+}}
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+"#
+        )
+    };
+    let topo =
+        nlink_lab::parser::parse(&src("set mgmt port [22]", "accept tcp dport @mgmt", false))
+            .unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let foreign = lab
+        .exec(
+            "b",
+            "nft",
+            &[
+                "add",
+                "rule",
+                "inet",
+                "nlink-lab",
+                "input",
+                "tcp",
+                "dport",
+                "@mgmt",
+                "counter",
+            ],
+        )
+        .unwrap();
+    assert_eq!(foreign.exit_code, 0, "{}", foreign.stderr);
+    let nonlocal_bind = |lab: &RunningLab| {
+        lab.exec("b", "cat", &["/proc/sys/net/ipv4/ip_nonlocal_bind"])
+            .unwrap()
+            .stdout
+            .trim()
+            .to_string()
+    };
+    assert_eq!(nonlocal_bind(&lab), "0");
+
+    // the set's key changes (a recreate the hand-added rule is in the way
+    // of), together with a sysctl, whose stage comes first
+    let desired =
+        nlink_lab::parser::parse(&src("set mgmt ipv4 [10.0.0.1]", "accept src @mgmt", true))
+            .unwrap();
+    let layered = nlink_lab::compute_layered_diff(&lab, &desired)
+        .await
+        .unwrap();
+    assert!(
+        layered.nftables["b"].refusal().is_some() && layered.to_string().contains("! "),
+        "the diff says what it cannot do:\n{layered}"
+    );
+    let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sink = {
+        let events = events.clone();
+        move |ev: nlink_lab::api::OpEvent| events.lock().unwrap().push(ev)
+    };
+    let ctx = nlink_lab::OpCtx::new("apply", lab.name()).with_sink(std::sync::Arc::new(sink));
+    let err = nlink_lab::apply_with_ctx(
+        &mut lab,
+        &desired,
+        &nlink_lab::ApplyOptions::default(),
+        &ctx,
+    )
+    .await
+    .expect_err("the apply must be refused");
+    assert!(
+        err.to_string().contains("nothing has been changed") && err.to_string().contains("b: "),
+        "{err}"
+    );
+    assert!(
+        !events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|e| matches!(e.phase, nlink_lab::api::OpPhase::RollingBack { .. })),
+        "refused before anything ran, so nothing to roll back"
+    );
+    assert_eq!(
+        nonlocal_bind(&lab),
+        "0",
+        "the sysctl stage must not have run"
+    );
+    let set = lab
+        .exec("b", "nft", &["list", "set", "inet", "nlink-lab", "mgmt"])
+        .unwrap()
+        .stdout;
+    assert!(set.contains("inet_service"), "{set}");
+
+    // the set dropped while the hand-added rule uses it: kept, and said
+    let desired = nlink_lab::parser::parse(&src("", "accept tcp dport 22", false)).unwrap();
+    nlink_lab::apply(&mut lab, &desired)
+        .await
+        .expect("an apply that keeps a set in use is not refused");
+    let layered = nlink_lab::compute_layered_diff(&lab, &desired)
+        .await
+        .unwrap();
+    assert!(
+        layered.is_empty() && layered.has_blocked() && layered.to_string().contains("! "),
+        "kept, said, and not drift:\n{layered}"
     );
     lab.destroy().await.expect("destroy failed");
 }

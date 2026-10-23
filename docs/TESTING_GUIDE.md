@@ -48,7 +48,7 @@ Deploying namespaces needs root (or `CAP_NET_ADMIN`). When the test process
 is not root the macro panics with:
 
 ```text
-#[lab_test] 'test_connectivity' needs root or CAP_NET_ADMIN+CAP_SYS_ADMIN; run under sudo, or set NLINK_LAB_SKIP_ROOT_TESTS=1 to skip
+test 'test_connectivity' needs root or CAP_NET_ADMIN+CAP_SYS_ADMIN; run under sudo, or set NLINK_LAB_SKIP_ROOT_TESTS=1 to skip
 ```
 
 This is deliberate: a privileged test that quietly returns green on a
@@ -60,8 +60,33 @@ set the environment variable:
 NLINK_LAB_SKIP_ROOT_TESTS=1 cargo test --test integration
 ```
 
-The skip is printed to stderr (`*** SKIPPING #[lab_test] '...' ***`) so it
-remains visible in CI logs. `""`, `"0"` and `"false"` count as unset.
+The skip is printed to stderr (`*** SKIPPING test '...' ***`) so it
+remains visible in CI logs. An empty value, `0`, `false`, `no` and `off` (in
+any case) count as unset; anything else turns the skip on.
+
+A test written without the macro uses the same gate, and gates on a kernel
+feature or a tool with `feature`:
+
+```rust
+use nlink_lab::test_helpers::{feature, privileged};
+
+#[tokio::test]
+async fn vrf_routes_stay_in_their_table() {
+    if !privileged("vrf_routes_stay_in_their_table") {
+        return; // NLINK_LAB_SKIP_ROOT_TESTS is on
+    }
+    if !feature("vrf_routes_stay_in_their_table", "vrf", has_vrf()) {
+        return;
+    }
+    // …
+}
+```
+
+A missing feature skips loudly, unless `NLINK_LAB_STRICT_FEATURES` names it
+(`NLINK_LAB_STRICT_FEATURES=nftables,vrf`, or `1` for every feature): then
+the test fails. A lane that is meant to have a module sets it, so losing the
+module turns the lane red instead of passing every test that needs it.
+nlink-lab's own integration lane does.
 
 ### Cleanup on failure
 

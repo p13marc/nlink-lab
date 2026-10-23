@@ -355,7 +355,7 @@ cannot report coverage it does not have. Run with `sudo cargo test`,
 or grant `CAP_NET_ADMIN`+`CAP_SYS_ADMIN` to the test binary. To skip
 instead (a job that is meant to run unprivileged), set
 `NLINK_LAB_SKIP_ROOT_TESTS=1`: each test then prints
-`*** SKIPPING #[lab_test] '...' ***` and passes.
+`*** SKIPPING test '...' ***` and passes.
 
 ### Tests interfere with each other
 

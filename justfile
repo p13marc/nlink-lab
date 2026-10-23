@@ -48,7 +48,7 @@ ci: fmt-check lint
     cargo build --workspace --all-targets
     cargo build --workspace --all-targets --no-default-features
     cargo build --workspace --all-targets --all-features
-    cargo test --workspace --exclude nlink-lab
+    NLINK_LAB_SKIP_ROOT_TESTS=1 cargo test --workspace --exclude nlink-lab
     cargo test -p nlink-lab --lib
     # Separate invocations: cargo rejects `--doc` alongside another target
     # selector, and ci.yml runs them as two steps too.

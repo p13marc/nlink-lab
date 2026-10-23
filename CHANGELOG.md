@@ -37,6 +37,13 @@ JSON Schema did not describe its JSON (nlink #876).
   its cascade under it, and what the diff cannot do comes last as `!`
   lines.
 
+- **A firewall port range is installed as nft writes it** (#299): one
+  `range` compare, where nlink-lab 0.14 wrote a `>=`/`<=` pair. A lab
+  deployed by 0.14 with a rule like `drop tcp dport 8000-8999` shows that
+  rule as one in-place replace in `verify` (and `apply --dry-run`) until
+  the next `apply`, which replaces it in place; nothing else in a 0.14
+  lab's ruleset changes. A negated range (`!= 8000-8999`) was already one
+  compare.
 - **`NLINK_LAB_SKIP_ROOT_TESTS=no` (or `off`, `FALSE`) no longer skips**
   (#298). Only an empty value, `0` and `false` counted as off, so these
   turned the skip on. Off is now an empty value, `0`, `false`, `no` or
@@ -44,6 +51,17 @@ JSON Schema did not describe its JSON (nlink #876).
 
 ### Changed
 
+- **The firewall and NAT planner builds rules as data** (#299): each NLL
+  match clause is an nlink `Match`, each statement a `Stmt`, the verdict a
+  `Verdict`, declared with `push_rule_keyed` (nlink #527, which nlink-lab
+  asked for). No rule is built from hand-written expressions any more, and
+  no NAT literal is re-parsed with `.expect()` inside a rule closure: a bad
+  one is a planner error, and the planned config is validated before
+  anything is sent. Every rule keeps the bytes it had but a port range
+  (see Migration): before the old builder code went, the two were compared
+  over every match form, statement and verdict (441 rules alike, the 38
+  that differ all positive port ranges), and the examples' golden pins the
+  result. Every rule the examples plan prints as nft prints it.
 - **A test that needs root fails without it, everywhere** (#298, nlink
   #885's lesson). `#[lab_test]` already did; the 92 hand-written root
   tests of the integration suite, the daemon's end-to-end tests and the

@@ -2234,14 +2234,15 @@ async fn wireguard_config_reapply_is_zero_ops() {
         .expect("compute_layered_diff failed");
     assert!(layered.is_empty(), "not converged:\n{layered}");
 
-    // A peer changed by hand is a `peers-to-modify` entry, whose keepalive
-    // and preshared-key flag nlink 0.32's schema described as a `Duration`
-    // and a key (nlink #876).
+    // A peer changed by hand is a `peers-to-modify` entry: its public key,
+    // and the presence flags nlink 0.32's schema described as keys (nlink
+    // #876). The endpoint is declared (a keepalive is not, so a changed
+    // one is no drift).
     let set = lab
         .exec(
             "gw-a",
             "wg",
-            &["set", "wg0", "peer", &peer, "persistent-keepalive", "17"],
+            &["set", "wg0", "peer", &peer, "endpoint", "192.0.2.9:51820"],
         )
         .unwrap();
     assert_eq!(set.exit_code, 0, "{}", set.stderr);
@@ -2251,12 +2252,12 @@ async fn wireguard_config_reapply_is_zero_ops() {
     let json = serde_json::to_value(&layered.wireguard).unwrap();
     assert!(
         json.to_string().contains("peers-to-modify"),
-        "the keepalive should be a modified peer: {json:#}"
+        "the endpoint should be a modified peer: {json:#}"
     );
     assert_report_matches_schema(lab.name(), &layered);
     nlink_lab::apply(&mut lab, &topo)
         .await
-        .expect("apply after a hand-changed keepalive failed");
+        .expect("apply after a hand-changed endpoint failed");
     let layered = nlink_lab::compute_layered_diff(&lab, &topo)
         .await
         .expect("compute_layered_diff failed");

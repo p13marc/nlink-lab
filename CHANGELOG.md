@@ -43,7 +43,7 @@ JSON Schema did not describe its JSON (nlink #876).
   (#297). It was free-form while nlink's schema described the Rust types
   rather than the JSON (a public key as 32 integers; nlink #876). A test
   validates a filled report against the published schema, and the root
-  suite validates real WireGuard drift (a peer removed, a keepalive
+  suite validates real WireGuard drift (a peer removed, an endpoint
   changed) the same way.
 
 ## [0.14.0] - 2026-10-18

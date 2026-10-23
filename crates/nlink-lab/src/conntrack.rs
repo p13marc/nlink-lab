@@ -13,8 +13,13 @@ use std::net::IpAddr;
 
 use nlink::Connection;
 use nlink::netlink::Netfilter;
-use nlink::netlink::netfilter::{ConntrackEntry, ConntrackFilter, IpProtocol};
+use nlink::netlink::netfilter::{
+    ConntrackEntry, ConntrackFilter, ConntrackStatus, ConntrackTuple, IpProtocol,
+};
+use nlink_lab_shared::api::{ConntrackFlow, ConntrackQuery, FlowTuple};
 
+use crate::error::{Error, Result};
+use crate::running::RunningLab;
 use crate::types::{NatAction, NatProto, NatRule};
 
 /// The rules one of `old` and `new` has and the other does not: what an
@@ -134,6 +139,262 @@ pub(crate) async fn forget_flows(
     Ok(gone)
 }
 
+/// Conntrack status bits, by nft's names.
+const STATUS: [(&str, ConntrackStatus); 7] = [
+    ("expected", ConntrackStatus::EXPECTED),
+    ("seen-reply", ConntrackStatus::SEEN_REPLY),
+    ("assured", ConntrackStatus::ASSURED),
+    ("confirmed", ConntrackStatus::CONFIRMED),
+    ("snat", ConntrackStatus::SRC_NAT),
+    ("dnat", ConntrackStatus::DST_NAT),
+    ("dying", ConntrackStatus::DYING),
+];
+
+/// A query, ready to run: the filter nlink (and the kernel) applies, and
+/// the CIDRs it cannot, checked on what it returns.
+struct Selection {
+    filter: ConntrackFilter,
+    src: Option<String>,
+    dst: Option<String>,
+}
+
+impl Selection {
+    fn of(query: &ConntrackQuery) -> Result<Selection> {
+        let mut filter = ConntrackFilter::new();
+        let mut l4 = None;
+        if let Some(proto) = &query.proto {
+            let n = crate::firewall::l4proto_number(proto).ok_or_else(|| {
+                Error::invalid_argument(format!(
+                    "unknown protocol '{proto}' (a name such as tcp, udp, icmp, icmpv6, sctp, \
+                     or a number 0-255)"
+                ))
+            })?;
+            l4 = Some(n);
+            filter = filter.proto(match n {
+                1 => IpProtocol::Icmp,
+                6 => IpProtocol::Tcp,
+                17 => IpProtocol::Udp,
+                58 => IpProtocol::Icmpv6,
+                other => IpProtocol::Other(other),
+            });
+        }
+        if (query.sport.is_some() || query.dport.is_some()) && !matches!(l4, Some(6 | 17)) {
+            return Err(Error::invalid_argument(
+                "a port needs the protocol it is a port of: tcp or udp",
+            ));
+        }
+        if let Some(port) = query.sport {
+            filter = filter.orig_src_port(port);
+        }
+        if let Some(port) = query.dport {
+            filter = filter.orig_dst_port(port);
+        }
+        let (src_host, src) = host_or_cidr(query.src.as_deref())?;
+        let (dst_host, dst) = host_or_cidr(query.dst.as_deref())?;
+        if let Some(addr) = src_host {
+            filter = filter.orig_src(addr);
+        }
+        if let Some(addr) = dst_host {
+            filter = filter.orig_dst(addr);
+        }
+        if let Some(mark) = query.mark {
+            filter = filter.mark(mark, u32::MAX);
+        }
+        if let Some(zone) = query.zone {
+            filter = filter.zone(zone);
+        }
+        if !query.status.is_empty() {
+            let mut bits = ConntrackStatus::empty();
+            for name in &query.status {
+                let (_, bit) = STATUS.iter().find(|(n, _)| n == name).ok_or_else(|| {
+                    Error::invalid_argument(format!(
+                        "unknown status '{name}' (expected {})",
+                        STATUS.map(|(n, _)| n).join(", ")
+                    ))
+                })?;
+                bits |= *bit;
+            }
+            filter = filter.status(bits, bits);
+        }
+        Ok(Selection { filter, src, dst })
+    }
+
+    fn selects(&self, entry: &ConntrackEntry) -> bool {
+        let within = |cidr: &Option<String>, addr: Option<IpAddr>| {
+            cidr.as_deref()
+                .is_none_or(|c| addr.is_some_and(|a| in_cidr(a, c)))
+        };
+        within(&self.src, entry.orig.src_ip) && within(&self.dst, entry.orig.dst_ip)
+    }
+}
+
+/// An address operand: one host, which the kernel can match, or a CIDR,
+/// which nlink-lab checks.
+fn host_or_cidr(text: Option<&str>) -> Result<(Option<IpAddr>, Option<String>)> {
+    let Some(text) = text else {
+        return Ok((None, None));
+    };
+    let (addr, prefix) = crate::helpers::parse_ip_or_cidr(text)
+        .map_err(|e| Error::invalid_argument(format!("'{text}': {e}")))?;
+    if prefix == if addr.is_ipv4() { 32 } else { 128 } {
+        Ok((Some(addr), None))
+    } else {
+        Ok((None, Some(text.to_string())))
+    }
+}
+
+/// The flows of `conn`'s namespace that `query` selects.
+async fn select(
+    conn: &Connection<Netfilter>,
+    query: &ConntrackQuery,
+) -> Result<Vec<ConntrackEntry>> {
+    let selection = Selection::of(query)?;
+    let entries = conn
+        .get_conntrack_matching(&selection.filter)
+        .await
+        .map_err(|e| Error::nlink("read conntrack", e))?;
+    Ok(entries
+        .into_iter()
+        .filter(|e| selection.selects(e))
+        .collect())
+}
+
+/// A tracked flow as the API shows it.
+fn flow_of(node: &str, entry: &ConntrackEntry) -> ConntrackFlow {
+    let tuple = |t: &ConntrackTuple| FlowTuple {
+        src: t.src_ip.map(|a| a.to_string()),
+        dst: t.dst_ip.map(|a| a.to_string()),
+        sport: t.src_port,
+        dport: t.dst_port,
+    };
+    let proto = match entry.proto {
+        IpProtocol::Tcp => "tcp".to_string(),
+        IpProtocol::Udp => "udp".to_string(),
+        IpProtocol::Icmp => "icmp".to_string(),
+        IpProtocol::Icmpv6 => "icmpv6".to_string(),
+        other => crate::firewall::L4_PROTOS
+            .iter()
+            .find(|(_, n)| *n == other.number())
+            .map_or_else(|| other.number().to_string(), |(name, _)| name.to_string()),
+    };
+    let status = ConntrackStatus::from_bits(entry.status.unwrap_or(0));
+    ConntrackFlow {
+        node: node.to_string(),
+        family: if entry.orig.src_ip.is_some_and(|a| a.is_ipv6()) {
+            "ipv6"
+        } else {
+            "ipv4"
+        }
+        .to_string(),
+        proto,
+        orig: tuple(&entry.orig),
+        reply: tuple(&entry.reply),
+        state: entry.tcp_state.map(|s| snake(&format!("{s:?}"))),
+        status: STATUS
+            .iter()
+            .filter(|(_, bit)| status.contains(*bit))
+            .map(|(name, _)| name.to_string())
+            .collect(),
+        timeout: entry.timeout,
+        mark: entry.mark,
+        zone: entry.zone,
+    }
+}
+
+/// `TimeWait` as `time_wait`.
+fn snake(name: &str) -> String {
+    let mut out = String::new();
+    for (i, c) in name.chars().enumerate() {
+        if c.is_ascii_uppercase() && i > 0 {
+            out.push('_');
+        }
+        out.push(c.to_ascii_lowercase());
+    }
+    out
+}
+
+impl RunningLab {
+    fn netfilter_of(&self, node: &str) -> Result<Connection<Netfilter>> {
+        let ns = self
+            .ns_resolver_of(node)
+            .ok_or_else(|| Error::NodeNotFound {
+                name: node.to_string(),
+            })?;
+        Ok(ns.connection()?)
+    }
+
+    /// The flows a node's conntrack table holds that `query` selects
+    /// (#303): what `nlink-lab conntrack` lists.
+    pub async fn conntrack(
+        &self,
+        node: &str,
+        query: &ConntrackQuery,
+    ) -> Result<Vec<ConntrackFlow>> {
+        let conn = self.netfilter_of(node)?;
+        Ok(select(&conn, query)
+            .await?
+            .iter()
+            .map(|e| flow_of(node, e))
+            .collect())
+    }
+
+    /// [`RunningLab::conntrack`] on `node`, or on every node of the lab.
+    pub async fn conntrack_of(
+        &self,
+        node: Option<&str>,
+        query: &ConntrackQuery,
+    ) -> Result<Vec<ConntrackFlow>> {
+        let mut flows = Vec::new();
+        for node in self.conntrack_nodes(node)? {
+            flows.extend(self.conntrack(&node, query).await?);
+        }
+        Ok(flows)
+    }
+
+    /// [`RunningLab::flush_conntrack`] on `node`, or on every node: how
+    /// many flows went, per node.
+    pub async fn flush_conntrack_of(
+        &self,
+        node: Option<&str>,
+        query: &ConntrackQuery,
+    ) -> Result<std::collections::BTreeMap<String, usize>> {
+        let mut deleted = std::collections::BTreeMap::new();
+        for node in self.conntrack_nodes(node)? {
+            let n = self.flush_conntrack(&node, query).await?;
+            deleted.insert(node, n);
+        }
+        Ok(deleted)
+    }
+
+    /// `node`, checked, or every node of the lab.
+    fn conntrack_nodes(&self, node: Option<&str>) -> Result<Vec<String>> {
+        match node {
+            Some(n) if self.topology().nodes.contains_key(n) => Ok(vec![n.to_string()]),
+            Some(n) => Err(Error::NodeNotFound {
+                name: n.to_string(),
+            }),
+            None => Ok(self.topology().nodes.keys().cloned().collect()),
+        }
+    }
+
+    /// Delete the flows of a node that `query` selects (every flow, with
+    /// an empty query), each by its tuple, zone and id; how many went
+    /// (#303). Their next packet starts a new flow, through the rules as
+    /// they are now.
+    pub async fn flush_conntrack(&self, node: &str, query: &ConntrackQuery) -> Result<usize> {
+        let conn = self.netfilter_of(node)?;
+        let mut gone = 0;
+        for entry in select(&conn, query).await? {
+            match conn.del_conntrack_entry(&entry).await {
+                Ok(()) => gone += 1,
+                Err(e) if e.is_not_found() => {}
+                Err(e) => return Err(Error::nlink(format!("delete a flow on '{node}'"), e)),
+            }
+        }
+        Ok(gone)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,6 +488,75 @@ mod tests {
             &flow(IpProtocol::Tcp, "203.0.113.10", "198.51.100.7", 443)
         ));
         assert!(!in_cidr("10.0.0.1".parse().unwrap(), "10.0.0.0/33"));
+    }
+
+    #[test]
+    fn a_query_filters_what_the_kernel_can_and_checks_cidrs_itself() {
+        let q = ConntrackQuery {
+            proto: Some("udp".into()),
+            dst: Some("10.0.2.0/24".into()),
+            dport: Some(5000),
+            status: vec!["dnat".into()],
+            ..Default::default()
+        };
+        let sel = Selection::of(&q).unwrap();
+        let mut e = flow(IpProtocol::Udp, "10.0.1.10", "10.0.2.1", 5000);
+        e.status = Some(ConntrackStatus::DST_NAT.bits() | ConntrackStatus::SEEN_REPLY.bits());
+        assert!(sel.filter.matches(&e) && sel.selects(&e));
+        let mut other = flow(IpProtocol::Udp, "10.0.1.10", "10.0.3.1", 5000);
+        other.status = e.status;
+        assert!(sel.filter.matches(&other) && !sel.selects(&other));
+        let plain = flow(IpProtocol::Udp, "10.0.1.10", "10.0.2.1", 5000);
+        assert!(!sel.filter.matches(&plain), "not DNATed");
+        // what cannot be asked
+        for (bad, why) in [
+            (
+                ConntrackQuery {
+                    dport: Some(80),
+                    ..Default::default()
+                },
+                "tcp or udp",
+            ),
+            (
+                ConntrackQuery {
+                    proto: Some("quic".into()),
+                    ..Default::default()
+                },
+                "unknown protocol",
+            ),
+            (
+                ConntrackQuery {
+                    status: vec!["nat".into()],
+                    ..Default::default()
+                },
+                "unknown status",
+            ),
+        ] {
+            let err = Selection::of(&bad).err().expect(why).to_string();
+            assert!(err.contains(why), "{err}");
+        }
+    }
+
+    #[test]
+    fn a_flow_shows_its_directions_state_and_status() {
+        let mut e = flow(IpProtocol::Tcp, "10.0.1.10", "10.0.2.1", 80);
+        e.reply = ConntrackTuple {
+            src_ip: Some("10.0.1.20".parse().unwrap()),
+            dst_ip: Some("10.0.1.10".parse().unwrap()),
+            src_port: Some(8080),
+            dst_port: Some(40000),
+            ..Default::default()
+        };
+        e.tcp_state = Some(nlink::netlink::netfilter::TcpConntrackState::TimeWait);
+        e.status = Some(ConntrackStatus::DST_NAT.bits() | ConntrackStatus::ASSURED.bits());
+        let f = flow_of("gw", &e);
+        assert_eq!(
+            (f.family.as_str(), f.proto.as_str(), f.state.as_deref()),
+            ("ipv4", "tcp", Some("time_wait"))
+        );
+        assert_eq!(f.status, ["assured", "dnat"]);
+        assert_eq!(f.reply.src.as_deref(), Some("10.0.1.20"));
+        assert_eq!(f.orig.dport, Some(80));
     }
 
     #[test]

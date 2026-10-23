@@ -1445,6 +1445,10 @@ fn the_operations_futures_are_send(
     send(lab.clear_impairment("n:eth0"));
     send(lab.partition("n:eth0"));
     send(lab.heal("n:eth0"));
+    let query = nlink_lab_shared::api::ConntrackQuery::default();
+    send(lab.conntrack_of(None, &query));
+    send(lab.flush_conntrack_of(None, &query));
+    send(crate::ops::read::handle(&request));
     send(crate::ops::mutate::handle(request, ctx));
 }
 

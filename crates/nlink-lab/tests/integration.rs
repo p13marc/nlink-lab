@@ -6843,9 +6843,9 @@ async fn nftables_refusals_are_refused_before_anything_changes() {
         return;
     }
     let lab_name = format!("fwref-{}", std::process::id());
-    let src = |set: &str, rule: &str, forward: bool| {
-        let sysctl = if forward {
-            r#"sysctl "net.ipv4.ip_forward" "1""#
+    let src = |set: &str, rule: &str, with_sysctl: bool| {
+        let sysctl = if with_sysctl {
+            r#"sysctl "net.ipv4.ip_nonlocal_bind" "1""#
         } else {
             ""
         };
@@ -6891,14 +6891,14 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
         )
         .unwrap();
     assert_eq!(foreign.exit_code, 0, "{}", foreign.stderr);
-    let forwarding = |lab: &RunningLab| {
-        lab.exec("b", "cat", &["/proc/sys/net/ipv4/ip_forward"])
+    let nonlocal_bind = |lab: &RunningLab| {
+        lab.exec("b", "cat", &["/proc/sys/net/ipv4/ip_nonlocal_bind"])
             .unwrap()
             .stdout
             .trim()
             .to_string()
     };
-    assert_eq!(forwarding(&lab), "0");
+    assert_eq!(nonlocal_bind(&lab), "0");
 
     // the set's key changes (a recreate the hand-added rule is in the way
     // of), together with a sysctl, whose stage comes first
@@ -6938,7 +6938,11 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
             .any(|e| matches!(e.phase, nlink_lab::api::OpPhase::RollingBack { .. })),
         "refused before anything ran, so nothing to roll back"
     );
-    assert_eq!(forwarding(&lab), "0", "the sysctl stage must not have run");
+    assert_eq!(
+        nonlocal_bind(&lab),
+        "0",
+        "the sysctl stage must not have run"
+    );
     let set = lab
         .exec("b", "nft", &["list", "set", "inet", "nlink-lab", "mgmt"])
         .unwrap()

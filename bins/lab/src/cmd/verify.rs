@@ -63,6 +63,10 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         println!("{} change(s) needed to converge", report.change_count);
     } else if !ctx.quiet {
         println!("Lab {lab:?} matches its topology (no drift).");
+        if layered.has_blocked() {
+            println!("nftables keeps what nlink cannot change:");
+            crate::output::print_layered(layered, &[]);
+        }
     }
     if drift {
         set_exit_code(EXIT_VALIDATION);

@@ -522,6 +522,7 @@ async fn apply_ctx(
         removals: report.removed,
     });
     preflight_recreates(running, desired).await?;
+    preflight_nftables(running, &cur_plan, &diff).await?;
 
     let mut env = apply::ApplyEnv::from_running(running, desired, &cur_plan)?;
     env.ctx = ctx.clone();
@@ -938,21 +939,26 @@ pub(crate) fn stack_networks(
 /// firewall and no NAT the table is declared absent, so one an earlier
 /// apply left behind is deleted (and reported by `apply --check`).
 pub(crate) fn node_stack(cfg: &StackConfig) -> Result<nlink::facade::Stack> {
-    use nlink::netlink::nftables::{Family, config::NftablesConfig};
-    let nftables = if cfg.firewall.is_none() && cfg.nat.is_none() {
-        NftablesConfig::new().absent_table(NLINK_LAB_TABLE, Family::Inet)
-    } else {
-        topology_to_nftables_config(cfg.firewall.as_ref(), cfg.nat.as_ref())?
-    };
     #[allow(unused_mut)]
     let mut stack = nlink::facade::Stack::new()
         .network(cfg.network.clone())
-        .nftables(nftables);
+        .nftables(node_nftables(cfg)?);
     #[cfg(feature = "wireguard")]
     if let Some(wg) = &cfg.wireguard {
         stack = stack.wireguard(wg.clone());
     }
     Ok(stack)
+}
+
+/// A node's nftables layer: the `nlink-lab` table its firewall and NAT
+/// declare, or the table's absence when it has neither.
+fn node_nftables(cfg: &StackConfig) -> Result<nlink::netlink::nftables::config::NftablesConfig> {
+    use nlink::netlink::nftables::{Family, config::NftablesConfig};
+    if cfg.firewall.is_none() && cfg.nat.is_none() {
+        Ok(NftablesConfig::new().absent_table(NLINK_LAB_TABLE, Family::Inet))
+    } else {
+        topology_to_nftables_config(cfg.firewall.as_ref(), cfg.nat.as_ref())
+    }
 }
 
 /// Apply a node's stack. nlink plans every layer once and applies that
@@ -972,6 +978,17 @@ pub(crate) async fn apply_stack_for_node(
     let stack = node_stack(cfg)?;
     let mut apply = nlink::netlink::config::ApplyOptions::default();
     apply.plan = plan;
+    // `-vv` shows what the node's nftables layer changes, as nft prints
+    // it: planned once more here, read-only, since the report only counts
+    // it (#300)
+    if tracing::enabled!(tracing::Level::DEBUG)
+        && let Ok(planned) = stack.plan_in(handle.spec(), apply.plan.clone()).await
+        && let Some(diff) = planned
+            .nftables
+            .filter(|d| !d.is_empty() || !d.blocked.is_empty())
+    {
+        tracing::debug!(node = %node_name, "nftables plan: {diff}");
+    }
     let retry = nlink::reconcile::ReconcileOptions::new()
         .with_max_retries(2)
         .with_backoff(std::time::Duration::from_millis(50));
@@ -1088,7 +1105,12 @@ pub async fn compute_layered_diff_with(
         if let Some(d) = plan.network.filter(|d| !d.is_empty()) {
             network.insert(node_name.clone(), d);
         }
-        if let Some(d) = plan.nftables.filter(|d| !d.is_empty()) {
+        // what the diff cannot do is shown too, a set kept because a rule
+        // nlink-lab did not write uses it among them (#300)
+        if let Some(d) = plan
+            .nftables
+            .filter(|d| !d.is_empty() || !d.blocked.is_empty())
+        {
             nftables.insert(node_name.clone(), d);
         }
         if let Some(d) = plan.wireguard.filter(|d| !d.is_empty()) {
@@ -1159,6 +1181,61 @@ async fn preflight_recreates(running: &RunningLab, desired: &Topology) -> Result
          and nothing has been changed: {}. Remove that state first (e.g. `ip neigh del`, \
          a hand-added route or FDB entry; for FRR, take the link out of routing), or \
          destroy and deploy the lab again.",
+        refused.join("; ")
+    )))
+}
+
+/// Refuse an apply before anything changes when nlink would refuse a
+/// node's nftables changes (#300).
+///
+/// nlink 0.33 says what an nftables diff cannot do (`NftablesDiff::blocked`)
+/// and refuses it before it writes anything: a set, object or flowtable the
+/// diff recreates that a rule nlink-lab did not write uses, a chain it
+/// cannot recreate, table flags it cannot change. That refusal comes from
+/// the `Stack` stage, after earlier stages of the same apply have run, so
+/// it is checked here first: a read-only diff of every node whose stack the
+/// apply reconciles and that has, or had, a firewall or NAT.
+async fn preflight_nftables(running: &RunningLab, current: &Plan, diff: &Plan) -> Result<()> {
+    let had_nftables: BTreeSet<&str> = current
+        .ops
+        .iter()
+        .filter_map(|op| match op {
+            Op::Stack { node, cfg } if cfg.firewall.is_some() || cfg.nat.is_some() => {
+                Some(node.as_str())
+            }
+            _ => None,
+        })
+        .collect();
+    let mut refused = Vec::new();
+    for op in &diff.ops {
+        let Op::Stack { node, cfg } = op else {
+            continue;
+        };
+        if cfg.firewall.is_none() && cfg.nat.is_none() && !had_nftables.contains(node.as_str()) {
+            continue;
+        }
+        // a node the apply adds has no namespace yet, and nothing to refuse
+        let Ok(handle) = node_handle_for(running, node) else {
+            continue;
+        };
+        let conn: Connection<nlink::Nftables> = handle
+            .connection()
+            .map_err(|e| Error::nlink(format!("nftables connection on '{node}'"), e))?;
+        let planned = node_nftables(cfg)?
+            .diff(&conn)
+            .await
+            .map_err(|e| Error::nlink(format!("nftables diff on '{node}'"), e))?;
+        if let Some(why) = planned.refusal() {
+            refused.push(format!("{node}: {why}"));
+        }
+    }
+    if refused.is_empty() {
+        return Ok(());
+    }
+    Err(Error::deploy_failed(format!(
+        "apply would change nftables in a way nlink refuses, and nothing has been changed: \
+         {}. Remove what blocks it (a rule added by hand that uses what the change \
+         recreates), or destroy and deploy the lab again.",
         refused.join("; ")
     )))
 }

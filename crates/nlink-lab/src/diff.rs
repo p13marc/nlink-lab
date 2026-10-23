@@ -453,6 +453,15 @@ impl LayeredDiff {
             && self.wireguard.values().all(|d| d.is_empty())
     }
 
+    /// True when an nftables diff lists what it cannot do (nlink 0.33's
+    /// `blocked`): a set it keeps because a rule nlink-lab did not write
+    /// uses it, an object of a type nlink does not model, … The ones that
+    /// refuse count as changes, and fail `apply` before anything changes;
+    /// the others do not count, and are only said (#300).
+    pub fn has_blocked(&self) -> bool {
+        self.nftables.values().any(|d| !d.blocked.is_empty())
+    }
+
     /// Total change count, summed across every subdiff.
     pub fn change_count(&self) -> usize {
         self.topology.change_count()
@@ -529,16 +538,20 @@ impl std::fmt::Display for LayeredDiff {
         nftables_nodes.sort();
         for node in nftables_nodes {
             let diff = &self.nftables[node];
-            if diff.is_empty() {
+            if diff.is_empty() && diff.blocked.is_empty() {
                 continue;
             }
-            writeln!(
-                f,
-                "NftablesDiff ({node}, {} change{}):",
-                diff.change_count(),
-                if diff.change_count() == 1 { "" } else { "s" }
-            )?;
-            write_block(f, diff)?;
+            let count = diff.change_count();
+            match count {
+                0 => writeln!(f, "NftablesDiff ({node}, no changes):")?,
+                1 => writeln!(f, "NftablesDiff ({node}, 1 change):")?,
+                n => writeln!(f, "NftablesDiff ({node}, {n} changes):")?,
+            }
+            // nlink's own first line says the count again: its changes,
+            // then what it cannot do (`!`), one per line
+            let text = diff.to_string();
+            let body = text.split_once('\n').map_or("", |(_, body)| body);
+            write_block(f, &body)?;
             emitted = true;
         }
 

@@ -30,7 +30,7 @@ env:
   # them, myserver setup/ci-integration.conf) and the packages installed
   # below. Every step also unsets NLINK_LAB_SKIP_ROOT_TESTS, so a test that
   # needs root fails without it.
-  NLINK_LAB_STRICT_FEATURES: nftables,vrf,wireguard,bridge-vlan-filtering,bonding,wg,iperf3,frr,bgpd
+  NLINK_LAB_STRICT_FEATURES: nftables,nf_conntrack_netlink,vrf,wireguard,bridge-vlan-filtering,bonding,wg,iperf3,frr,bgpd
 
 jobs:
   integration:
@@ -54,7 +54,7 @@ jobs:
       - name: Guard that kernel modules are preloaded on the runner VM
         run: |
           missing=0
-          for m in nf_tables vrf wireguard bridge bonding; do
+          for m in nf_tables nf_conntrack_netlink vrf wireguard bridge bonding; do
             test -d "/sys/module/$m" || { echo "::error::module $m not loaded on the runner VM"; missing=1; }
           done
           exit $missing

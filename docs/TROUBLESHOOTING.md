@@ -281,6 +281,14 @@ half-built ruleset, and conntrack state is untouched — but an anonymous
 `counter name …`, does not). Rules nlink-lab did not write are left
 alone.
 
+### After an `apply` of a NAT change, an open connection broke
+
+Expected for the flows the changed rule matched: their conntrack
+entries are deleted so their next packet takes the new translation. A
+TCP connection whose destination moved is reset by the new target; a
+UDP stream simply goes there. `apply --keep-conntrack` keeps such flows
+on their old translation until they time out.
+
 ---
 
 ## `.nlz` Archive Errors

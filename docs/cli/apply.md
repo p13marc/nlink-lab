@@ -277,6 +277,9 @@ Options:
       --reset-impairments
           Drop the impairments set at runtime with `nlink-lab impair` and converge on the topology's `impair` declarations. Without this, a runtime impairment survives `apply` unless the topology changes that endpoint
 
+      --keep-conntrack
+          Keep the tracked flows of the NAT rules this apply changes. Without it they are deleted once the apply is done, so a flow that began before (a UDP stream, an open connection) is translated by the new rules on its next packet rather than keep its old translation
+
   -h, --help
           Print help (see a summary with '-h')
 ```

@@ -153,12 +153,16 @@ impl ApplyEnv {
 /// Blocking work — a container runtime's CLI, a command run in a node, a
 /// wait on a process — on tokio's blocking pool, so the plan's future does
 /// not stall the runtime awaiting it (the CLI's progress and Ctrl-C, the
-/// daemon's other work on a lab's thread). A panic resumes here.
-async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
+/// daemon's other work on a lab's thread). A panic resumes here; work the
+/// runtime dropped (it is shutting down) is an error, so what runs after
+/// it, a rollback included, still runs.
+async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Result<T> {
     match tokio::task::spawn_blocking(work).await {
-        Ok(out) => out,
+        Ok(out) => Ok(out),
         Err(e) if e.is_panic() => std::panic::resume_unwind(e.into_panic()),
-        Err(e) => panic!("blocking plan work did not finish: {e}"),
+        Err(e) => Err(Error::deploy_failed(format!(
+            "blocking plan work did not finish: {e}"
+        ))),
     }
 }
 
@@ -291,12 +295,13 @@ async fn wait_frr_converged(plan: &Plan, env: &ApplyEnv) -> Result<()> {
                 })
             };
             if spec.expected_ospf_neighbors > 0 {
-                let full = count("show ip ospf neighbor json", "\"Full/").await;
+                let full = count("show ip ospf neighbor json", "\"Full/").await?;
                 up += full.min(spec.expected_ospf_neighbors);
                 all_ok &= full >= spec.expected_ospf_neighbors;
             }
             if spec.expected_bgp_peers > 0 {
-                let established = count("show bgp summary json", "\"state\":\"Established\"").await;
+                let established =
+                    count("show bgp summary json", "\"state\":\"Established\"").await?;
                 up += established.min(spec.expected_bgp_peers);
                 all_ok &= established >= spec.expected_bgp_peers;
             }
@@ -375,7 +380,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             match pull.as_deref() {
                 // the runtime's `run` pulls a missing image itself, so
                 // `never` pulled anyway (#217)
-                Some("never") if !has_image().await => {
+                Some("never") if !has_image().await? => {
                     return Err(Error::deploy_failed(format!(
                         "node '{node}': image '{image}' is not present locally and pull is `never`"
                     )));
@@ -390,10 +395,10 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                         None,
                     );
                     let (rt, image) = (rt.clone(), image.clone());
-                    blocking(move || rt.pull_image(&image)).await?
+                    blocking(move || rt.pull_image(&image)).await??
                 }
                 _ => {
-                    if env.ctx.reporting() && !has_image().await {
+                    if env.ctx.reporting() && !has_image().await? {
                         env.ctx.waiting(
                             nlink_lab_shared::api::WaitKind::ImagePull {
                                 image: image.clone(),
@@ -403,13 +408,13 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                         );
                     }
                     let (rt, image) = (rt.clone(), image.clone());
-                    blocking(move || rt.ensure_image(&image)).await?
+                    blocking(move || rt.ensure_image(&image)).await??
                 }
             }
             let info = {
                 let (rt, name, image, opts) =
                     (rt.clone(), name.clone(), image.clone(), opts.clone());
-                blocking(move || rt.create(&name, &image, &opts)).await?
+                blocking(move || rt.create(&name, &image, &opts)).await??
             };
             journal.record(Undo::RemoveContainer {
                 binary: rt.binary().to_string(),
@@ -817,7 +822,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     )
                     .is_ok_and(|o| o.exit_code == 0))
                 })
-                .await?;
+                .await??;
                 if passed {
                     tracing::info!("healthcheck passed for '{node}'");
                     break;
@@ -1195,7 +1200,7 @@ async fn exec_op(
                 let cmd_strs: Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
                 rt.exec(&id, &cmd_strs)
             })
-            .await
+            .await?
             .map_err(|e| {
                 Error::deploy_failed(format!(
                     "failed to exec in container '{node}' exec[{index}]: {e}"
@@ -1214,7 +1219,7 @@ async fn exec_op(
         cmd.args(&exec.cmd[1..]);
         let output = {
             let handle = handle.clone();
-            blocking(move || handle.spawn_output(cmd)).await
+            blocking(move || handle.spawn_output(cmd)).await?
         }
         .map_err(|e| {
             Error::nlink(
@@ -1416,7 +1421,7 @@ async fn start_wifi_daemon(
     let _ = std::fs::remove_file(pidfile);
     let output = {
         let handle = handle.clone();
-        blocking(move || handle.spawn_output(cmd)).await
+        blocking(move || handle.spawn_output(cmd)).await?
     }
     .map_err(|e| Error::nlink(format!("failed to start {what} on '{node}'"), e))?;
     if !output.status.success() {
@@ -1463,7 +1468,7 @@ async fn start_forking_daemon(
         .spawn(cmd)
         .map_err(|e| Error::nlink(format!("failed to start {what} on '{node}'"), e))?;
     let status = blocking(move || child.wait())
-        .await
+        .await?
         .map_err(|e| Error::deploy_failed(format!("failed to wait for {what} on '{node}': {e}")))?;
     if !status.success() {
         let msg = std::fs::read_to_string(stderr_file).unwrap_or_default();

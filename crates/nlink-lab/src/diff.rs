@@ -917,6 +917,32 @@ mod tests {
     use super::*;
     use crate::Lab;
 
+    /// A node whose nftables diff only says what it cannot do prints its
+    /// header and that line: nlink's `Display` opens with a count line
+    /// (`no changes`) then too.
+    #[test]
+    fn an_nftables_diff_with_only_blocked_entries_prints_them() {
+        use nlink::netlink::nftables::Family;
+        use nlink::netlink::nftables::config::{Blocked, NftablesDiff};
+        let blocked = Blocked::UnmodelledObject {
+            family: Family::Inet,
+            table: "nlink-lab".into(),
+            name: "odd".into(),
+            object_type: 99,
+        };
+        let mut nftables = NftablesDiff::default();
+        nftables.blocked.push(blocked.clone());
+        let layered = LayeredDiff {
+            nftables: [("hq".to_string(), nftables)].into(),
+            ..Default::default()
+        };
+        assert!(layered.is_empty() && layered.has_blocked());
+        assert_eq!(
+            layered.to_string(),
+            format!("NftablesDiff (hq, no changes):\n  ! {blocked}\n")
+        );
+    }
+
     /// A node's nftables part prints its header once, then nlink's lines
     /// without nlink's own count line (#300): this pins the format of
     /// nlink's `Display` it relies on.

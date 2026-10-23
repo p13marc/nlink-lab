@@ -96,6 +96,8 @@ pub mod running;
 pub mod scenario;
 #[cfg(test)]
 pub(crate) mod schema_check;
+#[cfg(test)]
+mod schema_check_tests;
 pub mod state;
 pub mod subnet_pool;
 pub mod templates;

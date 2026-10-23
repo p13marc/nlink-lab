@@ -586,6 +586,14 @@ pub async fn handle(req: Request, ctx: &OpCtx) -> Option<Result<Response>> {
             }
             .await
         }
+        Request::FlushConntrack { lab, node, query } => {
+            async {
+                let running = RunningLab::load(&lab)?;
+                let deleted = running.flush_conntrack_of(node.as_deref(), &query).await?;
+                report("conntrack_flushed", &deleted)
+            }
+            .await
+        }
         Request::ClearImpairment { lab, endpoint } => {
             async {
                 RunningLab::load(&lab)?.clear_impairment(&endpoint).await?;

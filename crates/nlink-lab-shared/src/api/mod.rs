@@ -32,9 +32,9 @@ pub const DEFAULT_SOCKET: &str = "/run/nlink-lab/api/api.sock";
 
 /// The API version: `(major, minor)`. A client and a daemon of different
 /// majors refuse each other at the handshake.
-pub const API_VERSION: (u32, u32) = (1, 0);
+pub const API_VERSION: (u32, u32) = (1, 1);
 
-/// `API_VERSION` as written in the handshake: `"1.0"`.
+/// `API_VERSION` as written in the handshake: `"1.1"`.
 pub fn api_version_string() -> String {
     format!("{}.{}", API_VERSION.0, API_VERSION.1)
 }

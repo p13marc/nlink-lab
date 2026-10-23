@@ -42,6 +42,8 @@ const FEATURES: &[&str] = &[
     "operations",
     "jobs",
     "sessions",
+    // `conntrack`, `flush_conntrack` (API 1.1, #303)
+    "conntrack",
 ];
 
 /// What a running call receives from its client.

@@ -270,6 +270,42 @@ async fn the_daemon_serves_real_labs() {
         Response::Report { report, .. } => assert_eq!(report["eth0"][0], "10.231.0.2/24"),
         other => panic!("{other:?}"),
     }
+    // #303: a node's tracked flows, and deleting some (through the lab's
+    // queue: a change)
+    match client
+        .call(Request::Conntrack {
+            lab: LAB.into(),
+            node: Some("a".into()),
+            query: Default::default(),
+        })
+        .await
+        .unwrap()
+    {
+        Response::Report { kind, report } => {
+            assert_eq!(kind, "conntrack");
+            assert!(report.is_array(), "{report}");
+        }
+        other => panic!("{other:?}"),
+    }
+    match client
+        .call(Request::FlushConntrack {
+            lab: LAB.into(),
+            node: Some("a".into()),
+            query: nlink_lab_shared::api::ConntrackQuery {
+                proto: Some("udp".into()),
+                dport: Some(9),
+                ..Default::default()
+            },
+        })
+        .await
+        .unwrap()
+    {
+        Response::Report { kind, report } => {
+            assert_eq!(kind, "conntrack_flushed");
+            assert_eq!(report["a"], 0, "{report}");
+        }
+        other => panic!("{other:?}"),
+    }
     assert!(matches!(
         client
             .call(Request::GetMetrics { lab: LAB.into() })

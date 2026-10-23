@@ -12,7 +12,7 @@ use std::net::IpAddr;
 use std::collections::BTreeMap;
 
 use nlink::netlink::nftables::{
-    CmpOp, CtState, Expr, Family, Hook, PacketField, PayloadBase, Policy, Register, Rule,
+    CmpOp, CtState, Expr, Family, FilterHook, PacketField, PayloadBase, Policy, Register, Rule,
     SetElement, SetKeyType,
 };
 
@@ -38,11 +38,11 @@ impl Chain {
         }
     }
 
-    pub(crate) fn hook(self) -> Hook {
+    pub(crate) fn hook(self) -> FilterHook {
         match self {
-            Chain::Input => Hook::Input,
-            Chain::Forward => Hook::Forward,
-            Chain::Output => Hook::Output,
+            Chain::Input => FilterHook::Input,
+            Chain::Forward => FilterHook::Forward,
+            Chain::Output => FilterHook::Output,
         }
     }
 }
@@ -1275,7 +1275,7 @@ mod tests {
         let cfg =
             nlink::netlink::nftables::config::NftablesConfig::new()
                 .table("t", Family::Inet, |t| t.rule_keyed("input", "k", |_| rule));
-        cfg.tables()[0].rules()[0].exprs().to_vec()
+        cfg.tables()[0].rules()[0].exprs().expect("the rule lowers")
     }
 
     fn rule(m: &str, action: &str) -> FirewallRule {

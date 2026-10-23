@@ -150,6 +150,18 @@ impl ApplyEnv {
     }
 }
 
+/// Blocking work — a container runtime's CLI, a command run in a node, a
+/// wait on a process — on tokio's blocking pool, so the plan's future does
+/// not stall the runtime awaiting it (the CLI's progress and Ctrl-C, the
+/// daemon's other work on a lab's thread). A panic resumes here.
+async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
+    match tokio::task::spawn_blocking(work).await {
+        Ok(out) => out,
+        Err(e) if e.is_panic() => std::panic::resume_unwind(e.into_panic()),
+        Err(e) => panic!("blocking plan work did not finish: {e}"),
+    }
+}
+
 /// Execute every op of `plan` in order, journaling inverses.
 pub(super) async fn execute(plan: &Plan, env: &mut ApplyEnv, journal: &mut Journal) -> Result<()> {
     let mut last_stage: Option<Stage> = None;
@@ -266,21 +278,25 @@ async fn wait_frr_converged(plan: &Plan, env: &ApplyEnv) -> Result<()> {
             let Ok(handle) = env.handle(node) else {
                 continue;
             };
-            let count = |cmd: &str, needle: &str| -> usize {
-                let mut c = std::process::Command::new(&vtysh);
-                c.args(["-N", &spec.pathspace, "-c", cmd]);
-                match handle.spawn_output(c) {
-                    Ok(out) => String::from_utf8_lossy(&out.stdout).matches(needle).count(),
-                    Err(_) => 0,
-                }
+            let count = |cmd: &'static str, needle: &'static str| {
+                let (handle, vtysh, pathspace) =
+                    (handle.clone(), vtysh.clone(), spec.pathspace.clone());
+                blocking(move || {
+                    let mut c = std::process::Command::new(&vtysh);
+                    c.args(["-N", &pathspace, "-c", cmd]);
+                    match handle.spawn_output(c) {
+                        Ok(out) => String::from_utf8_lossy(&out.stdout).matches(needle).count(),
+                        Err(_) => 0,
+                    }
+                })
             };
             if spec.expected_ospf_neighbors > 0 {
-                let full = count("show ip ospf neighbor json", "\"Full/");
+                let full = count("show ip ospf neighbor json", "\"Full/").await;
                 up += full.min(spec.expected_ospf_neighbors);
                 all_ok &= full >= spec.expected_ospf_neighbors;
             }
             if spec.expected_bgp_peers > 0 {
-                let established = count("show bgp summary json", "\"state\":\"Established\"");
+                let established = count("show bgp summary json", "\"state\":\"Established\"").await;
                 up += established.min(spec.expected_bgp_peers);
                 all_ok &= established >= spec.expected_bgp_peers;
             }
@@ -349,12 +365,17 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
         } => {
             let rt = env
                 .runtime
-                .as_ref()
+                .clone()
                 .ok_or_else(|| Error::deploy_failed("no container runtime available"))?;
+            // the runtime is its CLI: every call runs off the async worker
+            let has_image = || {
+                let (rt, image) = (rt.clone(), image.clone());
+                blocking(move || rt.has_image(&image))
+            };
             match pull.as_deref() {
                 // the runtime's `run` pulls a missing image itself, so
                 // `never` pulled anyway (#217)
-                Some("never") if !rt.has_image(image) => {
+                Some("never") if !has_image().await => {
                     return Err(Error::deploy_failed(format!(
                         "node '{node}': image '{image}' is not present locally and pull is `never`"
                     )));
@@ -368,10 +389,11 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                         Some(node.clone()),
                         None,
                     );
-                    rt.pull_image(image)?
+                    let (rt, image) = (rt.clone(), image.clone());
+                    blocking(move || rt.pull_image(&image)).await?
                 }
                 _ => {
-                    if env.ctx.reporting() && !rt.has_image(image) {
+                    if env.ctx.reporting() && !has_image().await {
                         env.ctx.waiting(
                             nlink_lab_shared::api::WaitKind::ImagePull {
                                 image: image.clone(),
@@ -380,10 +402,15 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                             None,
                         );
                     }
-                    rt.ensure_image(image)?
+                    let (rt, image) = (rt.clone(), image.clone());
+                    blocking(move || rt.ensure_image(&image)).await?
                 }
             }
-            let info = rt.create(name, image, opts)?;
+            let info = {
+                let (rt, name, image, opts) =
+                    (rt.clone(), name.clone(), image.clone(), opts.clone());
+                blocking(move || rt.create(&name, &image, &opts)).await?
+            };
             journal.record(Undo::RemoveContainer {
                 binary: rt.binary().to_string(),
                 id: info.id.clone(),
@@ -718,7 +745,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             tracing::debug!("startup-delay {delay} for node '{node}'");
             env.ctx.sleep(d).await?;
         }
-        Op::Exec { node, index, exec } => exec_op(node, *index, exec, env, journal)?,
+        Op::Exec { node, index, exec } => exec_op(node, *index, exec, env, journal).await?,
         Op::Healthcheck {
             node,
             cmd,
@@ -749,41 +776,48 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             env.ctx.waiting(what(), Some(cmd.clone()), Some(limit));
             let deadline = std::time::Instant::now() + limit;
             let mut failed = 0u32;
+            let runtime = env.runtime.as_ref().map(|rt| rt.binary().to_string());
             loop {
                 let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-                let child = match &container {
-                    Some(id) => {
-                        let rt = env.runtime.as_ref().ok_or_else(|| {
-                            Error::deploy_failed("no container runtime available")
-                        })?;
-                        let mut probe = std::process::Command::new(rt.binary());
-                        probe.args(["exec", id, "sh", "-c", cmd]);
-                        probe
-                            .stdout(std::process::Stdio::piped())
-                            .stderr(std::process::Stdio::piped())
-                            .spawn()
-                            .map_err(|e| {
-                                Error::deploy_failed(format!("healthcheck on '{node}': {e}"))
-                            })
-                    }
-                    None => {
-                        let mut probe = std::process::Command::new("sh");
-                        probe.args(["-c", cmd]);
-                        probe
-                            .stdout(std::process::Stdio::piped())
-                            .stderr(std::process::Stdio::piped());
-                        handle
-                            .spawn(probe)
-                            .map_err(|e| Error::nlink(format!("healthcheck on '{node}'"), e))
-                    }
-                }?;
-                // a probe that hangs is killed at the deadline: it held the
-                // deploy past it (#217)
-                let passed = crate::running::output_with_timeout(
-                    child,
-                    remaining.max(std::time::Duration::from_millis(100)),
-                )
-                .is_ok_and(|o| o.exit_code == 0);
+                let (handle, container, runtime) =
+                    (handle.clone(), container.clone(), runtime.clone());
+                let (script, at) = (cmd.clone(), node.clone());
+                let passed = blocking(move || -> Result<bool> {
+                    let child = match &container {
+                        Some(id) => {
+                            let rt = runtime.ok_or_else(|| {
+                                Error::deploy_failed("no container runtime available")
+                            })?;
+                            let mut probe = std::process::Command::new(rt);
+                            probe.args(["exec", id, "sh", "-c", &script]);
+                            probe
+                                .stdout(std::process::Stdio::piped())
+                                .stderr(std::process::Stdio::piped())
+                                .spawn()
+                                .map_err(|e| {
+                                    Error::deploy_failed(format!("healthcheck on '{at}': {e}"))
+                                })
+                        }
+                        None => {
+                            let mut probe = std::process::Command::new("sh");
+                            probe.args(["-c", &script]);
+                            probe
+                                .stdout(std::process::Stdio::piped())
+                                .stderr(std::process::Stdio::piped());
+                            handle
+                                .spawn(probe)
+                                .map_err(|e| Error::nlink(format!("healthcheck on '{at}'"), e))
+                        }
+                    }?;
+                    // a probe that hangs is killed at the deadline: it held
+                    // the deploy past it (#217)
+                    Ok(crate::running::output_with_timeout(
+                        child,
+                        remaining.max(std::time::Duration::from_millis(100)),
+                    )
+                    .is_ok_and(|o| o.exit_code == 0))
+                })
+                .await?;
                 if passed {
                     tracing::info!("healthcheck passed for '{node}'");
                     break;
@@ -865,14 +899,15 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     &stderr_file,
                     env,
                     journal,
-                )?;
+                )
+                .await?;
                 if *d == frr::Daemon::Zebra {
                     // Protocol daemons retry the zapi socket anyway; waiting
                     // keeps their logs clean.
                     let sock = frr::run_dir(&spec.pathspace).join("zserv.api");
                     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
                     while !sock.exists() && std::time::Instant::now() < deadline {
-                        std::thread::sleep(std::time::Duration::from_millis(50));
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     }
                 }
             }
@@ -932,7 +967,8 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     let pidfile = wifi_pidfile(&env.lab, node, &wifi.name);
                     let mut cmd = std::process::Command::new("hostapd");
                     cmd.args(["-B", "-P", &pidfile, &conf]);
-                    start_wifi_daemon(&handle, cmd, "hostapd", node, &pidfile, env, journal)?;
+                    start_wifi_daemon(&handle, cmd, "hostapd", node, &pidfile, env, journal)
+                        .await?;
                 }
                 crate::types::WifiMode::Station => {
                     let conf = crate::wifi::write_config(
@@ -952,15 +988,8 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     let pidfile = wifi_pidfile(&env.lab, node, &wifi.name);
                     let mut cmd = std::process::Command::new("wpa_supplicant");
                     cmd.args(["-B", "-P", &pidfile, "-i", &wifi.name, "-c", &conf]);
-                    start_wifi_daemon(
-                        &handle,
-                        cmd,
-                        "wpa_supplicant",
-                        node,
-                        &pidfile,
-                        env,
-                        journal,
-                    )?;
+                    start_wifi_daemon(&handle, cmd, "wpa_supplicant", node, &pidfile, env, journal)
+                        .await?;
                 }
                 crate::types::WifiMode::Mesh => {
                     // `wifi-mesh-id` and `wifi-channel-range` refuse these
@@ -1066,11 +1095,16 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
         }
         Op::RemoveContainer { node, id } => {
             if let Some(rt) = &env.runtime {
-                let _ = std::process::Command::new(rt.binary())
-                    .args(["rm", "-f", id])
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .status();
+                let (binary, id) = (rt.binary().to_string(), id.clone());
+                blocking(move || {
+                    std::process::Command::new(binary)
+                        .args(["rm", "-f", &id])
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .status()
+                })
+                .await
+                .ok();
             }
             env.containers.remove(node);
             env.ns.remove(node);
@@ -1139,7 +1173,7 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
 
 /// `run` / `exec` blocks: foreground commands run to completion,
 /// background ones are tracked (PID + start time + log files).
-fn exec_op(
+async fn exec_op(
     node: &str,
     index: usize,
     exec: &crate::types::ExecConfig,
@@ -1154,10 +1188,15 @@ fn exec_op(
         if let Some(container_id) = &container_id {
             let rt = env
                 .runtime
-                .as_ref()
+                .clone()
                 .ok_or_else(|| Error::deploy_failed("no container runtime available"))?;
-            let cmd_strs: Vec<&str> = exec.cmd.iter().map(|s| s.as_str()).collect();
-            let output = rt.exec(container_id, &cmd_strs).map_err(|e| {
+            let (id, argv) = (container_id.clone(), exec.cmd.clone());
+            let output = blocking(move || {
+                let cmd_strs: Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
+                rt.exec(&id, &cmd_strs)
+            })
+            .await
+            .map_err(|e| {
                 Error::deploy_failed(format!(
                     "failed to exec in container '{node}' exec[{index}]: {e}"
                 ))
@@ -1173,7 +1212,11 @@ fn exec_op(
         }
         let mut cmd = std::process::Command::new(&exec.cmd[0]);
         cmd.args(&exec.cmd[1..]);
-        let output = handle.spawn_output(cmd).map_err(|e| {
+        let output = {
+            let handle = handle.clone();
+            blocking(move || handle.spawn_output(cmd)).await
+        }
+        .map_err(|e| {
             Error::nlink(
                 format!("failed to run command on '{node}' exec[{index}]"),
                 e,
@@ -1361,7 +1404,7 @@ fn wifi_pidfile(lab: &str, node: &str, iface: &str) -> String {
 /// parent, then track the daemon through the pidfile it wrote (#85): the
 /// pid joins `env.pids` with its start time and an `Undo::KillProcess`,
 /// so `destroy`, node removal and `KillWifiDaemon` can all stop it.
-fn start_wifi_daemon(
+async fn start_wifi_daemon(
     handle: &NsRef,
     cmd: std::process::Command,
     what: &str,
@@ -1371,9 +1414,11 @@ fn start_wifi_daemon(
     journal: &mut Journal,
 ) -> Result<()> {
     let _ = std::fs::remove_file(pidfile);
-    let output = handle
-        .spawn_output(cmd)
-        .map_err(|e| Error::nlink(format!("failed to start {what} on '{node}'"), e))?;
+    let output = {
+        let handle = handle.clone();
+        blocking(move || handle.spawn_output(cmd)).await
+    }
+    .map_err(|e| Error::nlink(format!("failed to start {what} on '{node}'"), e))?;
     if !output.status.success() {
         // hostapd and wpa_supplicant report on stdout.
         let said = [&output.stderr, &output.stdout]
@@ -1387,7 +1432,7 @@ fn start_wifi_daemon(
             output.status,
         )));
     }
-    track_pidfile(what, node, pidfile, env, journal);
+    track_pidfile(what, node, pidfile, env, journal).await;
     Ok(())
 }
 
@@ -1397,7 +1442,7 @@ fn start_wifi_daemon(
 /// would never see EOF. stdout goes to `/dev/null`, stderr to a file
 /// that is read back only when the foreground parent exits non-zero.
 #[allow(clippy::too_many_arguments)]
-fn start_forking_daemon(
+async fn start_forking_daemon(
     handle: &NsRef,
     mut cmd: std::process::Command,
     what: &str,
@@ -1417,8 +1462,8 @@ fn start_forking_daemon(
     let mut child = handle
         .spawn(cmd)
         .map_err(|e| Error::nlink(format!("failed to start {what} on '{node}'"), e))?;
-    let status = child
-        .wait()
+    let status = blocking(move || child.wait())
+        .await
         .map_err(|e| Error::deploy_failed(format!("failed to wait for {what} on '{node}': {e}")))?;
     if !status.success() {
         let msg = std::fs::read_to_string(stderr_file).unwrap_or_default();
@@ -1427,12 +1472,18 @@ fn start_forking_daemon(
             msg.trim()
         )));
     }
-    track_pidfile(what, node, pidfile, env, journal);
+    track_pidfile(what, node, pidfile, env, journal).await;
     Ok(())
 }
 
 /// Wait up to 2 s for `pidfile`, then journal + track the pid it names.
-fn track_pidfile(what: &str, node: &str, pidfile: &str, env: &mut ApplyEnv, journal: &mut Journal) {
+async fn track_pidfile(
+    what: &str,
+    node: &str,
+    pidfile: &str,
+    env: &mut ApplyEnv,
+    journal: &mut Journal,
+) {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
     let pid = loop {
         if let Some(pid) = std::fs::read_to_string(pidfile)
@@ -1444,7 +1495,7 @@ fn track_pidfile(what: &str, node: &str, pidfile: &str, env: &mut ApplyEnv, jour
         if std::time::Instant::now() >= deadline {
             break None;
         }
-        std::thread::sleep(std::time::Duration::from_millis(20));
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     };
     match pid {
         Some(pid) => {
@@ -1531,36 +1582,4 @@ async fn create_radio(
             )
         })?;
     Ok(())
-}
-
-/// [`execute`] on a thread and a current-thread runtime of its own.
-///
-/// nlink 0.32's reconciling applies (`Stack::apply_reconcile_in`, which
-/// `Op::Stack` awaits) are not `Send`, even with `'static` inputs: their
-/// retry loop takes an `AsyncFnMut`, whose call future rustc cannot prove
-/// `Send` for every borrow (nlink #877, rust-lang/rust#102211). The plan's
-/// future is therefore not `Send`, and neither would `deploy()`/`apply()`
-/// be: a caller could no longer `tokio::spawn` them. Running the plan here
-/// keeps theirs `Send`. The plan, env and journal travel by value and come
-/// back; a panic in the plan resumes in the caller.
-pub(super) async fn execute_isolated(
-    plan: Plan,
-    env: ApplyEnv,
-    journal: Journal,
-) -> (Result<()>, ApplyEnv, Journal) {
-    let task = tokio::task::spawn_blocking(move || {
-        let (mut env, mut journal) = (env, journal);
-        let res = match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
-            Ok(rt) => rt.block_on(execute(&plan, &mut env, &mut journal)),
-            Err(e) => Err(Error::deploy_failed(format!("plan runtime: {e}"))),
-        };
-        (res, env, journal)
-    });
-    match task.await {
-        Ok(out) => out,
-        Err(e) => std::panic::resume_unwind(e.into_panic()),
-    }
 }

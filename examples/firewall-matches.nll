@@ -1,0 +1,59 @@
+# Firewall matches: TCP flags, conntrack status, direction and zone,
+# packet types, protocols, and ordered compares.
+#
+# `gw` routes between a LAN and a WAN and publishes the LAN's web server
+# on its WAN address. Its forward chain lets replies through by their
+# conntrack direction, published flows by their DNAT status, and new
+# LAN connections only to ports up to 9000: a SYN to a port above it is
+# dropped and counted. The assertions prove the ICMP side: the LAN
+# reaches the WAN and the router, the WAN reaches neither.
+#
+#   sudo nlink-lab deploy --strict examples/firewall-matches.nll
+#   sudo nlink-lab exec -L firewall-matches gw -- nft list table inet nlink-lab
+#
+# Demonstrates: tcp flags (with a mask), ct status, ct direction, ct zone,
+# pkttype, l4proto, `<`/`>`/`<=`/`>=` on ports, marks and ct marks,
+# `mark !=`.
+
+lab "firewall-matches" {
+  description "Router firewall matching TCP flags, conntrack state and protocols"
+}
+
+profile router { forward ipv4 }
+
+node gw : router {
+  # Traffic addressed to gw itself: pings from the LAN, never a broadcast.
+  firewall policy drop {
+    accept ct established,related
+    drop pkttype broadcast counter name broadcasts
+    accept iif lan0 l4proto icmp
+  }
+  # Traffic routed through gw.
+  firewall forward policy drop {
+    accept ct direction reply
+    accept ct status dnat tcp dport 8080 counter name published
+    drop tcp flags syn / syn,ack tcp dport > 9000 counter name high-ports
+    accept iif lan0 tcp dport <= 9000
+    accept iif lan0 l4proto icmp
+    # what a raw table put in a conntrack zone, or marked, stays out
+    drop ct zone > 0
+    drop mark >= 0x100
+    drop ct mark != 0
+  }
+  nat {
+    dnat iif wan0 dst 10.0.2.1 tcp dport 80 to 10.0.1.10:8080
+  }
+}
+
+node lan-host { route default via 10.0.1.1 }
+node wan-host { route default via 10.0.2.1 }
+
+link gw:lan0 -- lan-host:eth0 { 10.0.1.1/24 -- 10.0.1.10/24 }
+link gw:wan0 -- wan-host:eth0 { 10.0.2.1/24 -- 10.0.2.10/24 }
+
+validate {
+  reach lan-host wan-host
+  no-reach wan-host lan-host
+  reach lan-host gw
+  no-reach wan-host gw
+}

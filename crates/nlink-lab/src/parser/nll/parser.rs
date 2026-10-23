@@ -1973,9 +1973,9 @@ fn parse_firewall_rule(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Firew
                 tokens,
                 *pos,
                 format!(
-                    "expected a firewall match (ct/tcp/udp/icmp/icmpv6/mark/src/dst/iif/oif) or \
-                     a statement (limit/counter/log/mark set/ct mark/classify/clamp mss), found {other} (matches go before \
-                     statements)"
+                    "expected a firewall match (ct/tcp/udp/icmp/icmpv6/mark/src/dst/iif/oif/\
+                     pkttype/l4proto/rpf) or a statement (limit/counter/log/mark set/ct mark/\
+                     classify/clamp mss), found {other} (matches go before statements)"
                 ),
             ));
         }
@@ -2043,6 +2043,65 @@ fn eat_neq(tokens: &[Spanned], pos: &mut usize) -> &'static str {
         " !="
     } else {
         ""
+    }
+}
+
+/// An optional comparison before a match operand (#302): `!=`, `<`, `>`,
+/// `<=` or `>=`, as the match string writes it (with its leading space).
+fn eat_cmp(tokens: &[Spanned], pos: &mut usize) -> &'static str {
+    let op = match at(tokens, *pos) {
+        Some(Token::NotEq) => " !=",
+        Some(Token::Lt) => " <",
+        Some(Token::Gt) => " >",
+        Some(Token::LtEq) => " <=",
+        Some(Token::GtEq) => " >=",
+        _ => return "",
+    };
+    *pos += 1;
+    op
+}
+
+/// Refuse an order (`<`, `>`, …) where only `!=` or nothing can go.
+fn no_order(tokens: &[Spanned], at_pos: usize, op: &str, what: &str) -> Result<()> {
+    if matches!(op, "" | " !=") {
+        return Ok(());
+    }
+    Err(err(
+        tokens,
+        at_pos,
+        format!(
+            "{what} is matched with `!=` or nothing, not `{}`",
+            op.trim()
+        ),
+    ))
+}
+
+/// A comma list of names, each one of `known` (#302): `syn,ack`,
+/// `dnat,seen-reply`.
+fn parse_known_names<T>(
+    tokens: &[Spanned],
+    pos: &mut usize,
+    known: &[(&str, T)],
+    what: &str,
+) -> Result<Vec<String>> {
+    let mut names = Vec::new();
+    loop {
+        let at_pos = *pos;
+        let name = parse_name(tokens, pos)?;
+        if !known.iter().any(|(k, _)| *k == name) && !name.contains("${") {
+            return Err(err(
+                tokens,
+                at_pos,
+                format!(
+                    "unknown {what} '{name}' (expected {})",
+                    known.iter().map(|(k, _)| *k).collect::<Vec<_>>().join(", ")
+                ),
+            ));
+        }
+        names.push(name);
+        if !eat(tokens, pos, &Token::Comma) {
+            return Ok(names);
+        }
     }
 }
 
@@ -2123,11 +2182,44 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
                     break;
                 }
                 *pos += 2;
+                let op = eat_cmp(tokens, pos);
                 let (text, _) = parse_mark_value(tokens, pos)?;
-                parts.push(format!("ct mark {text}"));
+                parts.push(format!("ct mark{op} {text}"));
                 continue;
             }
             *pos += 1;
+            // `ct status|direction|zone` (#302)
+            if eat_kw(tokens, pos, "status") {
+                let op_at = *pos;
+                let op = eat_cmp(tokens, pos);
+                no_order(tokens, op_at, op, "`ct status`")?;
+                let names =
+                    parse_known_names(tokens, pos, &crate::firewall::CT_STATUS, "ct status")?;
+                parts.push(format!("ct status{op} {}", names.join(",")));
+                continue;
+            }
+            if eat_kw(tokens, pos, "direction") {
+                let op_at = *pos;
+                let op = eat_cmp(tokens, pos);
+                no_order(tokens, op_at, op, "`ct direction`")?;
+                let at_pos = *pos;
+                let dir = parse_name(tokens, pos)?;
+                if !matches!(dir.as_str(), "original" | "reply") && !dir.contains("${") {
+                    return Err(err(
+                        tokens,
+                        at_pos,
+                        format!("ct direction is original or reply, got '{dir}'"),
+                    ));
+                }
+                parts.push(format!("ct direction{op} {dir}"));
+                continue;
+            }
+            if eat_kw(tokens, pos, "zone") {
+                let op = eat_cmp(tokens, pos);
+                let zone = expect_int_range(tokens, pos, "ct zone", 0, 65535)?;
+                parts.push(format!("ct zone{op} {zone}"));
+                continue;
+            }
             eat_kw(tokens, pos, "state");
             let mut states = Vec::new();
             loop {
@@ -2160,16 +2252,48 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
                 "udp"
             };
             *pos += 1;
+            // `tcp flags [!=] syn,ack [/ syn,ack,rst]` (#302)
+            if proto == "tcp" && eat_kw(tokens, pos, "flags") {
+                let op_at = *pos;
+                let op = eat_cmp(tokens, pos);
+                no_order(tokens, op_at, op, "`tcp flags`")?;
+                let flags =
+                    parse_known_names(tokens, pos, &crate::firewall::TCP_FLAGS, "tcp flag")?;
+                let mut text = format!("tcp flags{op} {}", flags.join(","));
+                if eat(tokens, pos, &Token::Slash) {
+                    let mask_at = *pos;
+                    let mask =
+                        parse_known_names(tokens, pos, &crate::firewall::TCP_FLAGS, "tcp flag")?;
+                    if let Some(f) = flags.iter().find(|f| !mask.contains(f)) {
+                        return Err(err(
+                            tokens,
+                            mask_at,
+                            format!(
+                                "tcp flag '{f}' is outside the mask '{}', so the rule never matches",
+                                mask.join(",")
+                            ),
+                        ));
+                    }
+                    text.push_str(&format!(" / {}", mask.join(",")));
+                }
+                parts.push(text);
+                continue;
+            }
             let dir = if eat_kw(tokens, pos, "dport") {
                 "dport"
             } else if eat_kw(tokens, pos, "sport") {
                 "sport"
             } else {
+                let what = if proto == "tcp" {
+                    "'dport', 'sport' or 'flags'"
+                } else {
+                    "'dport' or 'sport'"
+                };
                 return Err(err(
                     tokens,
                     *pos,
                     format!(
-                        "expected 'dport' or 'sport' after '{proto}', found {}",
+                        "expected {what} after '{proto}', found {}",
                         at(tokens, *pos).map_or("end of input".to_string(), |t| t.to_string())
                     ),
                 ));
@@ -2178,15 +2302,21 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
                 parts.push(parse_concat_tail(tokens, pos, format!("{proto} {dir}"))?);
                 continue;
             }
-            let neg = eat_neq(tokens, pos);
+            let op_at = *pos;
+            let op = eat_cmp(tokens, pos);
             if matches!(at(tokens, *pos), Some(Token::At)) {
+                no_order(tokens, op_at, op, "a set")?;
                 let set = parse_set_ref(tokens, pos)?;
-                parts.push(format!("{proto} {dir}{neg} {set}"));
+                parts.push(format!("{proto} {dir}{op} {set}"));
                 continue;
             }
-            // `!= LO-HI` is a range compare since nlink 0.32 (#189).
+            // `!= LO-HI` is a range compare since nlink 0.32 (#189); an
+            // order compares one port (#302)
             let port = parse_port_or_range(tokens, pos)?;
-            parts.push(format!("{proto} {dir}{neg} {port}"));
+            if port.contains('-') {
+                no_order(tokens, op_at, op, "a port range")?;
+            }
+            parts.push(format!("{proto} {dir}{op} {port}"));
         } else if check_kw(tokens, *pos, "icmp") {
             *pos += 1;
             let icmp_type = expect_int(tokens, pos)?;
@@ -2204,26 +2334,58 @@ fn parse_match_expr(tokens: &[Spanned], pos: &mut usize) -> Result<String> {
                 parts.push(parse_concat_tail(tokens, pos, "mark".into())?);
                 continue;
             }
-            let neg = eat_neq(tokens, pos);
+            let op_at = *pos;
+            let op = eat_cmp(tokens, pos);
             if matches!(at(tokens, *pos), Some(Token::At)) {
+                no_order(tokens, op_at, op, "a set")?;
                 let set = parse_set_ref(tokens, pos)?;
-                parts.push(format!("mark{neg} {set}"));
+                parts.push(format!("mark{op} {set}"));
                 continue;
             }
-            if !neg.is_empty() {
-                return Err(err(
-                    tokens,
-                    *pos,
-                    "`mark !=` takes a set: `mark != @name`".into(),
-                ));
-            }
             let (mut text, _, mask) = parse_masked_mark(tokens, pos)?;
+            if mask.is_some() {
+                no_order(tokens, op_at, op, "a masked mark")?;
+            }
             // `mark 0x10-0x1f` (#189)
             if mask.is_none() && eat(tokens, pos, &Token::Dash) {
+                no_order(tokens, op_at, op, "a mark range")?;
                 let (hi, _) = parse_mark_value(tokens, pos)?;
                 text = format!("{text}-{hi}");
             }
-            parts.push(format!("mark {text}"));
+            parts.push(format!("mark{op} {text}"));
+        } else if check_kw(tokens, *pos, "pkttype") {
+            // `pkttype [!=] host|broadcast|multicast|other` (#302)
+            *pos += 1;
+            let op_at = *pos;
+            let op = eat_cmp(tokens, pos);
+            no_order(tokens, op_at, op, "`pkttype`")?;
+            let names = parse_known_names(tokens, pos, &crate::firewall::PKT_TYPES, "pkttype")?;
+            if names.len() > 1 {
+                return Err(err(tokens, op_at, "`pkttype` takes one packet type".into()));
+            }
+            parts.push(format!("meta pkttype{op} {}", names[0]));
+        } else if check_kw(tokens, *pos, "l4proto") {
+            // `l4proto [OP] NAME|N` (#302)
+            *pos += 1;
+            let op = eat_cmp(tokens, pos);
+            let at_pos = *pos;
+            let proto = match at(tokens, *pos) {
+                Some(Token::Int(_)) => {
+                    expect_int_range(tokens, pos, "protocol", 0, 255)?.to_string()
+                }
+                _ => parse_name(tokens, pos)?,
+            };
+            if crate::firewall::l4proto_number(&proto).is_none() && !proto.contains("${") {
+                return Err(err(
+                    tokens,
+                    at_pos,
+                    format!(
+                        "unknown protocol '{proto}' (a name such as tcp, udp, icmp, gre, sctp, \
+                         or a number 0-255)"
+                    ),
+                ));
+            }
+            parts.push(format!("meta l4proto{op} {proto}"));
         } else if check_kw(tokens, *pos, "rpf") {
             // Reverse-path filtering (#189): the source is not routed back
             // out of the interface it came in on.

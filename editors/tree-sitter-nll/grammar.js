@@ -294,15 +294,29 @@ module.exports = grammar({
           seq(
             choice("tcp", "udp"),
             choice("dport", "sport"),
-            optional("!="),
+            optional($._cmp),
             choice(seq($._value, optional(seq("-", $.integer))), $.set_ref),
+          ),
+          // `tcp flags [!=] syn,ack [/ syn,ack,rst]` (#302)
+          seq(
+            "tcp",
+            "flags",
+            optional("!="),
+            $.name_list,
+            optional(seq("/", $.name_list)),
           ),
           seq(choice("icmp", "icmpv6"), optional($._value)),
             seq("ct", optional("state"), $.ct_states),
-            seq("ct", "mark", $._mark_value),
+            seq("ct", "mark", optional($._cmp), $._mark_value),
+            // `ct status|direction|zone` (#302)
+            seq("ct", "status", optional("!="), $.name_list),
+            seq("ct", "direction", optional("!="), $.identifier),
+            seq("ct", "zone", optional($._cmp), $.integer),
+            seq("pkttype", optional("!="), $.identifier),
+            seq("l4proto", optional($._cmp), choice($.integer, $.identifier)),
             seq(
               "mark",
-              optional("!="),
+              optional($._cmp),
               choice(
                 seq(
                   $._mark_value,
@@ -319,6 +333,12 @@ module.exports = grammar({
       ),
 
     ct_states: ($) => seq($.identifier, repeat(seq(",", $.identifier))),
+
+    // flag and status names (`syn,ack`, `dnat,seen-reply`, #302)
+    name_list: ($) => seq($.identifier, repeat(seq(",", $.identifier))),
+
+    // what a match compares with (#302): `!=` or an order
+    _cmp: ($) => choice("!=", "<", ">", "<=", ">="),
 
     // ── NAT ─────────────────────────────────────────
     nat_block: ($) =>

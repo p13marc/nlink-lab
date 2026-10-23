@@ -646,10 +646,13 @@ node gw : router {
 }
 ```
 
-Matches: `src`/`dst` (with `!=`), `tcp`/`udp` `dport`/`sport` (a port or
-a range `8000-8999`, `!=` for a single port), `ct` states, `iif`/`oif`,
-`icmp`/`icmpv6` types, `mark`. A rule with no match (`reject`) catches
-everything left. `reject` answers ICMP port unreachable; `reject with
+Matches: `src`/`dst` (with `!=`), `tcp`/`udp` `dport`/`sport` (a port, a
+range `8000-8999`, `!=`, or an order such as `> 1024`), `tcp flags`
+(`syn`, `syn / syn,ack`), `ct` states, `ct status` (`dnat`, `seen-reply`, …),
+`ct direction`, `ct zone`, `ct mark`, `iif`/`oif`, `icmp`/`icmpv6` types,
+`mark` (with `!=`, an order, a mask or a range), `pkttype`, `l4proto`,
+`rpf`. The full table is in the [NLL reference](NLL_DSL_DESIGN.md). A rule
+with no match (`reject`) catches everything left. `reject` answers ICMP port unreachable; `reject with
 tcp-reset` sends a reset. There is also an `output` chain, and
 `firewall { input … forward … output … }` groups them.
 

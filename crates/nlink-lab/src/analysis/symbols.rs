@@ -436,6 +436,84 @@ pub const BLOCK_KEYWORDS: &[(&str, &[&str])] = &[
     ("scenario", &["at", "down", "up", "clear", "validate"]),
     ("benchmark", &["ping", "iperf3", "assert"]),
     ("frr", &["ospf", "bgp"]),
+    // a firewall block, and its chains (#302)
+    (
+        "firewall",
+        &[
+            "set",
+            "input",
+            "forward",
+            "output",
+            "policy",
+            "accept",
+            "drop",
+            "reject",
+            "with",
+            "src",
+            "dst",
+            "tcp",
+            "udp",
+            "dport",
+            "sport",
+            "flags",
+            "icmp",
+            "icmpv6",
+            "ct",
+            "state",
+            "status",
+            "direction",
+            "zone",
+            "mark",
+            "iif",
+            "oif",
+            "pkttype",
+            "l4proto",
+            "rpf",
+            "counter",
+            "limit",
+            "log",
+            "classify",
+            "clamp",
+        ],
+    ),
+    ("input", FIREWALL_RULE_WORDS),
+    ("forward", FIREWALL_RULE_WORDS),
+    ("output", FIREWALL_RULE_WORDS),
+];
+
+/// What a firewall chain's rules are made of: verdicts, match fields
+/// (#302's included) and statements. The `firewall` entry lists them too
+/// (a block's rules can sit in it directly); a test keeps the two in step.
+const FIREWALL_RULE_WORDS: &[&str] = &[
+    "accept",
+    "drop",
+    "reject",
+    "with",
+    "src",
+    "dst",
+    "tcp",
+    "udp",
+    "dport",
+    "sport",
+    "flags",
+    "icmp",
+    "icmpv6",
+    "ct",
+    "state",
+    "status",
+    "direction",
+    "zone",
+    "mark",
+    "iif",
+    "oif",
+    "pkttype",
+    "l4proto",
+    "rpf",
+    "counter",
+    "limit",
+    "log",
+    "classify",
+    "clamp",
 ];
 
 /// Words that lex as `Ident` because they are only keywords in context.
@@ -447,6 +525,20 @@ pub const CONTEXTUAL_KEYWORDS: &[&str] = &["qdisc", "bond", "vlan", "site", "if"
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A rule written straight in a `firewall { }` block is completed like
+    /// one in a chain: the `firewall` entry holds every chain word.
+    #[test]
+    fn the_firewall_block_offers_every_chain_word() {
+        let firewall = BLOCK_KEYWORDS
+            .iter()
+            .find(|(k, _)| *k == "firewall")
+            .map(|(_, words)| *words)
+            .unwrap();
+        for word in FIREWALL_RULE_WORDS {
+            assert!(firewall.contains(word), "{word}");
+        }
+    }
     use crate::parser::nll::lexer::lex;
 
     const SRC: &str = concat!(

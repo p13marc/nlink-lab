@@ -246,7 +246,7 @@ bins/gui/src/       # nlink-lab-gui, the desktop app (iced 0.14, experimental):
 bins/gui/tests/packaging.rs    # desktop entry / metainfo / manifest / release agree
 
 examples/
-  *.nll             # NLL topology examples (46 top-level; 55 incl. cookbook/ and imports/)
+  *.nll             # NLL topology examples (47 top-level; 56 incl. cookbook/ and imports/)
   imports/          # Import composition and parametric module examples
 ```
 
@@ -307,7 +307,9 @@ NLL supports `for` loops (integer ranges and list iteration), `let` variables,
 (`pool fabric 10.0.0.0/16 /30`), topology patterns (`mesh`, `ring`, `star`),
 cross-references (`${node.iface}`), multi-profile inheritance,
 inline impairments (`->` / `<-`), profiles, firewall (input/forward/output
-chains; `src`/`dst`, `iif`/`oif`, `!=`, port ranges; accept/drop/reject
+chains; `src`/`dst`, `iif`/`oif`, `!=` and orders (`< > <= >=` on ports, marks,
+`ct mark`, `ct zone`, `l4proto`), port ranges, `tcp flags` (`syn / syn,ack`), `ct status`/
+`direction`/`zone`, `pkttype`, `l4proto`; accept/drop/reject
 with `reject with tcp-reset`; named sets with `@set` lookups, interval and
 concatenated keys; `limit` (packets or bytes)/`counter`/`counter name`/`log … level` statements and a
 `validate { counter … }` assertion; `rpf` anti-spoofing, `!=` port ranges, mark ranges; `mark set`/`ct mark set|save|restore`,

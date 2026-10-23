@@ -14,9 +14,9 @@ use std::net::IpAddr;
 use std::collections::BTreeMap;
 
 use nlink::netlink::nftables::{
-    CtState, FibFlags, FibResult, Field as NftField, FilterHook, IcmpxCode, Match, MatchOp,
-    ObjectType, PacketField, Policy, Reject, RuleSpec, SetElement, SetKeyType, Stmt, Value,
-    Verdict,
+    CtDirection, CtState, CtStatus, FibFlags, FibResult, Field as NftField, FilterHook, IcmpxCode,
+    Match, MatchOp, ObjectType, PacketField, PktType, Policy, Reject, RuleSpec, SetElement,
+    SetKeyType, Stmt, TcpFlags, Value, Verdict,
 };
 
 use crate::types::{FirewallConfig, FirewallRule, FirewallSet, RejectWith, SetKey};
@@ -255,11 +255,12 @@ pub(crate) enum Clause {
         prefix: u8,
         text: String,
     },
-    /// `tcp|udp dport|sport [!=] N` or `… LO-HI`.
+    /// `tcp|udp dport|sport [OP] N` or `… [!=] LO-HI`: an order (`<`, `>`,
+    /// `<=`, `>=`) compares one port (#302).
     Port {
         tcp: bool,
         dport: bool,
-        neg: bool,
+        op: Cmp,
         lo: u16,
         hi: u16,
     },
@@ -267,16 +268,40 @@ pub(crate) enum Clause {
     Icmp { v6: bool, ty: u8 },
     /// `ct state a,b`.
     CtState(Vec<String>),
-    /// `mark V` or `mark V/M` (decimal or hex, as written in `text`).
+    /// `mark [OP] V` or `mark [!=] V/M` (decimal or hex, as written in
+    /// `text`).
     Mark {
+        op: Cmp,
         value: u32,
         mask: Option<u32>,
         text: String,
     },
-    /// `mark LO-HI` (#189).
-    MarkRange { lo: u32, hi: u32, text: String },
-    /// `ct mark V`.
-    CtMark { value: u32, text: String },
+    /// `mark [!=] LO-HI` (#189).
+    MarkRange {
+        neg: bool,
+        lo: u32,
+        hi: u32,
+        text: String,
+    },
+    /// `ct mark [OP] V`.
+    CtMark { op: Cmp, value: u32, text: String },
+    /// `tcp flags [!=] a,b [/ c,d]` (#302): any of the flags, or with a
+    /// mask, the flags under it are exactly these.
+    TcpFlags {
+        neg: bool,
+        flags: Vec<String>,
+        mask: Option<Vec<String>>,
+    },
+    /// `ct status [!=] a,b` (#302): any of these status bits.
+    CtStatus { neg: bool, names: Vec<String> },
+    /// `ct direction [!=] original|reply` (#302).
+    CtDirection { neg: bool, reply: bool },
+    /// `ct zone [OP] N` (#302).
+    CtZone { op: Cmp, zone: u16 },
+    /// `meta pkttype [!=] host|broadcast|multicast|other` (#302).
+    PktType { neg: bool, kind: String },
+    /// `meta l4proto [OP] NAME|N` (#302); `text` as written.
+    L4Proto { op: Cmp, proto: u8, text: String },
     /// `iifname|oifname [!=] NAME`.
     Iface { out: bool, neg: bool, name: String },
     /// `rpf`, stored as nft's `fib saddr . iif oif missing` (#189): the
@@ -285,12 +310,162 @@ pub(crate) enum Clause {
     Rpf,
 }
 
+/// How a clause compares its field with its value (#302): equal (written
+/// as nothing), `!=`, or an order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Cmp {
+    Eq,
+    Ne,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+}
+
+impl Cmp {
+    /// The operator a token writes, if it is one (`==` is not written).
+    pub(crate) fn parse(tok: &str) -> Option<Cmp> {
+        Some(match tok {
+            "!=" => Cmp::Ne,
+            "<" => Cmp::Lt,
+            ">" => Cmp::Gt,
+            "<=" => Cmp::Le,
+            ">=" => Cmp::Ge,
+            _ => return None,
+        })
+    }
+
+    /// The operator with its leading space, nothing for equal: what goes
+    /// between a field and its value.
+    pub(crate) fn text(self) -> &'static str {
+        match self {
+            Cmp::Eq => "",
+            Cmp::Ne => " !=",
+            Cmp::Lt => " <",
+            Cmp::Gt => " >",
+            Cmp::Le => " <=",
+            Cmp::Ge => " >=",
+        }
+    }
+
+    /// An order rather than an equality.
+    pub(crate) fn ordered(self) -> bool {
+        !matches!(self, Cmp::Eq | Cmp::Ne)
+    }
+
+    fn op(self) -> MatchOp {
+        match self {
+            Cmp::Eq => MatchOp::Eq,
+            Cmp::Ne => MatchOp::Ne,
+            Cmp::Lt => MatchOp::Lt,
+            Cmp::Gt => MatchOp::Gt,
+            Cmp::Le => MatchOp::Le,
+            Cmp::Ge => MatchOp::Ge,
+        }
+    }
+}
+
+/// `tcp flags` names, as nft spells them (`ecn` is the ECE bit).
+pub(crate) const TCP_FLAGS: [(&str, TcpFlags); 8] = [
+    ("fin", TcpFlags::FIN),
+    ("syn", TcpFlags::SYN),
+    ("rst", TcpFlags::RST),
+    ("psh", TcpFlags::PSH),
+    ("ack", TcpFlags::ACK),
+    ("urg", TcpFlags::URG),
+    ("ecn", TcpFlags::ECE),
+    ("cwr", TcpFlags::CWR),
+];
+
+/// `ct status` names, as nft spells them.
+pub(crate) const CT_STATUS: [(&str, CtStatus); 7] = [
+    ("expected", CtStatus::EXPECTED),
+    ("seen-reply", CtStatus::SEEN_REPLY),
+    ("assured", CtStatus::ASSURED),
+    ("confirmed", CtStatus::CONFIRMED),
+    ("snat", CtStatus::SRC_NAT),
+    ("dnat", CtStatus::DST_NAT),
+    ("dying", CtStatus::DYING),
+];
+
+/// `pkttype` names, as nft spells them.
+pub(crate) const PKT_TYPES: [(&str, PktType); 4] = [
+    ("host", PktType::Host),
+    ("broadcast", PktType::Broadcast),
+    ("multicast", PktType::Multicast),
+    ("other", PktType::OtherHost),
+];
+
+/// IP protocol names `l4proto` takes (`/etc/protocols`' names); a number
+/// 0–255 is taken as well.
+pub(crate) const L4_PROTOS: [(&str, u8); 14] = [
+    ("icmp", 1),
+    ("igmp", 2),
+    ("tcp", 6),
+    ("udp", 17),
+    ("dccp", 33),
+    ("gre", 47),
+    ("esp", 50),
+    ("ah", 51),
+    ("icmpv6", 58),
+    ("ipv6-icmp", 58),
+    ("ospf", 89),
+    ("vrrp", 112),
+    ("sctp", 132),
+    ("udplite", 136),
+];
+
+/// The protocol number of an `l4proto` operand: a name of [`L4_PROTOS`]
+/// or a number.
+pub(crate) fn l4proto_number(text: &str) -> Option<u8> {
+    L4_PROTOS
+        .iter()
+        .find(|(n, _)| *n == text)
+        .map(|(_, p)| *p)
+        .or_else(|| text.parse().ok())
+}
+
+/// The names of a comma list, each checked against `known`.
+fn names_in<'a, T>(
+    value: &str,
+    known: &'a [(&'a str, T)],
+    what: &str,
+) -> Result<Vec<String>, String> {
+    value
+        .split(',')
+        .map(|n| {
+            let n = n.trim();
+            if known.iter().any(|(k, _)| *k == n) {
+                Ok(n.to_string())
+            } else {
+                Err(format!(
+                    "unknown {what} '{n}' in firewall rule (expected {})",
+                    known.iter().map(|(k, _)| *k).collect::<Vec<_>>().join(", ")
+                ))
+            }
+        })
+        .collect()
+}
+
+/// The flags of `tcp flags` names.
+fn tcp_flags_of(names: &[String]) -> TcpFlags {
+    let mut flags = TcpFlags::empty();
+    for n in names {
+        if let Some((_, f)) = TCP_FLAGS.iter().find(|(k, _)| k == n) {
+            flags |= *f;
+        }
+    }
+    flags
+}
+
 /// How `rpf` is stored in a match expression: what nft writes for it.
 const RPF: [&str; 6] = ["fib", "saddr", ".", "iif", "oif", "missing"];
 
 const SUPPORTED: &str = "Supported: 'ip saddr/daddr [!=] CIDR|@set', 'ip6 saddr/daddr [!=] \
-     CIDR|@set', 'ct state ...', 'tcp|udp dport/sport [!=] N[-M]|@set', 'icmp type N', \
-     'icmpv6 type N', 'mark N|@set', 'iifname|oifname [!=] NAME', 'FIELD . FIELD [!=] @set'";
+     CIDR|@set', 'ct state ...', 'ct status|direction [!=] ...', 'ct mark|zone [OP] N', \
+     'tcp|udp dport/sport [OP] N[-M]|@set', 'tcp flags [!=] F[,F] [/ F,F]', 'icmp type N', \
+     'icmpv6 type N', 'mark [OP] N|@set', 'meta pkttype [!=] TYPE', 'meta l4proto [OP] PROTO', \
+     'iifname|oifname [!=] NAME', 'FIELD . FIELD [!=] @set' (OP: !=, <, >, <=, >=)";
 
 /// The set name of a `@name` operand.
 fn set_ref(op: &str) -> Result<Option<String>, String> {
@@ -351,8 +526,24 @@ pub(crate) fn parse_match(expr: &str) -> Result<Vec<Clause>, String> {
                 continue;
             }
         }
-        let neg = toks.get(i + 2) == Some(&"!=");
-        // the operand follows the keyword pair, after an optional `!=`
+        // the operator after a two-word field (`ip saddr`, `tcp dport`,
+        // `ct mark`, …), and the operand after it
+        let op = toks
+            .get(i + 2)
+            .and_then(|t| Cmp::parse(t))
+            .unwrap_or(Cmp::Eq);
+        let neg = op == Cmp::Ne;
+        let after_op = i + 2 + usize::from(op != Cmp::Eq);
+        let unordered = |what: &str| -> Result<(), String> {
+            if op.ordered() {
+                Err(format!(
+                    "{what} is matched with `!=` or nothing, not `{}`, in expression: '{expr}'",
+                    op.text().trim()
+                ))
+            } else {
+                Ok(())
+            }
+        };
         let operand = |at: usize| -> Result<&str, String> {
             toks.get(at)
                 .copied()
@@ -361,7 +552,8 @@ pub(crate) fn parse_match(expr: &str) -> Result<Vec<Clause>, String> {
         match toks[i] {
             kw @ ("ip" | "ip6") if matches!(toks.get(i + 1), Some(&("saddr" | "daddr"))) => {
                 let dir = toks[i + 1];
-                let at = i + 2 + usize::from(neg);
+                unordered("an address")?;
+                let at = after_op;
                 let cidr = operand(at)?;
                 let want_v6 = kw == "ip6";
                 let family = if want_v6 { "IPv6" } else { "IPv4" };
@@ -383,8 +575,28 @@ pub(crate) fn parse_match(expr: &str) -> Result<Vec<Clause>, String> {
                 });
                 i = at + 1;
             }
+            "tcp" if toks.get(i + 1) == Some(&"flags") => {
+                unordered("`tcp flags`")?;
+                let at = after_op;
+                let flags = names_in(operand(at)?, &TCP_FLAGS, "tcp flag")?;
+                let (mask, next) = if toks.get(at + 1) == Some(&"/") {
+                    let mask = names_in(operand(at + 2)?, &TCP_FLAGS, "tcp flag")?;
+                    if let Some(f) = flags.iter().find(|f| !mask.contains(f)) {
+                        return Err(format!(
+                            "tcp flag '{f}' is outside the mask '{}', so the rule never \
+                             matches: in expression: '{expr}'",
+                            mask.join(",")
+                        ));
+                    }
+                    (Some(mask), at + 3)
+                } else {
+                    (None, at + 1)
+                };
+                out.push(Clause::TcpFlags { neg, flags, mask });
+                i = next;
+            }
             proto @ ("tcp" | "udp") if matches!(toks.get(i + 1), Some(&("dport" | "sport"))) => {
-                let at = i + 2 + usize::from(neg);
+                let at = after_op;
                 let value = operand(at)?;
                 let port = |s: &str| {
                     s.parse::<u16>()
@@ -402,10 +614,16 @@ pub(crate) fn parse_match(expr: &str) -> Result<Vec<Clause>, String> {
                         "port range '{value}' in firewall rule starts after it ends"
                     ));
                 }
+                if op.ordered() && lo != hi {
+                    return Err(format!(
+                        "`{}` compares one port, not the range '{value}', in expression: '{expr}'",
+                        op.text().trim()
+                    ));
+                }
                 out.push(Clause::Port {
                     tcp: proto == "tcp",
                     dport: toks[i + 1] == "dport",
-                    neg,
+                    op,
                     lo,
                     hi,
                 });
@@ -440,9 +658,26 @@ pub(crate) fn parse_match(expr: &str) -> Result<Vec<Clause>, String> {
                 i += 3;
             }
             "mark" => {
-                let text = operand(i + 1)?;
+                // a one-word field: its operator is the next token
+                let op = toks
+                    .get(i + 1)
+                    .and_then(|t| Cmp::parse(t))
+                    .unwrap_or(Cmp::Eq);
+                let at = i + 1 + usize::from(op != Cmp::Eq);
+                let text = operand(at)?;
                 let bad = || format!("invalid mark '{text}' in firewall rule");
+                let order = |what: &str| -> Result<(), String> {
+                    if op.ordered() {
+                        Err(format!(
+                            "`{}` compares a plain mark, not {what} '{text}'",
+                            op.text().trim()
+                        ))
+                    } else {
+                        Ok(())
+                    }
+                };
                 if let Some((lo, hi)) = text.split_once('-') {
+                    order("the range")?;
                     let (lo, hi) = (
                         parse_u32(lo).ok_or_else(bad)?,
                         parse_u32(hi).ok_or_else(bad)?,
@@ -453,36 +688,102 @@ pub(crate) fn parse_match(expr: &str) -> Result<Vec<Clause>, String> {
                         ));
                     }
                     out.push(Clause::MarkRange {
+                        neg: op == Cmp::Ne,
                         lo,
                         hi,
                         text: text.to_string(),
                     });
-                    i += 2;
+                    i = at + 1;
                     continue;
                 }
                 let (value, mask) = match text.split_once('/') {
-                    Some((v, m)) => (
-                        parse_u32(v).ok_or_else(bad)?,
-                        Some(parse_u32(m).ok_or_else(bad)?),
-                    ),
+                    Some((v, m)) => {
+                        order("the masked")?;
+                        (
+                            parse_u32(v).ok_or_else(bad)?,
+                            Some(parse_u32(m).ok_or_else(bad)?),
+                        )
+                    }
                     None => (parse_u32(text).ok_or_else(bad)?, None),
                 };
                 out.push(Clause::Mark {
+                    op,
                     value,
                     mask,
                     text: text.to_string(),
                 });
-                i += 2;
+                i = at + 1;
             }
             "ct" if toks.get(i + 1) == Some(&"mark") => {
-                let text = operand(i + 2)?;
+                let at = after_op;
+                let text = operand(at)?;
                 let value = parse_u32(text)
                     .ok_or_else(|| format!("invalid ct mark '{text}' in firewall rule"))?;
                 out.push(Clause::CtMark {
+                    op,
                     value,
                     text: text.to_string(),
                 });
-                i += 3;
+                i = at + 1;
+            }
+            "ct" if toks.get(i + 1) == Some(&"status") => {
+                unordered("`ct status`")?;
+                let names = names_in(operand(after_op)?, &CT_STATUS, "ct status")?;
+                out.push(Clause::CtStatus { neg, names });
+                i = after_op + 1;
+            }
+            "ct" if toks.get(i + 1) == Some(&"direction") => {
+                unordered("`ct direction`")?;
+                let value = operand(after_op)?;
+                let reply = match value {
+                    "original" => false,
+                    "reply" => true,
+                    other => {
+                        return Err(format!(
+                            "ct direction is original or reply, got '{other}' in firewall rule"
+                        ));
+                    }
+                };
+                out.push(Clause::CtDirection { neg, reply });
+                i = after_op + 1;
+            }
+            "ct" if toks.get(i + 1) == Some(&"zone") => {
+                let value = operand(after_op)?;
+                let zone = value.parse::<u16>().map_err(|_| {
+                    format!("invalid ct zone '{value}' in firewall rule (a number 0-65535)")
+                })?;
+                out.push(Clause::CtZone { op, zone });
+                i = after_op + 1;
+            }
+            "meta" if toks.get(i + 1) == Some(&"pkttype") => {
+                unordered("`pkttype`")?;
+                let value = operand(after_op)?;
+                if !PKT_TYPES.iter().any(|(k, _)| *k == value) {
+                    return Err(format!(
+                        "unknown pkttype '{value}' in firewall rule (expected host, broadcast, \
+                         multicast or other)"
+                    ));
+                }
+                out.push(Clause::PktType {
+                    neg,
+                    kind: value.to_string(),
+                });
+                i = after_op + 1;
+            }
+            "meta" if toks.get(i + 1) == Some(&"l4proto") => {
+                let value = operand(after_op)?;
+                let proto = l4proto_number(value).ok_or_else(|| {
+                    format!(
+                        "unknown protocol '{value}' in firewall rule (a name such as tcp, udp, \
+                         icmp, gre, sctp, or a number 0-255)"
+                    )
+                })?;
+                out.push(Clause::L4Proto {
+                    op,
+                    proto,
+                    text: value.to_string(),
+                });
+                i = after_op + 1;
             }
             kw @ ("iifname" | "oifname") => {
                 let neg = toks.get(i + 1) == Some(&"!=");
@@ -537,7 +838,7 @@ impl Clause {
             Clause::Port {
                 tcp,
                 dport,
-                neg,
+                op,
                 lo,
                 hi,
             } => {
@@ -550,17 +851,24 @@ impl Clause {
                     "{} {}{} {range}",
                     if *tcp { "tcp" } else { "udp" },
                     if *dport { "dport" } else { "sport" },
-                    ne(*neg)
+                    op.text()
                 )
             }
             Clause::Icmp { v6, ty } => format!("{} {ty}", if *v6 { "icmpv6" } else { "icmp" }),
             Clause::CtState(states) => format!("ct {}", states.join(",")),
-            Clause::Mark { text, .. } | Clause::MarkRange { text, .. } => format!("mark {text}"),
-            Clause::CtMark { text, .. } => format!("ct mark {text}"),
+            Clause::Mark { op, text, .. } => format!("mark{} {text}", op.text()),
+            Clause::MarkRange { neg, text, .. } => format!("mark{} {text}", ne(*neg)),
+            Clause::CtMark { op, text, .. } => format!("ct mark{} {text}", op.text()),
             Clause::Iface { out, neg, name } => {
                 format!("{}{} {name}", if *out { "oif" } else { "iif" }, ne(*neg))
             }
             Clause::Rpf => "rpf".to_string(),
+            Clause::TcpFlags { .. }
+            | Clause::CtStatus { .. }
+            | Clause::CtDirection { .. }
+            | Clause::CtZone { .. } => self.to_match(),
+            Clause::PktType { neg, kind } => format!("pkttype{} {kind}", ne(*neg)),
+            Clause::L4Proto { op, text, .. } => format!("l4proto{} {text}", op.text()),
         }
     }
 
@@ -595,7 +903,7 @@ impl Clause {
             Clause::Port {
                 tcp,
                 dport,
-                neg,
+                op: cmp,
                 lo,
                 hi,
             } => {
@@ -608,7 +916,7 @@ impl Clause {
                 } else {
                     Value::range(*lo, *hi)
                 };
-                Match::new(field.packet_field(), op(*neg), value)
+                Match::new(field.packet_field(), cmp.op(), value)
             }
             Clause::Icmp { v6: false, ty } => Match::eq(NftField::IcmpType, *ty),
             Clause::Icmp { v6: true, ty } => Match::eq(NftField::Icmp6Type, *ty),
@@ -626,21 +934,75 @@ impl Clause {
                 Match::eq(NftField::CtState, ct)
             }
             Clause::Mark {
-                value, mask: None, ..
-            } => Match::eq(NftField::Mark, *value),
+                op: cmp,
+                value,
+                mask: None,
+                ..
+            } => Match::new(NftField::Mark, cmp.op(), *value),
             Clause::Mark {
+                op: cmp,
                 value,
                 mask: Some(mask),
                 ..
-            } => Match::eq(
+            } => Match::new(
                 NftField::Mark,
+                cmp.op(),
                 Value::Masked {
                     value: (*value).into(),
                     mask: (*mask).into(),
                 },
             ),
-            Clause::MarkRange { lo, hi, .. } => Match::eq(NftField::Mark, Value::range(*lo, *hi)),
-            Clause::CtMark { value, .. } => Match::eq(NftField::CtMark, *value),
+            Clause::MarkRange { neg, lo, hi, .. } => {
+                Match::new(NftField::Mark, op(*neg), Value::range(*lo, *hi))
+            }
+            Clause::CtMark { op: cmp, value, .. } => Match::new(NftField::CtMark, cmp.op(), *value),
+            Clause::TcpFlags {
+                neg,
+                flags,
+                mask: None,
+            } => Match::new(NftField::TcpFlags, op(*neg), tcp_flags_of(flags)),
+            Clause::TcpFlags {
+                neg,
+                flags,
+                mask: Some(mask),
+            } => Match::new(
+                NftField::TcpFlags,
+                op(*neg),
+                Value::Masked {
+                    value: tcp_flags_of(flags).bits().into(),
+                    mask: tcp_flags_of(mask).bits().into(),
+                },
+            ),
+            Clause::CtStatus { neg, names } => {
+                let mut status = CtStatus::empty();
+                for (_, bit) in CT_STATUS
+                    .iter()
+                    .filter(|(k, _)| names.iter().any(|n| n == k))
+                {
+                    status |= *bit;
+                }
+                Match::new(NftField::CtStatus, op(*neg), status)
+            }
+            Clause::CtDirection { neg, reply } => Match::new(
+                NftField::CtDirection,
+                op(*neg),
+                if *reply {
+                    CtDirection::Reply
+                } else {
+                    CtDirection::Original
+                },
+            ),
+            Clause::CtZone { op: cmp, zone } => Match::new(NftField::CtZone, cmp.op(), *zone),
+            Clause::PktType { neg, kind } => {
+                let kind = PKT_TYPES
+                    .iter()
+                    .find(|(k, _)| k == kind)
+                    .map_or(PktType::Host, |(_, t)| *t);
+                Match::new(NftField::PktType, op(*neg), kind)
+            }
+            Clause::L4Proto { op: cmp, proto, .. } => {
+                Match::new(NftField::L4Proto, cmp.op(), *proto)
+            }
             Clause::Iface { out, neg, name } => {
                 let field = if *out {
                     NftField::Oifname
@@ -685,7 +1047,7 @@ impl Clause {
             Clause::Port {
                 tcp,
                 dport,
-                neg,
+                op,
                 lo,
                 hi,
             } => {
@@ -701,13 +1063,32 @@ impl Clause {
                         dport: *dport
                     }
                     .text(),
-                    ne(*neg)
+                    op.text()
                 )
             }
             Clause::Icmp { v6, ty } => format!("{} type {ty}", if *v6 { "icmpv6" } else { "icmp" }),
             Clause::CtState(states) => format!("ct state {}", states.join(",")),
-            Clause::Mark { text, .. } | Clause::MarkRange { text, .. } => format!("mark {text}"),
-            Clause::CtMark { text, .. } => format!("ct mark {text}"),
+            Clause::Mark { op, text, .. } => format!("mark{} {text}", op.text()),
+            Clause::MarkRange { neg, text, .. } => format!("mark{} {text}", ne(*neg)),
+            Clause::CtMark { op, text, .. } => format!("ct mark{} {text}", op.text()),
+            Clause::TcpFlags { neg, flags, mask } => {
+                let mask = mask
+                    .as_ref()
+                    .map(|m| format!(" / {}", m.join(",")))
+                    .unwrap_or_default();
+                format!("tcp flags{} {}{mask}", ne(*neg), flags.join(","))
+            }
+            Clause::CtStatus { neg, names } => {
+                format!("ct status{} {}", ne(*neg), names.join(","))
+            }
+            Clause::CtDirection { neg, reply } => format!(
+                "ct direction{} {}",
+                ne(*neg),
+                if *reply { "reply" } else { "original" }
+            ),
+            Clause::CtZone { op, zone } => format!("ct zone{} {zone}", op.text()),
+            Clause::PktType { neg, kind } => format!("meta pkttype{} {kind}", ne(*neg)),
+            Clause::L4Proto { op, text, .. } => format!("meta l4proto{} {text}", op.text()),
             Clause::Iface { out, neg, name } => format!(
                 "{}{} {name}",
                 if *out { "oifname" } else { "iifname" },
@@ -1004,7 +1385,12 @@ pub(crate) fn check_verdict(rule: &FirewallRule, clauses: &[Clause]) -> Result<(
         )),
         Some(RejectWith::TcpReset)
             if !clauses.iter().any(|c| match c {
-                Clause::Port { tcp: true, .. } => true,
+                Clause::Port { tcp: true, .. } | Clause::TcpFlags { .. } => true,
+                Clause::L4Proto {
+                    op: Cmp::Eq,
+                    proto: 6,
+                    ..
+                } => true,
                 Clause::InSet { field, .. } => matches!(field, Field::Port { tcp: true, .. }),
                 Clause::Concat { fields, .. } => fields
                     .iter()
@@ -1013,8 +1399,8 @@ pub(crate) fn check_verdict(rule: &FirewallRule, clauses: &[Clause]) -> Result<(
             }) =>
         {
             Err(
-                "`reject with tcp-reset` needs a `tcp dport`/`tcp sport` match: a reset \
-                 answers TCP only"
+                "`reject with tcp-reset` needs a TCP match (`tcp dport`/`sport`, `tcp flags` or \
+                 `l4proto tcp`): a reset answers TCP only"
                     .to_string(),
             )
         }
@@ -1278,6 +1664,94 @@ mod tests {
         assert!(parse_match("").unwrap().is_empty());
     }
 
+    /// #302's fields and operators: each stored form reads back as itself,
+    /// renders as NLL, and lowers to what nft prints for it.
+    #[test]
+    fn new_fields_and_orders_round_trip_and_lower() {
+        for (stored, nll, nft) in [
+            (
+                "tcp flags syn,ack",
+                "tcp flags syn,ack",
+                "tcp flags syn,ack",
+            ),
+            ("tcp flags != syn", "tcp flags != syn", "tcp flags != syn"),
+            (
+                "tcp flags syn / syn,ack,rst",
+                "tcp flags syn / syn,ack,rst",
+                "tcp flags & (syn | rst | ack) == syn",
+            ),
+            (
+                "ct status dnat,seen-reply",
+                "ct status dnat,seen-reply",
+                "ct status seen-reply,dnat",
+            ),
+            (
+                "ct status != snat",
+                "ct status != snat",
+                "ct status != snat",
+            ),
+            (
+                "ct direction reply",
+                "ct direction reply",
+                "ct direction reply",
+            ),
+            ("ct zone > 1", "ct zone > 1", "ct zone > 1"),
+            (
+                "meta pkttype broadcast",
+                "pkttype broadcast",
+                "meta pkttype broadcast",
+            ),
+            (
+                "meta pkttype != host",
+                "pkttype != host",
+                "meta pkttype != host",
+            ),
+            ("meta l4proto 47", "l4proto 47", "meta l4proto gre"),
+            (
+                "meta l4proto >= sctp",
+                "l4proto >= sctp",
+                "meta l4proto >= sctp",
+            ),
+            ("tcp dport > 1024", "tcp dport > 1024", "tcp dport > 1024"),
+            ("udp sport <= 53", "udp sport <= 53", "udp sport <= 53"),
+            ("mark != 5", "mark != 5", "meta mark != 0x00000005"),
+            ("mark >= 0x10", "mark >= 0x10", "meta mark >= 0x00000010"),
+            (
+                "mark != 0x10/0xff",
+                "mark != 0x10/0xff",
+                "meta mark & 0x000000ff != 0x00000010",
+            ),
+            (
+                "mark != 0x10-0x1f",
+                "mark != 0x10-0x1f",
+                "meta mark != 0x00000010-0x0000001f",
+            ),
+            ("ct mark < 5", "ct mark < 5", "ct mark < 0x00000005"),
+        ] {
+            let clauses = parse_match(stored).unwrap_or_else(|e| panic!("{stored}: {e}"));
+            let back: Vec<String> = clauses.iter().map(Clause::to_match).collect();
+            assert_eq!(back.join(" "), stored);
+            let shown: Vec<String> = clauses.iter().map(Clause::to_nll).collect();
+            assert_eq!(shown.join(" "), nll);
+            let mut spec = RuleSpec::new();
+            for c in &clauses {
+                spec.push(c.item());
+            }
+            assert_eq!(
+                spec.nft_syntax_stateless(Family::Inet).as_deref(),
+                Some(nft),
+                "{stored}"
+            );
+            exprs_of(spec);
+        }
+        // a reset answers what a `tcp flags` or `l4proto tcp` match selects
+        for m in ["tcp flags syn", "meta l4proto tcp"] {
+            let mut r = rule(m, "reject");
+            r.reject_with = Some(RejectWith::TcpReset);
+            assert!(lower_rule(&r).is_ok(), "{m}");
+        }
+    }
+
     #[test]
     fn rejects_what_would_install_wrong() {
         for (expr, want) in [
@@ -1287,6 +1761,25 @@ mod tests {
             ("iifname averyveryverylongname0", "longer than 15"),
             ("tcp dport", "needs a value"),
             ("frob 1", "unsupported firewall match token 'frob'"),
+            // #302: what an order cannot compare, unknown names
+            ("tcp dport > 8000-8999", "compares one port, not the range"),
+            ("mark > 0x10/0xff", "compares a plain mark"),
+            ("mark < 0x10-0x1f", "compares a plain mark"),
+            (
+                "ip saddr < 10.0.0.1",
+                "an address is matched with `!=` or nothing",
+            ),
+            (
+                "tcp flags > syn",
+                "`tcp flags` is matched with `!=` or nothing",
+            ),
+            ("tcp flags fin / syn,ack", "outside the mask"),
+            ("tcp flags syn,ece", "unknown tcp flag 'ece'"),
+            ("ct status nat", "unknown ct status 'nat'"),
+            ("ct direction both", "ct direction is original or reply"),
+            ("ct zone 70000", "invalid ct zone '70000'"),
+            ("meta pkttype unicast", "unknown pkttype 'unicast'"),
+            ("meta l4proto quic", "unknown protocol 'quic'"),
         ] {
             let err = parse_match(expr).unwrap_err();
             assert!(err.contains(want), "{expr}: {err}");

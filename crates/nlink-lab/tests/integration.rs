@@ -4501,6 +4501,115 @@ link gw:wan0 -- server:eth0 {{ 10.0.2.1/24 -- 10.0.2.10/24 }}
     lab.destroy().await.expect("destroy failed");
 }
 
+/// #302's matches with real traffic, each counted on `gw`:
+/// - a SYN to a port above 9000 is dropped (`tcp flags syn / syn,ack`, `>`);
+/// - a marked packet passes `mark >= 0x10`;
+/// - a DNATed flow matches `ct status dnat` and its replies
+///   `ct direction reply`;
+/// - pings match `l4proto icmp`, and a broadcast ping `pkttype broadcast`.
+///
+/// Every rule reads back as declared, `ct zone` included (nothing sets a
+/// zone here: it installs and converges).
+#[tokio::test]
+async fn firewall_flags_conntrack_and_orders_match_traffic() {
+    if !privileged("firewall_flags_conntrack_and_orders_match_traffic") {
+        return;
+    }
+    if !feature(
+        "firewall_flags_conntrack_and_orders_match_traffic",
+        "nftables",
+        has_nftables(),
+    ) {
+        return;
+    }
+    let lab_name = format!("fw302-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}"
+profile router {{ forward ipv4 }}
+node client {{ route default via 10.0.1.1 }}
+node gw : router {{
+  firewall policy accept {{
+    drop pkttype broadcast counter name broadcasts
+  }}
+  firewall forward policy accept {{
+    drop tcp flags syn / syn,ack tcp dport > 9000 counter name high-syn
+    tcp flags fin,syn tcp dport 8080 counter name fin-or-syn
+    tcp dport 8080 mark set 0x20
+    mark >= 0x10 counter name marked
+    ct status dnat counter name translated
+    ct direction reply counter name replies
+    l4proto icmp counter name icmp
+    ct zone > 7 counter name zoned
+    ct mark != 0 counter name ct-marked
+  }}
+  nat {{
+    dnat iif lan0 dst 10.0.1.1 tcp dport 80 to 10.0.2.10:8080
+  }}
+}}
+node server {{ route default via 10.0.2.1 }}
+link client:eth0 -- gw:lan0 {{ 10.0.1.10/24 -- 10.0.1.1/24 }}
+link gw:wan0 -- server:eth0 {{ 10.0.2.1/24 -- 10.0.2.10/24 }}
+"#
+    ))
+    .unwrap();
+    let r = topo.validate();
+    assert!(!r.has_errors(), "{:?}", r.issues());
+    let lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    assert!(
+        layered.is_empty(),
+        "the kernel reads every rule back as declared:\n{layered}"
+    );
+    let counter = |name: &str| {
+        lab.firewall_counters_blocking("gw")
+            .unwrap()
+            .into_iter()
+            .find(|c| c.name == name)
+            .unwrap_or_else(|| panic!("counter {name}"))
+            .packets
+    };
+
+    let bind = |port: u16| {
+        lab.ns_resolver_of("server")
+            .unwrap()
+            .netns()
+            .unwrap()
+            .run(move || std::net::TcpListener::bind(("0.0.0.0", port)))
+            .unwrap()
+            .unwrap()
+    };
+    let (_low, _high) = (bind(8080), bind(9090));
+    let wait = std::time::Duration::from_secs(2);
+    let high = lab.tcp_connect("client", "10.0.2.10:9090".parse().unwrap(), wait);
+    assert!(
+        high.as_ref()
+            .is_err_and(|e| e.to_string().contains("timed out")),
+        "a SYN to a port above 9000 is dropped: {high:?}"
+    );
+    assert!(counter("high-syn") >= 1, "high-syn");
+    lab.tcp_connect("client", "10.0.2.10:8080".parse().unwrap(), wait)
+        .expect("8080 is not above 9000");
+    assert!(counter("marked") >= 1, "mark >= 0x10 after mark set 0x20");
+    // a flag list matches any of its flags: a lone SYN is `fin,syn`
+    assert!(counter("fin-or-syn") >= 1, "tcp flags fin,syn on a SYN");
+    lab.tcp_connect("client", "10.0.1.1:80".parse().unwrap(), wait)
+        .expect("the DNATed port reaches the server");
+    assert!(counter("translated") >= 1, "ct status dnat");
+    assert!(counter("replies") >= 1, "ct direction reply");
+
+    let ping = |args: &[&str]| lab.exec("client", "ping", args).unwrap();
+    assert_eq!(ping(&["-c", "1", "-W", "1", "10.0.2.10"]).exit_code, 0);
+    assert!(counter("icmp") >= 1, "l4proto icmp");
+    ping(&["-b", "-c", "2", "-i", "0.2", "-W", "1", "10.0.1.255"]);
+    assert!(counter("broadcasts") >= 1, "pkttype broadcast");
+    assert_eq!(counter("zoned"), 0, "no zone is set here");
+    assert_eq!(counter("ct-marked"), 0, "no ct mark is set here");
+    lab.destroy().await.expect("destroy failed");
+}
+
 // ─── Plan 156 PR C — impair --show JSON view ────────────
 
 // Round-4 follow-up: `--show --json` returned `endpoints: {}` for any

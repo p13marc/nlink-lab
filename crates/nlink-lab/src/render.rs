@@ -2441,7 +2441,7 @@ node gw {
         n.firewall = Some(FirewallConfig {
             policy: Some("drop".into()),
             rules: vec![crate::types::FirewallRule {
-                match_expr: Some("meta l4proto sctp".into()),
+                match_expr: Some("meta cpu 1".into()),
                 action: Some("accept".into()),
                 ..Default::default()
             }],

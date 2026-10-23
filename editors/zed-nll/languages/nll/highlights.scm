@@ -48,7 +48,7 @@
 (ipvlan_block "ipvlan" @keyword)
 (wifi_block "wifi" @keyword)
 (dummy_block "dummy" @keyword)
-(match_expression ["src" "dst" "tcp" "udp" "dport" "sport" "icmp" "icmpv6" "ct" "state" "mark" "iif" "oif" "rpf"] @keyword)
+(match_expression ["src" "dst" "tcp" "udp" "dport" "sport" "icmp" "icmpv6" "ct" "state" "mark" "iif" "oif" "rpf" "flags" "status" "direction" "zone" "pkttype" "l4proto"] @keyword)
 (inline_property ["parent" "mode"] @keyword)
 (wireguard_peer ["peer" "endpoint" "allowed-ips"] @keyword)
 (known_property ["interfaces" "listen" "key" "peers" "fwmark" "address" "vni" "local" "remote" "underlay" "ssid" "channel" "wpa2" "mesh-id" "interval" "timeout" "retries" "members" "mode" "miimon" "lacp-rate" "xmit-hash" "min-links" "updelay" "downdelay" "parent" "id" "protocol" "area" "router-id" "passive" "hello" "dead" "redistribute" "as" "neighbor"] @keyword)

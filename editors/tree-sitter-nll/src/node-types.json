@@ -2221,6 +2221,10 @@
           "named": true
         },
         {
+          "type": "name_list",
+          "named": true
+        },
+        {
           "type": "percent",
           "named": true
         },
@@ -2242,6 +2246,21 @@
         },
         {
           "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "name_list",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "identifier",
           "named": true
         }
       ]
@@ -4202,6 +4221,10 @@
     "named": false
   },
   {
+    "type": "direction",
+    "named": false
+  },
+  {
     "type": "dnat",
     "named": false
   },
@@ -4283,6 +4306,10 @@
   },
   {
     "type": "firewall",
+    "named": false
+  },
+  {
+    "type": "flags",
     "named": false
   },
   {
@@ -4463,6 +4490,10 @@
   },
   {
     "type": "key",
+    "named": false
+  },
+  {
+    "type": "l4proto",
     "named": false
   },
   {
@@ -4687,6 +4718,10 @@
     "named": false
   },
   {
+    "type": "pkttype",
+    "named": false
+  },
+  {
     "type": "pmtu",
     "named": false
   },
@@ -4875,6 +4910,10 @@
     "named": false
   },
   {
+    "type": "status",
+    "named": false
+  },
+  {
     "type": "streams",
     "named": false
   },
@@ -5008,6 +5047,10 @@
   },
   {
     "type": "xmit-hash",
+    "named": false
+  },
+  {
+    "type": "zone",
     "named": false
   },
   {

@@ -4,6 +4,48 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+Built on **nlink 0.33** (#297). It finished nlink's nftables redesign
+(nlink #708) and fixed two things nlink-lab reported: the reconciles
+could not be spawned (nlink #879, #877 here), and the WireGuard diff's
+JSON Schema did not describe its JSON (nlink #876).
+
+### Migration
+
+- **The `nftables` layer of `verify --json` and `apply --dry-run --json`
+  is nlink 0.33's `NftablesDiff`** (#297), and so is the daemon's
+  `check_apply` / `verify` report. It is `{"blocked", "changes",
+  "generation"}` instead of the per-kind lists (`rules-to-add`,
+  `chains-to-recreate`, `tables-refused`, `kept-in-use`, …):
+  - each change names its `type` (`table`, `chain`, `rule`, `set`,
+    `elements`, `object`, `flowtable`) and its `op` (`add`, `remove`,
+    `update`, `recreate`);
+  - an update has `from` (what the kernel holds) and `to`;
+  - a recreate adds `reason` and a `cascade`, which is not listed again;
+  - a rule carries `nft`, the rule as `nft -s list` prints it, and a
+    lowercase placement (`"append"`, `{"before": n}`, `{"after": n}`);
+  - a chain has `kind`, `"regular"` or `{"base": {…}}`.
+  The envelope did not change, so `schema_version` stays `3`, as when
+  0.14.0 reshaped these objects; a consumer that reads inside
+  `nftables.<node>` needs updating. `docs/cli/apply.md` shows the new form.
+- **`change_count` counts a recreate once** with everything it carries
+  (a set's elements, the rules it moves), and counts each `blocked`
+  entry that refuses. The same drift can report fewer changes than
+  before.
+- **The text diff prints rules as nft does.** A rule line ends with the
+  rule (`+ rule Inet nlink-lab/input [nlink-lab/fw/input/1] (after
+  handle=4): tcp dport 8080 accept`), a recreate is one `-/+` line with
+  its cascade under it, and what the diff cannot do comes last as `!`
+  lines.
+
+### Changed
+
+- **The `wireguard` layer is typed in `layered-diff.v3.schema.json`**
+  (#297). It was free-form while nlink's schema described the Rust types
+  rather than the JSON (a public key as 32 integers; nlink #876). A test
+  validates a filled report against the published schema, and the root
+  suite validates real WireGuard drift (a peer removed, a keepalive
+  changed) the same way.
+
 ## [0.14.0] - 2026-10-18
 
 The redesign release, and a breaking one: read the Migration section

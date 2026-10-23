@@ -28,9 +28,10 @@ have no typed struct yet.
 | daemon API, client → daemon ([API.md](../API.md)) | `api-client.v1.schema.json` | generated (`api::ClientMsg`) |
 | daemon API, daemon → client | `api-server.v1.schema.json` | generated (`api::ServerMsg`) |
 
-The upstream `nlink::ConfigDiff` / `nlink::NftablesDiff` values inside
-the layered diff are free-form objects in the schema (their shape is
-nlink's). The shapes without a schema are described in prose: `exec`'s
+The `network`, `nftables` and `wireguard` values inside the layered diff
+are nlink's `ConfigDiff`, `NftablesDiff` and `WireguardConfigDiff`, typed
+in the schema with the shape nlink serializes (nlink 0.33). The shapes
+without a schema are described in prose: `exec`'s
 in [docs/cli/exec.md](../cli/exec.md), `diagnose`'s and `stats`'s in their
 `--help`; `archive inspect --json` prints the archive summary, `export
 --format json` and `render --json` a topology, and `diff --json` the

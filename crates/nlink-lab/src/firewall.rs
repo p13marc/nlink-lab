@@ -4,19 +4,33 @@
 //! tcp dport 22`): it is what the NLL parser produces from `src 10.0.0.0/8
 //! tcp dport 22`, and what topology JSON, state files and `apply --check`
 //! carry. This module is the one place that reads it — the planner lowers it
-//! to an nlink [`Rule`], the validator checks it, `render` turns it back into
-//! NLL — where each used to carry its own tokenizer.
+//! to an nlink [`RuleSpec`] (nlink 0.33's rules as data: one `Match` per
+//! clause, a `Stmt` per statement, a `Verdict`), the validator checks it,
+//! `render` turns it back into NLL — where each used to carry its own
+//! tokenizer.
 
 use std::net::IpAddr;
 
 use std::collections::BTreeMap;
 
 use nlink::netlink::nftables::{
-    CmpOp, CtState, Expr, Family, FilterHook, PacketField, PayloadBase, Policy, Register, Rule,
-    SetElement, SetKeyType,
+    CtState, FibFlags, FibResult, Field as NftField, FilterHook, IcmpxCode, Match, MatchOp,
+    ObjectType, PacketField, Policy, Reject, RuleSpec, SetElement, SetKeyType, Stmt, Value,
+    Verdict,
 };
 
 use crate::types::{FirewallConfig, FirewallRule, FirewallSet, RejectWith, SetKey};
+
+/// An address match's value: the address itself for a full-length prefix,
+/// as nlink's builder writes it.
+pub(crate) fn addr_value(addr: IpAddr, prefix: u8) -> Value {
+    let width = if addr.is_ipv4() { 32 } else { 128 };
+    if prefix >= width {
+        Value::Addr(addr)
+    } else {
+        Value::Prefix(addr, prefix)
+    }
+}
 
 /// The base chains a node's firewall can declare.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -550,96 +564,54 @@ impl Clause {
         }
     }
 
-    /// Append the clause's expressions to `rule`. The plain forms use the
-    /// same nlink helpers they always did, so rules written before these
-    /// forms existed keep the exact bytes deployed labs carry.
-    pub(crate) fn lower(&self, rule: Rule) -> Rule {
+    /// The clause as an nlink match. Each is the item nlink's builder
+    /// method for the same form appends, so a rule keeps the bytes it
+    /// always had — except a port range, which is one `range eq`, as nft
+    /// writes it, where nlink-lab 0.14 wrote a `>=`/`<=` pair (#299).
+    pub(crate) fn item(&self) -> Match {
+        let op = |neg: bool| if neg { MatchOp::Ne } else { MatchOp::Eq };
         match self {
-            Clause::InSet {
-                field,
-                neg: false,
-                set,
-            } => rule.match_in_set(field.packet_field(), set),
-            Clause::InSet {
-                field,
-                neg: true,
-                set,
-            } => rule.match_not_in_set(field.packet_field(), set),
-            Clause::Concat { fields, neg, set } => {
-                let pf: Vec<PacketField> = fields.iter().map(|f| f.packet_field()).collect();
-                if *neg {
-                    rule.match_concat_not_in_set(&pf, set)
-                } else {
-                    rule.match_concat_in_set(&pf, set)
-                }
+            Clause::InSet { field, neg, set } => {
+                Match::new(field.packet_field(), op(*neg), Value::set(set))
             }
+            Clause::Concat { fields, neg, set } => Match::new(
+                NftField::Concat(fields.iter().map(|f| f.packet_field()).collect()),
+                op(*neg),
+                Value::set(set),
+            ),
             Clause::Addr {
                 src,
                 neg,
                 addr,
                 prefix,
                 ..
-            } => match (*src, *neg, *addr) {
-                (true, false, IpAddr::V4(a)) => rule.match_saddr_v4(a, *prefix),
-                (true, false, IpAddr::V6(a)) => rule.match_saddr_v6(a, *prefix),
-                (false, false, IpAddr::V4(a)) => rule.match_daddr_v4(a, *prefix),
-                (false, false, IpAddr::V6(a)) => rule.match_daddr_v6(a, *prefix),
-                (true, true, IpAddr::V4(a)) => rule.match_saddr_v4_not(a, *prefix),
-                (true, true, IpAddr::V6(a)) => rule.match_saddr_v6_not(a, *prefix),
-                (false, true, IpAddr::V4(a)) => rule.match_daddr_v4_not(a, *prefix),
-                (false, true, IpAddr::V6(a)) => rule.match_daddr_v6_not(a, *prefix),
-            },
+            } => {
+                let field = Field::Addr {
+                    v6: addr.is_ipv6(),
+                    src: *src,
+                };
+                Match::new(field.packet_field(), op(*neg), addr_value(*addr, *prefix))
+            }
             Clause::Port {
                 tcp,
                 dport,
                 neg,
                 lo,
                 hi,
-            } => match (*tcp, *dport, *neg, lo == hi) {
-                (true, true, false, true) => rule.match_tcp_dport(*lo),
-                (true, false, false, true) => rule.match_tcp_sport(*lo),
-                (false, true, false, true) => rule.match_udp_dport(*lo),
-                (false, false, false, true) => rule.match_udp_sport(*lo),
-                (true, true, true, true) => rule.match_tcp_dport_not(*lo),
-                (false, true, true, true) => rule.match_udp_dport_not(*lo),
-                (true, false, true, true) => rule.match_tcp_sport_not(*lo),
-                (false, false, true, true) => rule.match_udp_sport_not(*lo),
-                // `!= LO-HI` (#189): nlink's range compare, behind the
-                // protocol guard.
-                (_, _, true, false) => {
-                    let field = Field::Port {
-                        tcp: *tcp,
-                        dport: *dport,
-                    }
-                    .packet_field();
-                    rule.match_range_not(field, *lo, *hi)
-                }
-                // `sport !=` and ranges: the payload load nft emits, then
-                // one compare (`!=`) or two (`>= lo`, `<= hi`). Ports are
-                // big-endian, so the kernel's bytewise compare orders them.
-                _ => {
-                    let proto = if *tcp { 6 } else { 17 };
-                    let mut rule = rule.match_l4proto(proto).expr(Expr::Payload {
-                        dreg: Register::R0,
-                        base: PayloadBase::Transport,
-                        offset: if *dport { 2 } else { 0 },
-                        len: 2,
-                    });
-                    let cmp = |op, port: u16| Expr::Cmp {
-                        sreg: Register::R0,
-                        op,
-                        data: port.to_be_bytes().to_vec(),
-                    };
-                    if *neg {
-                        rule = rule.expr(cmp(CmpOp::Neq, *lo));
-                    } else {
-                        rule = rule.expr(cmp(CmpOp::Gte, *lo)).expr(cmp(CmpOp::Lte, *hi));
-                    }
-                    rule
-                }
-            },
-            Clause::Icmp { v6: false, ty } => rule.match_icmp_type(*ty),
-            Clause::Icmp { v6: true, ty } => rule.match_icmpv6_type(*ty),
+            } => {
+                let field = Field::Port {
+                    tcp: *tcp,
+                    dport: *dport,
+                };
+                let value = if lo == hi {
+                    Value::from(*lo)
+                } else {
+                    Value::range(*lo, *hi)
+                };
+                Match::new(field.packet_field(), op(*neg), value)
+            }
+            Clause::Icmp { v6: false, ty } => Match::eq(NftField::IcmpType, *ty),
+            Clause::Icmp { v6: true, ty } => Match::eq(NftField::Icmp6Type, *ty),
             Clause::CtState(states) => {
                 let mut ct = CtState::empty();
                 for st in states {
@@ -651,44 +623,39 @@ impl Clause {
                         _ => CtState::UNTRACKED,
                     };
                 }
-                rule.match_ct_state(ct)
+                Match::eq(NftField::CtState, ct)
             }
             Clause::Mark {
                 value, mask: None, ..
-            } => rule.match_mark(*value),
+            } => Match::eq(NftField::Mark, *value),
             Clause::Mark {
                 value,
                 mask: Some(mask),
                 ..
-            } => rule.match_mark_masked(*value, *mask),
-            Clause::MarkRange { lo, hi, .. } => rule.match_range(PacketField::Mark, *lo, *hi),
-            Clause::CtMark { value, .. } => rule.match_ct_mark(*value),
-            Clause::Iface {
-                out,
-                neg: false,
-                name,
-            } => {
-                if *out {
-                    rule.match_oif(name)
+            } => Match::eq(
+                NftField::Mark,
+                Value::Masked {
+                    value: (*value).into(),
+                    mask: (*mask).into(),
+                },
+            ),
+            Clause::MarkRange { lo, hi, .. } => Match::eq(NftField::Mark, Value::range(*lo, *hi)),
+            Clause::CtMark { value, .. } => Match::eq(NftField::CtMark, *value),
+            Clause::Iface { out, neg, name } => {
+                let field = if *out {
+                    NftField::Oifname
                 } else {
-                    rule.match_iif(name)
-                }
+                    NftField::Iifname
+                };
+                Match::new(field, op(*neg), name.as_str())
             }
-            Clause::Iface {
-                out,
-                neg: true,
-                name,
-            } => {
-                if *out {
-                    rule.match_oif_not(name)
-                } else {
-                    rule.match_iif_not(name)
-                }
-            }
-            Clause::Rpf => {
-                use nlink::netlink::nftables::FibFlags;
-                rule.match_fib_missing(FibFlags::SADDR | FibFlags::IIF)
-            }
+            Clause::Rpf => Match::eq(
+                NftField::Fib {
+                    flags: FibFlags::SADDR | FibFlags::IIF,
+                    result: FibResult::Oif,
+                },
+                false,
+            ),
         }
     }
 }
@@ -1011,12 +978,6 @@ pub(crate) fn lower_set(name: &str, set: &FirewallSet) -> Result<LoweredSet, Str
     })
 }
 
-/// ICMPX codes (`NFT_REJECT_ICMPX_*`), which nlink does not name.
-const ICMPX_NO_ROUTE: u8 = 0;
-const ICMPX_PORT_UNREACH: u8 = 1;
-const ICMPX_HOST_UNREACH: u8 = 2;
-const ICMPX_ADMIN_PROHIBITED: u8 = 3;
-
 /// Check a rule's verdict and its `reject with`, given its clauses.
 pub(crate) fn check_verdict(rule: &FirewallRule, clauses: &[Clause]) -> Result<(), String> {
     let action = rule.action.as_deref().unwrap_or("accept");
@@ -1164,20 +1125,26 @@ pub(crate) fn counter_names(fw: &FirewallConfig) -> Vec<String> {
     names.into_iter().collect()
 }
 
-/// Build the nftables rule for one firewall rule in `chain` of the
-/// `nlink-lab` table.
-pub(crate) fn lower_rule(table: &str, chain: Chain, rule: &FirewallRule) -> Result<Rule, String> {
+/// The body of one firewall rule: its matches, its statements and its
+/// verdict, as an nlink [`RuleSpec`] the planner declares in its chain.
+pub(crate) fn lower_rule(rule: &FirewallRule) -> Result<RuleSpec, String> {
     let clauses = parse_match(rule.match_expr.as_deref().unwrap_or(""))?;
     check_verdict(rule, &clauses)?;
     check_statements(rule)?;
-    let mut r = Rule::new(table, chain.name()).family(Family::Inet);
+    let mut spec = RuleSpec::new();
     for c in &clauses {
-        r = c.lower(r);
+        spec.push(c.item());
     }
     if rule.clamp_mss.is_some() {
         // the MSS option rides on SYNs: `tcp flags syn / syn,rst`
         use nlink::netlink::nftables::TcpFlags;
-        r = r.match_tcp_flags(TcpFlags::SYN, TcpFlags::SYN | TcpFlags::RST);
+        spec.push(Match::eq(
+            NftField::TcpFlags,
+            Value::Masked {
+                value: TcpFlags::SYN.bits().into(),
+                mask: (TcpFlags::SYN | TcpFlags::RST).bits().into(),
+            },
+        ));
     }
     // Statements in a fixed order: the limit first (it is a match too), so
     // the counters and the log see only the packets the rule acts on.
@@ -1200,13 +1167,16 @@ pub(crate) fn lower_rule(table: &str, chain: Chain, rule: &FirewallRule) -> Resu
         if l.over {
             e = e.over();
         }
-        r = r.expr(e);
+        spec.push(Stmt::Limit(e));
     }
     if rule.counter {
-        r = r.counter();
+        spec.push(Stmt::Counter);
     }
     if let Some(name) = &rule.counter_name {
-        r = r.counter_named(name);
+        spec.push(Stmt::Objref {
+            object_type: ObjectType::Counter,
+            name: name.clone(),
+        });
     }
     if let Some(l) = &rule.log {
         let mut e = nlink::netlink::nftables::LogExpr::new();
@@ -1219,62 +1189,60 @@ pub(crate) fn lower_rule(table: &str, chain: Chain, rule: &FirewallRule) -> Resu
         if let Some(level) = &l.level {
             e = e.level(log_level(level));
         }
-        r = r.expr(e);
+        spec.push(Stmt::Log(e));
     }
     if let Some(m) = rule.set_mark {
-        r = match m.mask {
-            Some(mask) => r.set_mark_masked(m.value, mask),
-            None => r.set_mark(m.value),
-        };
+        spec.push(match m.mask {
+            Some(mask) => Stmt::SetMarkMasked {
+                value: m.value,
+                mask,
+            },
+            None => Stmt::SetMark(m.value),
+        });
     }
     match rule.ct_mark {
-        Some(crate::types::CtMarkAction::Set(v)) => r = r.set_ct_mark(v),
-        Some(crate::types::CtMarkAction::Save) => r = r.save_mark_to_ct(),
-        Some(crate::types::CtMarkAction::Restore) => r = r.restore_mark_from_ct(),
+        Some(crate::types::CtMarkAction::Set(v)) => spec.push(Stmt::SetCtMark(v)),
+        Some(crate::types::CtMarkAction::Save) => spec.push(Stmt::SaveMarkToCt),
+        Some(crate::types::CtMarkAction::Restore) => spec.push(Stmt::RestoreMarkFromCt),
         None => {}
     }
     if let Some(h) = &rule.classify {
         let handle: nlink::TcHandle = h
             .parse()
             .map_err(|_| format!("classify '{h}' is not a tc class handle (like 1:10)"))?;
-        r = r.set_priority(handle);
+        spec.push(Stmt::SetPriority(handle));
     }
     match rule.clamp_mss {
-        Some(crate::types::MssClamp::Pmtu) => r = r.clamp_tcp_mss_to_pmtu(),
-        Some(crate::types::MssClamp::Mss(m)) => r = r.clamp_tcp_mss(m),
+        Some(crate::types::MssClamp::Pmtu) => spec.push(Stmt::ClampTcpMssToPmtu),
+        Some(crate::types::MssClamp::Mss(m)) => spec.push(Stmt::ClampTcpMss(m)),
         None => {}
     }
-    use nlink::netlink::nftables::{NFT_REJECT_ICMPX_UNREACH, NFT_REJECT_TCP_RST};
-    Ok(match rule.action.as_deref().unwrap_or("accept") {
-        "continue" => r,
-        "drop" => r.drop(),
-        "reject" => match rule.reject_with {
-            None | Some(RejectWith::PortUnreachable) => {
-                r.reject_with(NFT_REJECT_ICMPX_UNREACH, ICMPX_PORT_UNREACH)
-            }
-            Some(RejectWith::TcpReset) => r.reject_with(NFT_REJECT_TCP_RST, 0),
-            Some(RejectWith::HostUnreachable) => {
-                r.reject_with(NFT_REJECT_ICMPX_UNREACH, ICMPX_HOST_UNREACH)
-            }
-            Some(RejectWith::NoRoute) => r.reject_with(NFT_REJECT_ICMPX_UNREACH, ICMPX_NO_ROUTE),
-            Some(RejectWith::AdminProhibited) => {
-                r.reject_with(NFT_REJECT_ICMPX_UNREACH, ICMPX_ADMIN_PROHIBITED)
-            }
-        },
-        _ => r.accept(),
-    })
+    match rule.action.as_deref().unwrap_or("accept") {
+        "continue" => {}
+        "drop" => spec.push(Verdict::Drop),
+        "reject" => spec.push(Stmt::Reject(match rule.reject_with {
+            None | Some(RejectWith::PortUnreachable) => Reject::Icmpx(IcmpxCode::PortUnreachable),
+            Some(RejectWith::TcpReset) => Reject::TcpReset,
+            Some(RejectWith::HostUnreachable) => Reject::Icmpx(IcmpxCode::HostUnreachable),
+            Some(RejectWith::NoRoute) => Reject::Icmpx(IcmpxCode::NoRoute),
+            Some(RejectWith::AdminProhibited) => Reject::Icmpx(IcmpxCode::AdminProhibited),
+        })),
+        _ => spec.push(Verdict::Accept),
+    }
+    Ok(spec)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nlink::netlink::nftables::MetaKey;
+    use nlink::netlink::nftables::{CmpOp, Expr, Family, MetaKey, RangeOp};
 
-    /// A built rule's expressions (nlink exposes them on a declared rule).
-    fn exprs_of(rule: Rule) -> Vec<Expr> {
+    /// What a rule sends: its spec lowered in an inet table, as nlink
+    /// declares it.
+    fn exprs_of(spec: RuleSpec) -> Vec<Expr> {
         let cfg =
             nlink::netlink::nftables::config::NftablesConfig::new()
-                .table("t", Family::Inet, |t| t.rule_keyed("input", "k", |_| rule));
+                .table("t", Family::Inet, |t| t.push_rule_keyed("input", "k", spec));
         cfg.tables()[0].rules()[0].exprs().expect("the rule lowers")
     }
 
@@ -1327,7 +1295,7 @@ mod tests {
 
     #[test]
     fn reject_lowers_to_reject_not_accept() {
-        let r = exprs_of(lower_rule("t", Chain::Input, &rule("tcp dport 22", "reject")).unwrap());
+        let r = exprs_of(lower_rule(&rule("tcp dport 22", "reject")).unwrap());
         assert!(matches!(
             r.last(),
             Some(Expr::Reject {
@@ -1337,7 +1305,7 @@ mod tests {
         ));
         let mut tcp = rule("tcp dport 22", "reject");
         tcp.reject_with = Some(RejectWith::TcpReset);
-        let r = exprs_of(lower_rule("t", Chain::Input, &tcp).unwrap());
+        let r = exprs_of(lower_rule(&tcp).unwrap());
         assert!(matches!(
             r.last(),
             Some(Expr::Reject { reject_type: 1, .. })
@@ -1349,38 +1317,46 @@ mod tests {
         // a reset answers TCP only
         let mut udp = rule("udp dport 53", "reject");
         udp.reject_with = Some(RejectWith::TcpReset);
-        assert!(lower_rule("t", Chain::Input, &udp).is_err());
+        assert!(lower_rule(&udp).is_err());
         // `reject with` on an accept, an unknown action
         let mut acc = rule("tcp dport 22", "accept");
         acc.reject_with = Some(RejectWith::NoRoute);
-        assert!(lower_rule("t", Chain::Input, &acc).is_err());
-        assert!(lower_rule("t", Chain::Input, &rule("", "dorp")).is_err());
+        assert!(lower_rule(&acc).is_err());
+        assert!(lower_rule(&rule("", "dorp")).is_err());
         // a bare verdict matches everything
-        let r = exprs_of(lower_rule("t", Chain::Forward, &rule("", "drop")).unwrap());
+        let r = exprs_of(lower_rule(&rule("", "drop")).unwrap());
         assert_eq!(r.len(), 1);
     }
 
+    /// A port range is one `range eq`, as nft writes it (#299); nlink-lab
+    /// 0.14 wrote a `>=`/`<=` pair.
     #[test]
     fn port_range_and_negations_lower_to_the_compares_nft_emits() {
-        let r =
-            exprs_of(lower_rule("t", Chain::Input, &rule("tcp dport 8000-8999", "drop")).unwrap());
-        let cmps: Vec<(CmpOp, Vec<u8>)> = r
-            .iter()
-            .filter_map(|e| match e {
-                Expr::Cmp { op, data, .. } => Some((*op, data.clone())),
-                _ => None,
-            })
-            .collect();
-        // l4proto == tcp, then >= 8000 and <= 8999, big-endian
+        let spec = lower_rule(&rule("tcp dport 8000-8999", "drop")).unwrap();
         assert_eq!(
-            cmps[1..],
-            [
-                (CmpOp::Gte, 8000u16.to_be_bytes().to_vec()),
-                (CmpOp::Lte, 8999u16.to_be_bytes().to_vec())
-            ]
+            spec.nft_syntax_stateless(Family::Inet).as_deref(),
+            Some("tcp dport 8000-8999 drop")
         );
-        let r =
-            exprs_of(lower_rule("t", Chain::Forward, &rule("iifname != wan0", "drop")).unwrap());
+        let r = exprs_of(spec);
+        assert!(
+            r.iter().any(|e| matches!(
+                e,
+                Expr::Range { op: RangeOp::Eq, from, to, .. }
+                    if from[..] == 8000u16.to_be_bytes() && to[..] == 8999u16.to_be_bytes()
+            )),
+            "{r:?}"
+        );
+        assert!(
+            !r.iter().any(|e| matches!(
+                e,
+                Expr::Cmp {
+                    op: CmpOp::Gte | CmpOp::Lte,
+                    ..
+                }
+            )),
+            "{r:?}"
+        );
+        let r = exprs_of(lower_rule(&rule("iifname != wan0", "drop")).unwrap());
         assert!(matches!(
             &r[..2],
             [
@@ -1397,15 +1373,53 @@ mod tests {
     /// level lower to nlink's expressions; `rpf` is refused in the output
     /// chain, which has no input interface.
     #[test]
+    fn a_clamp_without_a_tcp_match_is_guarded_to_tcp() {
+        let mut clamp = rule("oifname wan0", "continue");
+        clamp.clamp_mss = Some(crate::types::MssClamp::Pmtu);
+        let spec = lower_rule(&clamp).unwrap();
+        assert_eq!(
+            spec.nft_syntax_stateless(Family::Inet).as_deref(),
+            Some(
+                "oifname \"wan0\" tcp flags & (syn | rst) == syn tcp option maxseg size set rt mtu"
+            )
+        );
+        // the flags are read behind `meta l4proto tcp`, once
+        let r = exprs_of(spec);
+        let flags = r
+            .iter()
+            .position(|e| matches!(e, Expr::Payload { offset: 13, .. }))
+            .expect("the flags load");
+        let guards: Vec<usize> = r
+            .windows(2)
+            .enumerate()
+            .filter(|(_, w)| {
+                matches!(
+                    w,
+                    [
+                        Expr::Meta {
+                            key: MetaKey::L4Proto,
+                            ..
+                        },
+                        Expr::Cmp { data, .. },
+                    ] if data[..] == [6]
+                )
+            })
+            .map(|(i, _)| i)
+            .collect();
+        assert!(
+            guards.len() == 1 && guards[0] < flags,
+            "one tcp guard before the flags: {r:?}"
+        );
+    }
+
+    #[test]
     fn rpf_negated_ranges_byte_limits_and_log_levels() {
         assert_eq!(parse_match(&RPF.join(" ")).unwrap(), [Clause::Rpf]);
         assert_eq!(Clause::Rpf.to_nll(), "rpf");
-        let r = exprs_of(lower_rule("t", Chain::Forward, &rule(&RPF.join(" "), "drop")).unwrap());
+        let r = exprs_of(lower_rule(&rule(&RPF.join(" "), "drop")).unwrap());
         assert!(matches!(r[0], Expr::Fib { .. }), "{r:?}");
 
-        let r = exprs_of(
-            lower_rule("t", Chain::Forward, &rule("tcp dport != 8000-8999", "drop")).unwrap(),
-        );
+        let r = exprs_of(lower_rule(&rule("tcp dport != 8000-8999", "drop")).unwrap());
         assert!(
             r.iter().any(|e| matches!(e, Expr::Range { .. })),
             "a negated range is nlink's range compare: {r:?}"
@@ -1423,7 +1437,7 @@ mod tests {
             level: Some("info".into()),
             ..Default::default()
         });
-        let r = exprs_of(lower_rule("t", Chain::Input, &limited).unwrap());
+        let r = exprs_of(lower_rule(&limited).unwrap());
         let shown = format!("{r:?}");
         assert!(
             shown.contains("Bytes") && shown.contains("1048576"),

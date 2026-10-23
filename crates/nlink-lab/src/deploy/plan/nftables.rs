@@ -25,17 +25,17 @@ pub(crate) const NLINK_LAB_TABLE: &str = "nlink-lab";
 /// (e.g. `dport 80` → `dport 8080`) replace the rule body without losing its
 /// position.
 ///
-/// Every firewall rule is built before the config, so a bad match, verdict
-/// or policy surfaces as `Err` before any kernel I/O.
+/// Every rule is built before the config, as an nlink `RuleSpec` (nlink
+/// 0.33, #299), so a bad match, verdict, policy or NAT literal surfaces as
+/// `Err` before any kernel I/O, and the config is validated before it is
+/// returned.
 pub(crate) fn topology_to_nftables_config(
     fw: Option<&crate::types::FirewallConfig>,
     nat: Option<&crate::types::NatConfig>,
 ) -> Result<nlink::netlink::nftables::config::NftablesConfig> {
-    use crate::types::NatAction;
     use nlink::netlink::nftables::config::NftablesConfig;
     use nlink::netlink::nftables::types::{BaseChain, Family, NatHook, Priority};
 
-    // The rule closures below `.expect()` these literals.
     if let Some(nat) = nat {
         validate_nat_rule_literals(nat)?;
     }
@@ -69,16 +69,21 @@ pub(crate) fn topology_to_nftables_config(
             let policy = crate::firewall::policy(policy).map_err(Error::deploy_failed)?;
             fw_chains.push((chain, policy));
             for (idx, rule) in rules.iter().enumerate() {
-                let built =
-                    crate::firewall::lower_rule(NLINK_LAB_TABLE, chain, rule).map_err(|e| {
-                        Error::deploy_failed(format!("{} rule {idx}: {e}", chain.name()))
-                    })?;
-                fw_rules.push((chain, format!("nlink-lab/fw/{}/{idx}", chain.name()), built));
+                let spec = crate::firewall::lower_rule(rule).map_err(|e| {
+                    Error::deploy_failed(format!("{} rule {idx}: {e}", chain.name()))
+                })?;
+                fw_rules.push((chain, format!("nlink-lab/fw/{}/{idx}", chain.name()), spec));
             }
         }
     }
 
-    let nat_rules = nat.map(|n| n.rules.as_slice()).unwrap_or(&[]);
+    let nat_rules = nat
+        .map(|n| n.rules.as_slice())
+        .unwrap_or(&[])
+        .iter()
+        .enumerate()
+        .map(|(idx, rule)| nat_rule_spec(idx, rule))
+        .collect::<Result<Vec<_>>>()?;
 
     cfg = cfg.table(NLINK_LAB_TABLE, Family::Inet, |mut t| {
         // Sets before the rules that look them up (nlink orders the batch
@@ -110,8 +115,8 @@ pub(crate) fn topology_to_nftables_config(
                 c.base(BaseChain::filter(chain.hook(), Priority::Filter).policy(policy))
             });
         }
-        for (chain, key, rule) in fw_rules {
-            t = t.rule_keyed(chain.name(), &key, move |_| rule);
+        for (chain, key, spec) in fw_rules {
+            t = t.push_rule_keyed(chain.name(), key, spec);
         }
 
         if want_nat {
@@ -123,91 +128,75 @@ pub(crate) fn topology_to_nftables_config(
                     c.base(BaseChain::nat(NatHook::Postrouting, Priority::SrcNat))
                 });
 
-            for (idx, nat_rule) in nat_rules.iter().enumerate() {
-                let rule_clone = nat_rule.clone();
-                // A range, a flag or a redirect (#189) is nlink's
-                // `NatStatement`. The other rules keep the expressions
-                // they always had, so they keep their bytes.
-                if let Some((chain, kind)) = nat_statement_rule(nat_rule) {
-                    let key = format!("nlink-lab/nat/{chain}/{idx}/{kind}");
-                    t = t.rule_keyed(chain, &key, move |mut r| {
-                        let (field, dir) = match rule_clone.action {
-                            NatAction::Dnat | NatAction::Redirect => (&rule_clone.dst, Dir::Daddr),
-                            _ => (&rule_clone.src, Dir::Saddr),
-                        };
-                        if let Some(cidr) = field {
-                            let (addr, prefix) =
-                                parse_addr_match(cidr).expect("validated NAT CIDR must parse");
-                            r = match_addr(r, dir, addr, prefix);
-                        }
-                        nat_matches(r, &rule_clone).nat(nat_statement(&rule_clone))
-                    });
-                    continue;
-                }
-                match nat_rule.action {
-                    NatAction::Masquerade => {
-                        let key = format!("nlink-lab/nat/postrouting/{idx}/masq");
-                        t = t.rule_keyed("postrouting", &key, move |mut r| {
-                            if let Some(src) = &rule_clone.src {
-                                let (addr, prefix) =
-                                    parse_addr_match(src).expect("validated NAT CIDR must parse");
-                                r = match_addr(r, Dir::Saddr, addr, prefix);
-                            }
-                            nat_matches(r, &rule_clone).masquerade()
-                        });
-                    }
-                    NatAction::Snat => {
-                        let key = format!("nlink-lab/nat/postrouting/{idx}/snat");
-                        t = t.rule_keyed("postrouting", &key, move |mut r| {
-                            if let Some(src) = &rule_clone.src {
-                                let (addr, prefix) =
-                                    parse_addr_match(src).expect("validated NAT CIDR must parse");
-                                r = match_addr(r, Dir::Saddr, addr, prefix);
-                            }
-                            r = nat_matches(r, &rule_clone);
-                            if let Some(target) = &rule_clone.target {
-                                let addr: std::net::IpAddr =
-                                    target.parse().expect("validated NAT target must parse");
-                                // `snat … to ADDR:PORT`: the port was dropped (#203).
-                                r = nat_target(r, NatAction::Snat, addr, rule_clone.target_port);
-                            }
-                            r
-                        });
-                    }
-                    NatAction::Dnat => {
-                        let key = format!("nlink-lab/nat/prerouting/{idx}/dnat");
-                        t = t.rule_keyed("prerouting", &key, move |mut r| {
-                            if let Some(dst) = &rule_clone.dst {
-                                let (addr, prefix) =
-                                    parse_addr_match(dst).expect("validated NAT CIDR must parse");
-                                r = match_addr(r, Dir::Daddr, addr, prefix);
-                            }
-                            r = nat_matches(r, &rule_clone);
-                            if let Some(target) = &rule_clone.target {
-                                let addr: std::net::IpAddr =
-                                    target.parse().expect("validated NAT target must parse");
-                                r = nat_target(r, NatAction::Dnat, addr, rule_clone.target_port);
-                            }
-                            r
-                        });
-                    }
-                    NatAction::Translate => {
-                        unreachable!("translate rules should be expanded during lowering");
-                    }
-                    NatAction::Redirect => unreachable!("a redirect is a NatStatement rule"),
-                }
+            for (chain, key, spec) in nat_rules {
+                t = t.push_rule_keyed(chain, key, spec);
             }
         }
 
         t
     });
 
+    cfg.validate()
+        .map_err(|e| Error::deploy_failed(format!("nftables config: {e}")))?;
     Ok(cfg)
 }
 
-/// Pre-validate every NAT rule's CIDR / target literals so
-/// the [`topology_to_nftables_config`] closures can rely on
-/// `.expect()`. Surfaces the offending value in the error.
+/// The chain, key and body of NAT rule `idx`.
+fn nat_rule_spec(
+    idx: usize,
+    nat: &crate::types::NatRule,
+) -> Result<(&'static str, String, nlink::netlink::nftables::RuleSpec)> {
+    use crate::types::NatAction;
+    use nlink::netlink::nftables::{NatType, RuleSpec, Stmt};
+    let (field, dir) = match nat.action {
+        NatAction::Dnat | NatAction::Redirect => (&nat.dst, Dir::Daddr),
+        _ => (&nat.src, Dir::Saddr),
+    };
+    let mut spec = RuleSpec::new();
+    if let Some(cidr) = field {
+        spec.push(addr_match(dir, cidr)?);
+    }
+    nat_matches(&mut spec, nat);
+    // A range, a flag or a redirect (#189) is nlink's `NatStatement`. The
+    // other rules keep the expressions they always had, so they keep their
+    // bytes.
+    if let Some((chain, kind)) = nat_statement_rule(nat) {
+        spec.push(Stmt::Nat(nat_statement(nat)?));
+        return Ok((chain, format!("nlink-lab/nat/{chain}/{idx}/{kind}"), spec));
+    }
+    let (chain, kind, nat_type) = match nat.action {
+        NatAction::Masquerade => {
+            spec.push(Stmt::Masquerade);
+            return Ok((
+                "postrouting",
+                format!("nlink-lab/nat/postrouting/{idx}/masq"),
+                spec,
+            ));
+        }
+        NatAction::Snat => ("postrouting", "snat", NatType::Snat),
+        NatAction::Dnat => ("prerouting", "dnat", NatType::Dnat),
+        NatAction::Translate | NatAction::Redirect => {
+            return Err(Error::deploy_failed(format!(
+                "NAT rule {idx}: a {:?} rule reached the planner unexpanded",
+                nat.action
+            )));
+        }
+    };
+    // `snat … to ADDR:PORT`: the port was dropped (#203).
+    if let Some(target) = &nat.target {
+        spec.push(Stmt::NatTo {
+            nat_type,
+            addr: nat_target_addr(target)?,
+            port: nat.target_port,
+        });
+    }
+    Ok((chain, format!("nlink-lab/nat/{chain}/{idx}/{kind}"), spec))
+}
+
+/// Check every NAT rule's literals for what nlink would not refuse but
+/// cannot be meant: a match and a target of different families, a range
+/// that runs backwards, an interface or port match on the wrong chain.
+/// The planner runs it first, and the validator reports it.
 pub(crate) fn validate_nat_rule_literals(nat: &crate::types::NatConfig) -> Result<()> {
     for nat_rule in &nat.rules {
         if let Some(msg) = nat_match_problem(nat_rule) {
@@ -329,39 +318,44 @@ enum Dir {
     Daddr,
 }
 
-/// Add a source/destination address match of the right family.
-fn match_addr(
-    rule: nlink::netlink::nftables::types::Rule,
-    dir: Dir,
-    ip: std::net::IpAddr,
-    prefix: u8,
-) -> nlink::netlink::nftables::types::Rule {
-    match (dir, ip) {
-        (Dir::Saddr, std::net::IpAddr::V4(a)) => rule.match_saddr_v4(a, prefix),
-        (Dir::Saddr, std::net::IpAddr::V6(a)) => rule.match_saddr_v6(a, prefix),
-        (Dir::Daddr, std::net::IpAddr::V4(a)) => rule.match_daddr_v4(a, prefix),
-        (Dir::Daddr, std::net::IpAddr::V6(a)) => rule.match_daddr_v6(a, prefix),
-    }
+/// A source or destination address match, of the address's family.
+fn addr_match(dir: Dir, cidr: &str) -> Result<nlink::netlink::nftables::Match> {
+    use nlink::netlink::nftables::{Field, Match};
+    let (addr, prefix) = parse_addr_match(cidr)
+        .map_err(|e| Error::deploy_failed(format!("invalid CIDR '{cidr}' in NAT rule: {e}")))?;
+    let field = match (dir, addr.is_ipv6()) {
+        (Dir::Saddr, false) => Field::Ip4Saddr,
+        (Dir::Daddr, false) => Field::Ip4Daddr,
+        (Dir::Saddr, true) => Field::Ip6Saddr,
+        (Dir::Daddr, true) => Field::Ip6Daddr,
+    };
+    Ok(Match::eq(field, crate::firewall::addr_value(addr, prefix)))
+}
+
+/// A NAT target address.
+fn nat_target_addr(target: &str) -> Result<std::net::IpAddr> {
+    target
+        .parse()
+        .map_err(|e| Error::deploy_failed(format!("invalid NAT target '{target}': {e}")))
 }
 
 /// A NAT rule's interface and port matches (#167), after its address:
 /// nothing for a rule that has none, so existing rules keep their bytes.
-fn nat_matches(
-    mut rule: nlink::netlink::nftables::types::Rule,
-    nat: &crate::types::NatRule,
-) -> nlink::netlink::nftables::types::Rule {
+fn nat_matches(spec: &mut nlink::netlink::nftables::RuleSpec, nat: &crate::types::NatRule) {
+    use crate::types::NatProto;
+    use nlink::netlink::nftables::{Field, Match};
     if let Some(iif) = &nat.iif {
-        rule = rule.match_iif(iif);
+        spec.push(Match::eq(Field::Iifname, iif.as_str()));
     }
     if let Some(oif) = &nat.oif {
-        rule = rule.match_oif(oif);
+        spec.push(Match::eq(Field::Oifname, oif.as_str()));
     }
     match (nat.proto, nat.dport) {
-        (Some(crate::types::NatProto::Tcp), Some(p)) => rule.match_tcp_dport(p),
-        (Some(crate::types::NatProto::Udp), Some(p)) => rule.match_udp_dport(p),
-        (Some(crate::types::NatProto::Tcp), None) => rule.match_l4proto(6),
-        (Some(crate::types::NatProto::Udp), None) => rule.match_l4proto(17),
-        (None, _) => rule,
+        (Some(NatProto::Tcp), Some(p)) => spec.push(Match::eq(Field::TcpDport, p)),
+        (Some(NatProto::Udp), Some(p)) => spec.push(Match::eq(Field::UdpDport, p)),
+        (Some(NatProto::Tcp), None) => spec.push(Match::eq(Field::L4Proto, 6u8)),
+        (Some(NatProto::Udp), None) => spec.push(Match::eq(Field::L4Proto, 17u8)),
+        (None, _) => {}
     }
 }
 
@@ -385,31 +379,35 @@ fn nat_statement_rule(nat: &crate::types::NatRule) -> Option<(&'static str, &'st
 }
 
 /// The `NatStatement` of a rule [`nat_statement_rule`] picked.
-fn nat_statement(nat: &crate::types::NatRule) -> nlink::netlink::nftables::NatStatement {
+fn nat_statement(nat: &crate::types::NatRule) -> Result<nlink::netlink::nftables::NatStatement> {
     use crate::types::{NatAction, NatFlag};
     use nlink::netlink::nftables::NatStatement;
-    let addr =
-        |s: &String| -> std::net::IpAddr { s.parse().expect("validated NAT target must parse") };
     let mut st = match nat.action {
         NatAction::Masquerade => NatStatement::masquerade(),
         NatAction::Redirect => NatStatement::redirect(),
         NatAction::Snat | NatAction::Dnat => {
-            let first = addr(
-                nat.target
-                    .as_ref()
-                    .expect("validated: snat/dnat have a target"),
-            );
+            let Some(target) = &nat.target else {
+                return Err(Error::deploy_failed(format!(
+                    "a {:?} rule needs a target",
+                    nat.action
+                )));
+            };
+            let first = nat_target_addr(target)?;
             let st = if nat.action == NatAction::Snat {
                 NatStatement::snat(first)
             } else {
                 NatStatement::dnat(first)
             };
             match &nat.target_end {
-                Some(last) => st.to(addr(last)),
+                Some(last) => st.to(nat_target_addr(last)?),
                 None => st,
             }
         }
-        NatAction::Translate => unreachable!("translate rules are expanded during lowering"),
+        NatAction::Translate => {
+            return Err(Error::deploy_failed(
+                "a translate rule reached the planner unexpanded",
+            ));
+        }
     };
     if let Some(first) = nat.target_port {
         st = st.ports(first, nat.target_port_end.unwrap_or(first));
@@ -421,24 +419,7 @@ fn nat_statement(nat: &crate::types::NatRule) -> nlink::netlink::nftables::NatSt
             NatFlag::Persistent => st.persistent(),
         };
     }
-    st
-}
-
-/// Add the snat/dnat target expression of the right family.
-fn nat_target(
-    rule: nlink::netlink::nftables::types::Rule,
-    action: crate::types::NatAction,
-    ip: std::net::IpAddr,
-    port: Option<u16>,
-) -> nlink::netlink::nftables::types::Rule {
-    use crate::types::NatAction;
-    match (action, ip) {
-        (NatAction::Snat, std::net::IpAddr::V4(a)) => rule.snat(a, port),
-        (NatAction::Snat, std::net::IpAddr::V6(a)) => rule.snat_v6(a, port),
-        (NatAction::Dnat, std::net::IpAddr::V4(a)) => rule.dnat(a, port),
-        (NatAction::Dnat, std::net::IpAddr::V6(a)) => rule.dnat_v6(a, port),
-        (NatAction::Masquerade | NatAction::Translate | NatAction::Redirect, _) => rule,
-    }
+    Ok(st)
 }
 
 /// Parse a (possibly compound) match expression and apply it to an nftables rule.
@@ -453,7 +434,7 @@ pub(crate) fn apply_match_expr(
     expr: &str,
 ) -> Result<nlink::netlink::nftables::types::Rule> {
     for clause in crate::firewall::parse_match(expr).map_err(Error::deploy_failed)? {
-        rule = clause.lower(rule);
+        rule = rule.then(clause.item());
     }
     Ok(rule)
 }
@@ -526,6 +507,44 @@ mod golden {
             }
         }
         out
+    }
+
+    /// Every rule the examples plan prints as nft prints it: what `verify`,
+    /// `apply --dry-run` and drift events show for it (nlink 0.33).
+    #[test]
+    fn every_planned_rule_prints_as_nft() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+        let mut checked = 0;
+        for dir in [root.clone(), root.join("cookbook"), root.join("imports")] {
+            for entry in std::fs::read_dir(&dir).unwrap() {
+                let file = entry.unwrap().path();
+                let Ok(topo) = crate::parser::parse_file(&file) else {
+                    continue;
+                };
+                for node in topo.nodes.values() {
+                    let fw = topo.effective_firewall(node);
+                    let Ok(cfg) =
+                        super::topology_to_nftables_config(fw.as_deref(), node.nat.as_ref())
+                    else {
+                        continue;
+                    };
+                    for table in cfg.tables() {
+                        for rule in table.rules() {
+                            let text = rule.spec().nft_syntax_stateless(table.family());
+                            assert!(
+                                text.as_deref().is_some_and(|t| !t.is_empty()),
+                                "{}: {:?} does not print: {:?}",
+                                file.display(),
+                                rule.handle_key(),
+                                rule.spec()
+                            );
+                            checked += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(checked > 50, "only {checked} rules");
     }
 
     #[test]

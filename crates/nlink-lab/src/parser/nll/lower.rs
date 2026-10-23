@@ -4884,7 +4884,52 @@ node b : guarded {
                 "firewall policy drop { drop src . tcp dport 22 }",
                 "matched against a set",
             ),
-            ("firewall policy drop { drop mark != 3 }", "takes a set"),
+            // `mark != 3` is a match since #302; an order still needs a
+            // plain value
+            (
+                "firewall policy drop { drop mark > 0x10/0xff }",
+                "a masked mark is matched with `!=` or nothing",
+            ),
+            (
+                "firewall policy drop { drop tcp dport < @ports }",
+                "a set is matched with `!=` or nothing",
+            ),
+            (
+                "firewall policy drop { drop tcp dport >= 1000-2000 }",
+                "a port range is matched with `!=` or nothing",
+            ),
+            (
+                "firewall policy drop { drop tcp flags syn,ece }",
+                "unknown tcp flag 'ece'",
+            ),
+            (
+                "firewall policy drop { drop tcp flags fin / syn,ack }",
+                "outside the mask",
+            ),
+            (
+                "firewall policy drop { drop ct status nat }",
+                "unknown ct status 'nat'",
+            ),
+            (
+                "firewall policy drop { drop ct direction both }",
+                "original or reply",
+            ),
+            (
+                "firewall policy drop { drop ct zone 70000 }",
+                "between 0 and 65535",
+            ),
+            (
+                "firewall policy drop { drop pkttype unicast }",
+                "unknown pkttype 'unicast'",
+            ),
+            (
+                "firewall policy drop { drop l4proto quic }",
+                "unknown protocol 'quic'",
+            ),
+            (
+                "firewall policy drop { drop pkttype > host }",
+                "`pkttype` is matched with",
+            ),
         ] {
             let full = format!("lab \"t\"\nnode a {{\n  {src}\n}}\n");
             let (msg, _) = parse_err_span(&full);

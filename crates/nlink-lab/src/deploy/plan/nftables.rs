@@ -193,9 +193,10 @@ fn nat_rule_spec(
     Ok((chain, format!("nlink-lab/nat/{chain}/{idx}/{kind}"), spec))
 }
 
-/// Pre-validate every NAT rule's CIDR / target literals so
-/// the [`topology_to_nftables_config`] closures can rely on
-/// `.expect()`. Surfaces the offending value in the error.
+/// Check every NAT rule's literals for what nlink would not refuse but
+/// cannot be meant: a match and a target of different families, a range
+/// that runs backwards, an interface or port match on the wrong chain.
+/// The planner runs it first, and the validator reports it.
 pub(crate) fn validate_nat_rule_literals(nat: &crate::types::NatConfig) -> Result<()> {
     for nat_rule in &nat.rules {
         if let Some(msg) = nat_match_problem(nat_rule) {

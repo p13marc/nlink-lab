@@ -1373,6 +1373,46 @@ mod tests {
     /// level lower to nlink's expressions; `rpf` is refused in the output
     /// chain, which has no input interface.
     #[test]
+    fn a_clamp_without_a_tcp_match_is_guarded_to_tcp() {
+        let mut clamp = rule("oifname wan0", "continue");
+        clamp.clamp_mss = Some(crate::types::MssClamp::Pmtu);
+        let spec = lower_rule(&clamp).unwrap();
+        assert_eq!(
+            spec.nft_syntax_stateless(Family::Inet).as_deref(),
+            Some(
+                "oifname \"wan0\" tcp flags & (syn | rst) == syn tcp option maxseg size set rt mtu"
+            )
+        );
+        // the flags are read behind `meta l4proto tcp`, once
+        let r = exprs_of(spec);
+        let flags = r
+            .iter()
+            .position(|e| matches!(e, Expr::Payload { offset: 13, .. }))
+            .expect("the flags load");
+        let guards: Vec<usize> = r
+            .windows(2)
+            .enumerate()
+            .filter(|(_, w)| {
+                matches!(
+                    w,
+                    [
+                        Expr::Meta {
+                            key: MetaKey::L4Proto,
+                            ..
+                        },
+                        Expr::Cmp { data, .. },
+                    ] if data[..] == [6]
+                )
+            })
+            .map(|(i, _)| i)
+            .collect();
+        assert!(
+            guards.len() == 1 && guards[0] < flags,
+            "one tcp guard before the flags: {r:?}"
+        );
+    }
+
+    #[test]
     fn rpf_negated_ranges_byte_limits_and_log_levels() {
         assert_eq!(parse_match(&RPF.join(" ")).unwrap(), [Clause::Rpf]);
         assert_eq!(Clause::Rpf.to_nll(), "rpf");

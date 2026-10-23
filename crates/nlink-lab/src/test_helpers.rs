@@ -658,12 +658,56 @@ mod tests {
             .lines()
             .find_map(|l| l.trim().strip_prefix("NLINK_LAB_STRICT_FEATURES:"))
             .expect("the integration lane sets NLINK_LAB_STRICT_FEATURES");
+        let gated = gated_features(tests);
         for name in list.split(',').map(str::trim) {
             assert!(
-                tests.contains(&format!("\"{name}\"")),
-                "integration.yml requires '{name}', which no test gates on"
+                gated.contains(name),
+                "integration.yml requires '{name}', which no test gates on: {gated:?}"
             );
         }
+    }
+
+    /// The names the integration suite passes to [`feature`]: a literal
+    /// second argument, or each name of a `for m in [...]` list whose
+    /// loop passes `m`.
+    fn gated_features(tests: &str) -> std::collections::BTreeSet<String> {
+        let literal = |s: &str| -> Option<String> {
+            let s = s.trim_start().strip_prefix('"')?;
+            Some(s[..s.find('"')?].to_string())
+        };
+        let mut names = std::collections::BTreeSet::new();
+        for call in tests.split("feature(").skip(1) {
+            // the first argument, a test name or a variable, then the feature
+            if let Some((_, rest)) = call.split_once(',')
+                && let Some(name) = literal(rest)
+            {
+                names.insert(name);
+            }
+        }
+        for list in tests.split("for m in [").skip(1) {
+            let list = &list[..list.find(']').unwrap_or(0)];
+            names.extend(list.split(',').filter_map(literal));
+        }
+        names
+    }
+
+    #[test]
+    fn gated_features_are_the_names_feature_calls_pass() {
+        let src = r#"
+            if !feature("t", "vrf", has_vrf()) {}
+            if !feature(
+                "long_test_name",
+                "bridge-vlan-filtering",
+                x(),
+            ) {}
+            for m in ["wireguard", "8021q"] { feature(test, m, ok(m)); }
+            let s = "nftables";
+        "#;
+        let names = gated_features(src);
+        assert_eq!(
+            names.into_iter().collect::<Vec<_>>(),
+            ["8021q", "bridge-vlan-filtering", "vrf", "wireguard"]
+        );
     }
 
     #[test]

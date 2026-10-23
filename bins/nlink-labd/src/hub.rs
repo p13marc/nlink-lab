@@ -6,8 +6,8 @@
 //! whoever deployed it. Each lab's `events.ndjson` is tailed from where
 //! the last scan left it, and a changed topology revision (an `apply`, a
 //! `restore`) is announced. Metrics are collected only for labs someone
-//! subscribed to, on a thread per lab: nlink's namespace connections are
-//! not `Send`.
+//! subscribed to, on a thread per lab: a collection walks `/proc` and
+//! reads files, which block.
 
 use std::collections::{BTreeMap, HashMap};
 use std::os::unix::fs::MetadataExt;

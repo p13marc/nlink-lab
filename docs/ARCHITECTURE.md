@@ -613,8 +613,9 @@ daemon.
   export) stay on the socket.
 - **Reads** go to `nlink_lab::ops::read`; **changes** to
   `nlink_lab::ops::mutate` — the functions the CLI calls — run as jobs:
-  one queue per lab, on a thread of its own with a `LocalSet` (nlink's
-  reconciles are not `Send`). A job outlives its caller: `list_ops`
+  one queue per lab, on a thread of its own (a change can block it: the
+  lab's lock waited for, a scenario or a benchmark run to its end). A
+  job outlives its caller: `list_ops`
   shows it, `attach_op` replays its progress so far, `cancel_op` stops
   it (a deploy or an apply rolls back). Interactive sessions end with
   their connection.

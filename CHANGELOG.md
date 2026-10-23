@@ -81,6 +81,15 @@ JSON Schema did not describe its JSON (nlink #876).
 
 ### Changed
 
+- **A deploy or an apply runs on the caller's runtime** (#301). Every
+  plan ran on a thread and a runtime of its own, because nlink 0.32's
+  reconciles were not `Send` (nlink #877, fixed in 0.33 by nlink #879).
+  The plan now runs where `deploy()`/`apply()` are awaited; what blocks in
+  it (the container runtime's CLI, commands run in a node, health
+  probes, FRR's `vtysh`, a daemon's pidfile) runs on tokio's blocking
+  pool, so it does not stall that runtime. A compile-time check keeps the
+  futures of deploy, apply, restore, reattach, the runtime impairment
+  calls and the daemon's job handler `Send`. No API change.
 - **The firewall and NAT planner builds rules as data** (#299): each NLL
   match clause is an nlink `Match`, each statement a `Stmt`, the verdict a
   `Verdict`, declared with `push_rule_keyed` (nlink #527, which nlink-lab

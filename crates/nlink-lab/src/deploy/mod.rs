@@ -146,10 +146,7 @@ async fn deploy_inner(
     });
     let mut env = apply::ApplyEnv::for_deploy(topology)?;
     env.ctx = ctx.clone();
-    let owned = std::mem::replace(journal, Journal::ephemeral(&topology.lab.name));
-    let (res, env, owned) = apply::execute_isolated(plan.clone(), env, owned).await;
-    *journal = owned;
-    res?;
+    apply::execute(&plan, &mut env, journal).await?;
 
     // ── state file ──
     #[cfg(feature = "wireguard")]
@@ -526,9 +523,8 @@ async fn apply_ctx(
 
     let mut env = apply::ApplyEnv::from_running(running, desired, &cur_plan)?;
     env.ctx = ctx.clone();
-    let journal = Journal::new(running.name());
-    let (res, env, mut journal) = apply::execute_isolated(diff.clone(), env, journal).await;
-    if let Err(e) = res {
+    let mut journal = Journal::new(running.name());
+    if let Err(e) = apply::execute(&diff, &mut env, &mut journal).await {
         // the caller reports the error: the log is for -v
         tracing::info!(
             "apply to '{}' failed: {e}; rolling back this apply",
@@ -774,9 +770,8 @@ async fn reattach_ctx(
     });
     let mut env = apply::ApplyEnv::from_running(running, &desired, &cur_plan)?;
     env.ctx = ctx.clone();
-    let journal = Journal::new(running.name());
-    let (res, env, mut journal) = apply::execute_isolated(diff.clone(), env, journal).await;
-    if let Err(e) = res {
+    let mut journal = Journal::new(running.name());
+    if let Err(e) = apply::execute(&diff, &mut env, &mut journal).await {
         tracing::warn!("reattach '{node}' failed: {e}; rolling back");
         journal.unwind().await;
         return Err(e);
@@ -1341,6 +1336,34 @@ pub(crate) fn now_iso8601() -> String {
     time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| "unknown".to_string())
+}
+
+/// The futures a caller spawns are `Send` (#301). The plan runs on the
+/// caller's runtime since nlink 0.33 made its reconciles `Send` (nlink
+/// #879, #884): a non-`Send` future here would only fail where something
+/// spawns it, the daemon above all. Compiling this is the check; it never
+/// runs.
+#[cfg(test)]
+#[allow(dead_code)]
+fn the_operations_futures_are_send(
+    lab: &mut RunningLab,
+    topology: &Topology,
+    snapshot: &crate::state::Snapshot,
+    impairment: &crate::types::Impairment,
+    ctx: &crate::ops::OpCtx,
+    request: nlink_lab_shared::api::Request,
+) {
+    fn send<F: std::future::Future + Send>(_: F) {}
+    send(deploy_with(topology, ctx));
+    send(apply_with_ctx(lab, topology, &ApplyOptions::default(), ctx));
+    send(compute_layered_diff(lab, topology));
+    send(restore_with(lab, snapshot, ctx));
+    send(reattach_node_with(lab, "n", ctx));
+    send(lab.set_impairment("n:eth0", impairment));
+    send(lab.clear_impairment("n:eth0"));
+    send(lab.partition("n:eth0"));
+    send(lab.heal("n:eth0"));
+    send(crate::ops::mutate::handle(request, ctx));
 }
 
 #[cfg(test)]

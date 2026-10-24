@@ -13,7 +13,6 @@ ignore = [
     "RUSTSEC-2023-0071", # rsa: Marvin timing sidechannel — no fixed release exists
     "RUSTSEC-2024-0436", # paste unmaintained
     "RUSTSEC-2025-0134", # rustls-pemfile unmaintained
-    "RUSTSEC-2025-0141", # bincode 1.x unmaintained
     "RUSTSEC-2026-0041", # lz4_flex decompress leak — zenoh pins 0.10, fix is in a later minor
     "RUSTSEC-2024-0449", # unsafe-libyaml unmaintained — zenoh-config's serde_yaml 0.9 (deprecated)
     # via iced 0.14 (nlink-lab-gui)
@@ -23,7 +22,6 @@ ignore = [
     "RUSTSEC-2026-0370", # zvariant unmaintained
     "RUSTSEC-2026-0371", # zbus_names unmaintained
     "RUSTSEC-2026-0372", # zvariant_derive unmaintained
-    # via wayland-scanner (build-time proc-macro only), which pins quick-xml <0.41
 ]
 
 [licenses]

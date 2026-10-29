@@ -116,7 +116,9 @@ pub(crate) fn counts(root: &Path) -> std::collections::BTreeMap<&'static str, St
 }
 
 /// `text` with every count marker's number set to what it counts; an
-/// unknown name or an unclosed marker is an error.
+/// unknown name or an unclosed marker is an error. A marker in a fenced
+/// block is filled like any other (CLAUDE.md's module map has some): a
+/// page that shows the syntax itself must not spell it whole.
 fn fill_counts(
     text: &str,
     counts: &std::collections::BTreeMap<&'static str, String>,
@@ -127,7 +129,8 @@ fn fill_counts(
         let after = &rest[at + COUNT_OPEN.len()..];
         let name_end = after
             .find("-->")
-            .ok_or_else(|| "a count marker without `-->`".to_string())?;
+            .filter(|end| !after[..*end].contains('\n'))
+            .ok_or_else(|| "a count marker whose `-->` is not on its line".to_string())?;
         let name = after[..name_end].trim();
         let value = counts
             .get(name)
@@ -160,13 +163,18 @@ fn index(cmd: &clap::Command) -> String {
 }
 
 /// Rewrite the command index between its markers in `<dir>/README.md`.
+/// A README without them is an error: a deleted marker must not turn the
+/// generated index off unnoticed.
 fn write_index(dir: &Path, cmd: &clap::Command) -> nlink_lab::Result<()> {
     let file = dir.join("README.md");
     let Ok(text) = std::fs::read_to_string(&file) else {
         return Ok(());
     };
     let (Some(a), Some(b)) = (text.find(INDEX_START), text.find(INDEX_END)) else {
-        return Ok(());
+        return Err(nlink_lab::Error::invalid_argument(format!(
+            "{} has no command index markers ({INDEX_START} … {INDEX_END})",
+            file.display()
+        )));
     };
     let page = format!(
         "{}{INDEX_START}\n{}\n{}",
@@ -332,6 +340,7 @@ mod tests {
              <!-- count:cli-commands -->40<!-- /count -->."
         );
         assert!(fill_counts("<!-- count:nope -->1<!-- /count -->", &counts).is_err());
+        assert!(fill_counts("<!-- count:cli-\ncommands -->1<!-- /count -->", &counts).is_err());
         assert!(fill_counts("<!-- count:cli-commands -->1", &counts).is_err());
     }
 
@@ -371,7 +380,11 @@ mod tests {
     #[test]
     fn prune_keeps_pages_it_did_not_write() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("README.md"), "# index\n").unwrap();
+        std::fs::write(
+            dir.path().join("README.md"),
+            format!("# index\n\n{INDEX_START}\n{INDEX_END}\n"),
+        )
+        .unwrap();
         std::fs::write(
             dir.path().join("gone.md"),
             format!("# gone\n\n{START}\n\n{END}\n"),

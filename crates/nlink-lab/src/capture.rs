@@ -10,8 +10,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-#[cfg(feature = "legacy-tcpdump-filter")]
-use netring::BpfInsn;
 use netring::{BpfFilter, Capture, CaptureStats, RingProfile};
 use nlink::netlink::namespace;
 
@@ -211,88 +209,19 @@ impl RotatingPcapWriter {
 const PCAP_GLOBAL_HEADER_BYTES: u64 = 24;
 const PCAP_RECORD_HEADER_BYTES: u64 = 16;
 
-// ── BPF filter compilation ────────────────────────────────────────────────
-
-/// Compile a tcpdump filter expression into a [`BpfFilter`].
-///
-/// Shells out to `tcpdump -dd` which outputs C-style BPF bytecode.
-/// Requires `tcpdump` (and `libpcap`) installed on the system.
-///
-/// **This is the legacy path.** Prefer [`netring::BpfFilter::builder`]
-/// (re-exported as `netring::BpfFilter`) for typed, dependency-free
-/// filter construction. Available only when nlink-lab is built with
-/// the `legacy-tcpdump-filter` feature.
-#[cfg(feature = "legacy-tcpdump-filter")]
-pub fn compile_bpf_filter(expression: &str) -> Result<BpfFilter> {
-    let output = std::process::Command::new("tcpdump")
-        .args(["-dd", expression])
-        .output()
-        .map_err(|e| Error::Capture(format!("failed to run tcpdump for BPF compilation: {e}")))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(Error::Capture(format!(
-            "tcpdump filter compilation failed: {stderr}"
-        )));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut insns = Vec::new();
-    for line in stdout.lines() {
-        // Lines look like: { 0x28, 0, 0, 0x0000000c },
-        let trimmed = line
-            .trim()
-            .trim_start_matches('{')
-            .trim_end_matches([',', '}', ' ']);
-        let parts: Vec<&str> = trimmed.split(',').map(|s| s.trim()).collect();
-        if parts.len() == 4 {
-            let code = parse_hex_or_dec(parts[0])?;
-            let jt = parse_hex_or_dec(parts[1])? as u8;
-            let jf = parse_hex_or_dec(parts[2])? as u8;
-            let k = parse_hex_or_dec(parts[3])? as u32;
-            insns.push(BpfInsn {
-                code: code as u16,
-                jt,
-                jf,
-                k,
-            });
-        }
-    }
-
-    if insns.is_empty() {
-        return Err(Error::Capture(
-            "tcpdump produced no BPF instructions".into(),
-        ));
-    }
-
-    BpfFilter::new(insns).map_err(|e| Error::Capture(format!("invalid BPF filter: {e}")))
-}
-
-#[cfg(feature = "legacy-tcpdump-filter")]
-fn parse_hex_or_dec(s: &str) -> Result<u64> {
-    let s = s.trim();
-    if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-        u64::from_str_radix(hex, 16)
-            .map_err(|e| Error::Capture(format!("invalid BPF value '{s}': {e}")))
-    } else {
-        s.parse::<u64>()
-            .map_err(|e| Error::Capture(format!("invalid BPF value '{s}': {e}")))
-    }
-}
+// ── BPF filters ───────────────────────────────────────────────────────────
 
 /// The BPF filter a [`CaptureFilter`](crate::api::CaptureFilter) says,
 /// built with netring's typed builder: `None` when it keeps everything.
-/// Its `expression` is compiled by `tcpdump`, in a build with the
-/// `legacy-tcpdump-filter` feature only. The CLI's `--filter-*` flags and
-/// the daemon's `capture` share it.
+/// The CLI's `--filter-*` flags and the daemon's `capture` share it. A
+/// tcpdump `expression` is refused: compiling one shelled out to
+/// `tcpdump -dd`, which 0.16 removed (#346).
 pub fn build_filter(f: &crate::api::CaptureFilter) -> Result<Option<BpfFilter>> {
-    if let Some(expr) = &f.expression {
-        if f.has_conditions() {
-            return Err(Error::invalid_argument(
-                "a tcpdump expression goes alone, without typed filter conditions",
-            ));
-        }
-        return legacy_filter(expr).map(Some);
+    if f.expression.is_some() {
+        return Err(Error::invalid_argument(
+            "tcpdump filter expressions were removed in nlink-lab 0.16 (#346): use the \
+             typed conditions (tcp, udp, host, src_net, dst_port, ports, not, …)",
+        ));
     }
     if f.is_empty() {
         return Ok(None);
@@ -424,20 +353,6 @@ pub fn build_filter(f: &crate::api::CaptureFilter) -> Result<Option<BpfFilter>> 
     b.build()
         .map(Some)
         .map_err(|e| Error::invalid_argument(format!("BPF filter build failed: {e}")))
-}
-
-#[cfg(feature = "legacy-tcpdump-filter")]
-fn legacy_filter(expr: &str) -> Result<BpfFilter> {
-    compile_bpf_filter(expr)
-}
-
-#[cfg(not(feature = "legacy-tcpdump-filter"))]
-fn legacy_filter(_expr: &str) -> Result<BpfFilter> {
-    Err(Error::invalid_argument(
-        "a tcpdump expression needs nlink-lab built with the `legacy-tcpdump-filter` \
-         feature (which shells out to `tcpdump -dd`); the typed conditions (tcp, \
-         dst_port, host, src_net, …) need neither",
-    ))
 }
 
 // ── Capture config & result ───────────────────────────────────────────────

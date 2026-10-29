@@ -74,6 +74,13 @@ pub struct RemovedFlag {
 /// Every removed flag.
 pub const REMOVED_FLAGS: &[RemovedFlag] = &[
     RemovedFlag {
+        command: "capture",
+        flag: "--filter",
+        instead: "nlink-lab capture EP --filter-tcp --filter-port 80 (the typed --filter-* \
+                  flags: host, net, port, ip-proto, vlan, not; the tcpdump expression went \
+                  with the legacy-tcpdump-filter feature, #346)",
+    },
+    RemovedFlag {
         command: "deploy",
         flag: "--daemon",
         instead: "nlink-lab top --daemon (nlink-labd, the host daemon, serves every lab: \

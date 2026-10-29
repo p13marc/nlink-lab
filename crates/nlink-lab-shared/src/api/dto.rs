@@ -379,9 +379,10 @@ pub struct CaptureFilter {
     /// Keep what does not match.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub not: bool,
-    /// A tcpdump expression instead of the conditions above: only a
-    /// daemon built with `legacy-tcpdump-filter` (and `tcpdump`) compiles
-    /// one.
+    /// Removed in 0.16 (#346): a daemon refuses a filter that sets it.
+    /// It was a tcpdump expression instead of the conditions above, which
+    /// only a daemon built with the dropped `legacy-tcpdump-filter`
+    /// feature compiled.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expression: Option<String>,
 }

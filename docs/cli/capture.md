@@ -65,11 +65,10 @@ For OR or hand-rolled bytecode, use the library API directly.
 | `--filter-dst-port PORT` | L4 destination port. |
 | `--filter-not` | Negate the entire filter. |
 
-### Legacy tcpdump-expression flag
-
-| Flag | Description |
-|------|-------------|
-| `-f`, `--filter EXPR` | tcpdump-style filter, e.g. `"tcp port 80"`. **Default builds reject this** with a migration suggestion — it shells out to `tcpdump -dd` and re-introduces a runtime tooling dependency. Build with `--features legacy-tcpdump-filter` to opt back in. Cannot be combined with any `--filter-*` flag. |
+The tcpdump-expression flag `--filter EXPR` was removed in 0.16
+(#346), with the `legacy-tcpdump-filter` build feature it needed: it
+shelled out to `tcpdump -dd`. Passing it says which typed flags to use.
+`tcp port 80` is `--filter-tcp --filter-port 80`.
 
 ## Examples
 
@@ -171,9 +170,6 @@ Options:
 
   -c, --count <COUNT>
           Capture N packets then stop
-
-      --filter <FILTER>
-          Legacy: full tcpdump filter expression (e.g., "tcp port 80"). Requires nlink-lab built with the `legacy-tcpdump-filter` feature *and* `tcpdump` on PATH. Default builds prefer the typed `--filter-*` flags below
 
       --filter-tcp
           Match only TCP (sets ip_proto=6)

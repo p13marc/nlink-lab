@@ -13,7 +13,8 @@ pub fn view(app: &App) -> Element<'_, Message> {
         text("nlink-lab").size(28),
         muted(concat!(
             "Network labs from topology files · ",
-            env!("CARGO_PKG_VERSION")
+            env!("CARGO_PKG_VERSION"),
+            " · experimental: may change in any minor release"
         )),
         row![
             button(text("Open a topology…"))

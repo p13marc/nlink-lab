@@ -57,7 +57,11 @@ pub const SPARK_POINTS: usize = 60;
 const POLL: Duration = Duration::from_secs(1);
 
 #[derive(Parser)]
-#[command(name = "nlink-lab-gui", version, about = "The nlink-lab desktop app")]
+#[command(
+    name = "nlink-lab-gui",
+    version,
+    about = "The nlink-lab desktop app (experimental: it may change in any minor release, docs/SUPPORT.md)"
+)]
 struct Cli {
     /// Topology files to open, one tab each.
     files: Vec<PathBuf>,

@@ -1736,7 +1736,7 @@
           }
         },
         "expression": {
-          "description": "A tcpdump expression instead of the conditions above: only a\ndaemon built with `legacy-tcpdump-filter` (and `tcpdump`) compiles\none.",
+          "description": "Removed in 0.16 (#346): a daemon refuses a filter that sets it.\nIt was a tcpdump expression instead of the conditions above, which\nonly a daemon built with the dropped `legacy-tcpdump-filter`\nfeature compiled.",
           "type": [
             "string",
             "null"

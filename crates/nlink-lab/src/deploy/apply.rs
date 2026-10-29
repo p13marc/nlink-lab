@@ -1359,12 +1359,13 @@ async fn exec_op(
         }
     }
     // Renamed to include the pid; where a rename fails, the log is recorded
-    // where it is (and `ps` has no exit code for it).
+    // where it is. The reaper's `.rc` is named from the prefix whatever
+    // happens here, but `ps` looks for it next to the recorded `.stdout`.
     let rename = |from: &std::path::Path, to: std::path::PathBuf| match std::fs::rename(from, &to) {
         Ok(()) => to,
         Err(e) => {
             tracing::warn!(
-                "keeping log {}: rename to {}: {e}",
+                "keeping log {}: rename to {}: {e} (`ps` will not show its exit code)",
                 from.display(),
                 to.display()
             );

@@ -633,8 +633,8 @@ async fn background_runs_report_their_exit_codes() {
     let topo = nlink_lab::parser::parse(&format!(
         r#"lab "{lab_name}"
 node a {{
-  run background ["sh", "-c", "sleep 2; exit 7"]
-  run background ["sh", "-c", "sleep 2; kill -TERM $$"]
+  run background ["sh", "-c", "sleep 4; exit 7"]
+  run background ["sh", "-c", "sleep 4; kill -TERM $$"]
 }}
 "#
     ))
@@ -643,7 +643,7 @@ node a {{
     let _guard = LabCleanup {
         name: lab.name().to_string(),
     };
-    let plain = lab.spawn("a", &["sh", "-c", "sleep 2; exit 5"]).unwrap();
+    let plain = lab.spawn("a", &["sh", "-c", "sleep 4; exit 5"]).unwrap();
     let mut metrics = nlink_lab::metrics::MetricsCollector::new(&lab);
     let _ = metrics.snapshot(&lab).await.unwrap();
     assert_eq!(
@@ -653,17 +653,20 @@ node a {{
         lab.process_status()
     );
 
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    while lab.process_status().iter().any(|p| p.alive) {
+    // dead, and the reaper has written its .rc (right after it reaps)
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    while lab
+        .process_status()
+        .iter()
+        .any(|p| p.alive || p.exit_code.is_none())
+    {
         assert!(
             std::time::Instant::now() < deadline,
-            "still running after 10 s: {:?}",
+            "no exit code 15 s on: {:?}",
             lab.process_status()
         );
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-    // the reaper writes the .rc right after it reaps
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     let (_, events) = metrics.snapshot(&lab).await.unwrap();
     let mut exited: Vec<Option<i32>> = events

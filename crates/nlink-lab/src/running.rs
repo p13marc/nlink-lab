@@ -1372,7 +1372,7 @@ impl RunningLab {
                 Ok(()) => to,
                 Err(e) => {
                     tracing::warn!(
-                        "keeping log {}: rename to {}: {e}",
+                        "keeping log {}: rename to {}: {e} (`ps` will not show its exit code)",
                         from.display(),
                         to.display()
                     );

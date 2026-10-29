@@ -3997,14 +3997,17 @@ async fn proc_stat_many_samples_a_whole_node(mut lab: RunningLab) {
 // ─── Plan 156 PR A — partition cycles fix ───────────────
 
 /// Whether `node:iface` drops what it sends and receives: a partition's
-/// matchall drop on both clsact hooks (#168).
+/// matchall on both clsact hooks (#168), a drop on ingress and a steal
+/// on egress (#347).
 fn blocked(lab: &RunningLab, node: &str, iface: &str) -> bool {
-    ["ingress", "egress"].iter().all(|hook| {
-        lab.exec(node, "tc", &["filter", "show", "dev", iface, hook])
-            .unwrap()
-            .stdout
-            .contains("action drop")
-    })
+    [("ingress", "action drop"), ("egress", "action stolen")]
+        .iter()
+        .all(|(hook, action)| {
+            lab.exec(node, "tc", &["filter", "show", "dev", iface, hook])
+                .unwrap()
+                .stdout
+                .contains(action)
+        })
 }
 
 // Round-4 §1: `partition` was a silent no-op on the second call after
@@ -5460,6 +5463,156 @@ qdisc a:eth0 prio {{ bands 3 }}
     );
     let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
     assert!(layered.is_empty(), "not converged:\n{layered}");
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// A partition is a black hole (#347): the partitioned node's own stack
+/// cannot tell it from a dead network. A UDP send with `IP_RECVERR`
+/// succeeds (a drop on egress would fail it with ENOBUFS), and a TCP
+/// stream across the cut stays established and backs off (a drop on
+/// egress made its TCP retry every 500 ms without backing off and give up
+/// with ETIMEDOUT about 8 s after the cut). After the heal the stream
+/// carries data again.
+#[tokio::test]
+async fn a_partition_is_a_black_hole_to_the_sender() {
+    use std::io::{Read, Write};
+    use std::os::fd::AsRawFd;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{Duration, Instant};
+
+    if !privileged("a_partition_is_a_black_hole_to_the_sender") {
+        return;
+    }
+    let lab_name = format!("pbh-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}"
+node a
+node b
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+"#
+    ))
+    .unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let ns = |node: &str| lab.namespace_for(node).unwrap().to_string();
+    // A socket stays in the namespace it was created in.
+    let in_ns = |node: &str| nlink::netlink::namespace::enter(&ns(node)).unwrap();
+
+    let listener = {
+        let _in = in_ns("b");
+        std::net::TcpListener::bind("10.0.0.2:9000").unwrap()
+    };
+    let received = Arc::new(AtomicU64::new(0));
+    let reader = {
+        let received = received.clone();
+        std::thread::spawn(move || {
+            let (mut conn, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 65536];
+            while let Ok(n @ 1..) = conn.read(&mut buf) {
+                received.fetch_add(n as u64, Ordering::Relaxed);
+            }
+        })
+    };
+    let (mut stream, udp) = {
+        let _in = in_ns("a");
+        let stream = std::net::TcpStream::connect_timeout(
+            &"10.0.0.2:9000".parse().unwrap(),
+            Duration::from_secs(5),
+        )
+        .unwrap();
+        (stream, std::net::UdpSocket::bind("10.0.0.1:0").unwrap())
+    };
+    stream
+        .set_write_timeout(Some(Duration::from_millis(200)))
+        .unwrap();
+    let on: libc::c_int = 1;
+    // SAFETY: setsockopt on a socket this test owns, with an int option.
+    let rc = unsafe {
+        libc::setsockopt(
+            udp.as_raw_fd(),
+            libc::IPPROTO_IP,
+            libc::IP_RECVERR,
+            (&on as *const libc::c_int).cast(),
+            std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+        )
+    };
+    assert_eq!(rc, 0, "IP_RECVERR: {}", std::io::Error::last_os_error());
+    let chunk = [b'x'; 4096];
+    // Only a full send buffer (EAGAIN after the write timeout) is fine.
+    let send = |stream: &mut std::net::TcpStream, since: Instant| match stream.write(&chunk) {
+        Ok(_) => {}
+        Err(e) if e.raw_os_error() == Some(libc::EAGAIN) => {}
+        Err(e) => panic!(
+            "the sender saw the partition {:.1?} after the cut: {e}",
+            since.elapsed()
+        ),
+    };
+    let start = Instant::now();
+    while received.load(Ordering::Relaxed) == 0 {
+        send(&mut stream, start);
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "no data before the cut"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+
+    lab.partition("a:eth0").await.expect("partition a failed");
+    lab.partition("b:eth0").await.expect("partition b failed");
+    let cut = Instant::now();
+    assert!(blocked(&lab, "a", "eth0") && blocked(&lab, "b", "eth0"));
+    udp.send_to(b"ping", "10.0.0.2:9001")
+        .expect("a UDP send through a partition must look sent");
+
+    while cut.elapsed() < Duration::from_secs(10) {
+        send(&mut stream, cut);
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    // The first bytes of `struct tcp_info`: state, ca_state, retransmits,
+    // probes, backoff.
+    let mut info = [0u8; 8];
+    let mut len = info.len() as libc::socklen_t;
+    // SAFETY: getsockopt into a buffer of `len` bytes; the kernel copies
+    // at most that many.
+    let rc = unsafe {
+        libc::getsockopt(
+            stream.as_raw_fd(),
+            libc::IPPROTO_TCP,
+            libc::TCP_INFO,
+            info.as_mut_ptr().cast(),
+            &mut len,
+        )
+    };
+    assert_eq!(rc, 0, "TCP_INFO: {}", std::io::Error::last_os_error());
+    assert_eq!(
+        info[0], 1,
+        "not ESTABLISHED after 10 s of partition: {info:?}"
+    );
+    assert!(info[4] > 0, "the sender never backed off: {info:?}");
+
+    let before = received.load(Ordering::Relaxed);
+    lab.heal("a:eth0").await.expect("heal a failed");
+    lab.heal("b:eth0").await.expect("heal b failed");
+    let healed = Instant::now();
+    while received.load(Ordering::Relaxed) == before {
+        send(&mut stream, cut);
+        assert!(
+            healed.elapsed() < Duration::from_secs(30),
+            "no data 30 s after the heal"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    eprintln!(
+        "after 10 s of partition: ESTABLISHED, backoff {}, retransmits {}; data again {:.1?} after the heal",
+        info[4],
+        info[2],
+        healed.elapsed()
+    );
+    drop(stream);
+    reader.join().unwrap();
     lab.destroy().await.expect("destroy failed");
 }
 

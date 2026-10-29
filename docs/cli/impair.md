@@ -67,7 +67,7 @@ Options:
           Remove the impairment (in `--dir`)
 
       --partition
-          Cut the endpoint off: drop everything it sends and receives. Its qdiscs (netem, `qdisc` block, rate limit, per-pair matrix) stay
+          Cut the endpoint off: drop everything it sends and receives, as a black hole (its own stack sees the sends succeed, so its TCP backs off and waits, as when a WAN goes dark). Its qdiscs (netem, `qdisc` block, rate limit, per-pair matrix) stay
 
       --heal
           End a partition: traffic flows again, through what it had

@@ -443,7 +443,9 @@ no longer has is deleted; a declared link's per-interface sysctls are
 devconf on its declaration. Traffic control is declared too
 (`plan/tc.rs`): a runtime `impair`/`--partition`/`--heal` reconciles the
 node's Tc-only config (`deploy::reconcile_node_tc`); a partition is a
-clsact matchall drop on both hooks, under whatever root the endpoint has. Namespaces created by nlink-lab carry
+clsact matchall on both hooks, under whatever root the endpoint has: a drop
+on ingress, a steal (TC_ACT_STOLEN) on egress, so the sender's stack sees a
+black hole, not a local drop (#347). Namespaces created by nlink-lab carry
 an ownership tag (`/run/nlink-lab/netns/<ns>`, `netns_tag.rs`) and
 `destroy --orphans` only ever reaps tagged ones. `deploy --dry-run`
 prints the plan; `validate { … }` assertions run after the state file is

@@ -25,7 +25,8 @@ pub struct PlanInputs {
     #[cfg(feature = "wireguard")]
     pub wg_keys: Option<wireguard::WgKeys>,
     /// Partitioned endpoints (`node:iface`): their traffic is dropped by
-    /// a filter on both hooks, under whatever qdisc they have (#168).
+    /// a filter on both hooks, under whatever qdisc they have (#168),
+    /// silently for the sender (#347).
     pub partitions: std::collections::BTreeSet<String>,
 }
 
@@ -746,10 +747,15 @@ link d:eth1 -- e:eth1 { 10.0.1.1/24 -- 10.0.1.2/24  delay 5ms  rate 1mbit }
         );
     }
 
-    /// A partition is a clsact with a matchall drop on both hooks (#168):
-    /// the interface's root qdisc stays declared.
+    /// A partition is a clsact with a matchall on both hooks (#168): the
+    /// interface's root qdisc stays declared. Ingress drops, egress steals
+    /// (#347): a drop there would be seen by the sender's own stack.
     #[test]
     fn a_partition_keeps_the_root_and_adds_drop_filters() {
+        use nlink::TcHandle;
+        use nlink::netlink::action::{ActionList, GactAction};
+        use nlink::netlink::config::FilterSpec;
+        use nlink::netlink::filter::MatchallFilter;
         use nlink::netlink::tc_spec::QdiscSpec;
         let t = topo(
             r#"lab "p"
@@ -777,7 +783,20 @@ qdisc a:eth0 prio { bands 3 }
                 .iter()
                 .any(|q| matches!(q.qdisc_type(), QdiscSpec::Clsact))
         );
-        assert_eq!(a.tc_trees()[0].filters().len(), 2);
+        let filters = a.tc_trees()[0].filters();
+        assert_eq!(filters.len(), 2);
+        let on = |hook: TcHandle| {
+            &filters
+                .iter()
+                .find(|f| f.parent == hook)
+                .unwrap_or_else(|| panic!("no filter on {hook:?}: {filters:?}"))
+                .spec
+        };
+        let matchall = |action| {
+            FilterSpec::from(MatchallFilter::new().actions(ActionList::new().with(action)))
+        };
+        assert_eq!(on(TcHandle::CLSACT_INGRESS), &matchall(GactAction::drop()));
+        assert_eq!(on(TcHandle::CLSACT_EGRESS), &matchall(GactAction::stolen()));
         assert!(stack_of(&p, "b").network.tc_trees().is_empty());
     }
 

@@ -619,6 +619,85 @@ async fn spawn_records_exit_code_without_owning_the_reaper(mut lab: RunningLab) 
     );
 }
 
+/// A topology's `run … background` gets an exit code like `spawn` does
+/// (#320): it used to be spawned without a reaper, so `ps` and the
+/// `ProcessExited` event of a dead service never had one. `exit 7` is 7, a
+/// SIGTERM death 143; plain `RunningLab::spawn` is reaped too.
+#[tokio::test]
+async fn background_runs_report_their_exit_codes() {
+    use nlink_lab_shared::messages::LabEventKind;
+    if !privileged("background_runs_report_their_exit_codes") {
+        return;
+    }
+    let lab_name = format!("rbx-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}"
+node a {{
+  run background ["sh", "-c", "sleep 4; exit 7"]
+  run background ["sh", "-c", "sleep 4; kill -TERM $$"]
+}}
+"#
+    ))
+    .unwrap();
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let plain = lab.spawn("a", &["sh", "-c", "sleep 4; exit 5"]).unwrap();
+    let mut metrics = nlink_lab::metrics::MetricsCollector::new(&lab);
+    let _ = metrics.snapshot(&lab).await.unwrap();
+    assert_eq!(
+        lab.process_status().iter().filter(|p| p.alive).count(),
+        3,
+        "all three alive at the first tick: {:?}",
+        lab.process_status()
+    );
+
+    // dead, and the reaper has written its .rc (right after it reaps)
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    while lab
+        .process_status()
+        .iter()
+        .any(|p| p.alive || p.exit_code.is_none())
+    {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "no exit code 15 s on: {:?}",
+            lab.process_status()
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
+    let (_, events) = metrics.snapshot(&lab).await.unwrap();
+    let mut exited: Vec<Option<i32>> = events
+        .iter()
+        .filter_map(|e| match &e.kind {
+            LabEventKind::ProcessExited { exit_code, .. } => Some(*exit_code),
+            _ => None,
+        })
+        .collect();
+    exited.sort();
+    assert_eq!(exited, [Some(5), Some(7), Some(143)], "{events:?}");
+
+    let mut ps: Vec<(u32, Option<i32>)> = nlink_lab::ops::view::processes(&lab)
+        .into_iter()
+        .map(|p| (p.pid, p.exit_code))
+        .collect();
+    ps.sort_by_key(|(_, code)| *code);
+    assert_eq!(
+        ps.iter().map(|(_, code)| *code).collect::<Vec<_>>(),
+        [Some(5), Some(7), Some(143)],
+        "{ps:?}"
+    );
+    assert!(ps.iter().any(|(pid, _)| *pid == plain));
+    assert!(
+        our_zombie_children().is_empty(),
+        "no reaper may be our zombie: {:?}",
+        our_zombie_children()
+    );
+    lab.destroy().await.expect("destroy failed");
+}
+
 // `exec_with_opts(.. env ..)` must apply env vars via Command::env, not
 // by wrapping in `/usr/bin/env`. Verifies both visibility of the new var
 // and additive semantics — inherited PATH must remain set.
@@ -5564,6 +5643,10 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     lab.partition("b:eth0").await.expect("partition b failed");
     let cut = Instant::now();
     assert!(blocked(&lab, "a", "eth0") && blocked(&lab, "b", "eth0"));
+    // The neighbour entry for 10.0.0.2 is warm from the TCP stream, so the
+    // datagram reaches the egress hook at once: that is where a drop
+    // reports ENOBUFS (an unresolved neighbour would queue it and hide
+    // the difference).
     udp.send_to(b"ping", "10.0.0.2:9001")
         .expect("a UDP send through a partition must look sent");
 

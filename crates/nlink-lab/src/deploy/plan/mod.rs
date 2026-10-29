@@ -751,7 +751,7 @@ link d:eth1 -- e:eth1 { 10.0.1.1/24 -- 10.0.1.2/24  delay 5ms  rate 1mbit }
     /// interface's root qdisc stays declared. Ingress drops, egress steals
     /// (#347): a drop there would be seen by the sender's own stack.
     #[test]
-    fn a_partition_keeps_the_root_and_adds_drop_filters() {
+    fn a_partition_keeps_the_root_and_adds_partition_filters() {
         use nlink::TcHandle;
         use nlink::netlink::action::{ActionList, GactAction};
         use nlink::netlink::config::FilterSpec;

@@ -134,6 +134,20 @@ impl NsRef {
         }
     }
 
+    /// [`spawn_detached`](Self::spawn_detached) with a reaper that records
+    /// the exit status in `<rc_prefix><pid>.rc` (see
+    /// [`crate::ns_exec::spawn_detached_reaped`]).
+    pub fn spawn_detached_reaped(
+        &self,
+        cmd: std::process::Command,
+        rc_prefix: &std::path::Path,
+    ) -> std::result::Result<u32, nlink::netlink::Error> {
+        match self {
+            NsRef::Named { name } => crate::ns_exec::spawn_detached_reaped(name, cmd, rc_prefix),
+            _ => crate::ns_exec::spawn_detached_path_reaped(&self.ns_path(), cmd, rc_prefix),
+        }
+    }
+
     /// Run a process to completion inside the namespace.
     pub fn spawn_output(
         &self,

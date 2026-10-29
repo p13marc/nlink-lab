@@ -1141,8 +1141,8 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                     env.pids.retain(|(_, p)| *p != pid);
                 }
                 None => tracing::warn!(
-                    "exec[{index}] of '{node}': no tracked pid (started before 0.9, or a \
-                     container exec); its process is left running"
+                    "exec[{index}] of '{node}': no tracked pid (started before 0.9); its \
+                     process is left running"
                 ),
             }
         }
@@ -1296,22 +1296,29 @@ async fn exec_op(
     let stderr_path = log_dir.join(format!("{node}-{basename}-{index}.stderr"));
     cmd.stdout(std::fs::File::create(&stdout_path)?);
     cmd.stderr(std::fs::File::create(&stderr_path)?);
+    // A reaper writes `<node>-<basename>-<pid>.rc` when the process exits,
+    // next to its renamed `.stdout`, where `ps` and `ProcessExited` read
+    // the exit code: as `spawn` does (#320).
+    let rc_prefix = log_dir.join(format!("{node}-{basename}-"));
     let pid = if container_id.is_some() {
         // The container is already in its own namespaces; this runs the runtime
         // binary (`podman exec …`) on the host, detached like every other
         // background process: a plain `spawn` made it the deploying
         // process's child, and its zombie once the container went (#204).
-        crate::ns_exec::spawn_detached_path(std::path::Path::new("/proc/self/ns/net"), cmd)
-            .map_err(|e| {
-                Error::nlink(
-                    format!(
-                        "failed to spawn background process in container '{node}' exec[{index}]"
-                    ),
-                    e,
-                )
-            })?
+        // The exit code is the `exec` client's, which is the command's.
+        crate::ns_exec::spawn_detached_path_reaped(
+            std::path::Path::new("/proc/self/ns/net"),
+            cmd,
+            &rc_prefix,
+        )
+        .map_err(|e| {
+            Error::nlink(
+                format!("failed to spawn background process in container '{node}' exec[{index}]"),
+                e,
+            )
+        })?
     } else {
-        handle.spawn_detached(cmd).map_err(|e| {
+        handle.spawn_detached_reaped(cmd, &rc_prefix).map_err(|e| {
             Error::nlink(
                 format!("failed to spawn background process on '{node}' exec[{index}]"),
                 e,
@@ -1351,10 +1358,28 @@ async fn exec_op(
             );
         }
     }
-    let final_stdout = log_dir.join(format!("{node}-{basename}-{pid}.stdout"));
-    let final_stderr = log_dir.join(format!("{node}-{basename}-{pid}.stderr"));
-    let _ = std::fs::rename(&stdout_path, &final_stdout);
-    let _ = std::fs::rename(&stderr_path, &final_stderr);
+    // Renamed to include the pid; where a rename fails, the log is recorded
+    // where it is. The reaper's `.rc` is named from the prefix whatever
+    // happens here, but `ps` looks for it next to the recorded `.stdout`.
+    let rename = |from: &std::path::Path, to: std::path::PathBuf| match std::fs::rename(from, &to) {
+        Ok(()) => to,
+        Err(e) => {
+            tracing::warn!(
+                "keeping log {}: rename to {}: {e} (`ps` will not show its exit code)",
+                from.display(),
+                to.display()
+            );
+            from.to_path_buf()
+        }
+    };
+    let final_stdout = rename(
+        &stdout_path,
+        log_dir.join(format!("{node}-{basename}-{pid}.stdout")),
+    );
+    let final_stderr = rename(
+        &stderr_path,
+        log_dir.join(format!("{node}-{basename}-{pid}.stderr")),
+    );
     env.process_logs.insert(
         pid,
         (

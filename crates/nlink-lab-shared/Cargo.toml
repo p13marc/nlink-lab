@@ -1,6 +1,6 @@
 [package]
 name = "nlink-lab-shared"
-description = "Shared types for nlink-lab backend/frontend Zenoh communication"
+description = "The nlink-lab daemon API (requests, responses, events, the unix-socket frame codec) and the metrics and Zenoh message types its clients share"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

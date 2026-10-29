@@ -23,7 +23,7 @@ sends) and [`api-server.v1`](json-schemas/api-server.v1.schema.json)
 
 ## Version
 
-`API_VERSION` is `1.1`, exchanged once when a connection opens. A daemon
+`API_VERSION` is <!-- count:api-version -->1.1<!-- /count -->, exchanged once when a connection opens. A daemon
 refuses a client of another major version, and a client one of another
 major. A minor version only adds methods and fields, announced as
 `features`; old clients ignore what they do not know. 1.1 added
@@ -211,7 +211,7 @@ opens with `hello`, the daemon answers `welcome`:
 
 ```json
 {"t": "hello", "api": "1.1", "client": "my-tool/0.1", "features": []}
-{"t": "welcome", "api": "1.1", "server": "nlink-labd/0.14.0", "host": "lab1",
+{"t": "welcome", "api": "1.1", "server": "nlink-labd/0.15.0", "host": "lab1",
  "uid": 1000, "user": "alice", "role": "operator", "features": ["read", "subscribe", "exec"]}
 ```
 

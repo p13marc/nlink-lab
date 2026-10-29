@@ -134,7 +134,7 @@ profile web-server {
 }
 ```
 
-### 3. Nodes
+### 4. Nodes
 
 ```nll-ignore
 node host                              # bare node
@@ -152,7 +152,7 @@ node r1 : router {                     # with properties
 }
 ```
 
-### 4. Links
+### 5. Links
 
 The `--` operator connects two endpoints.
 
@@ -199,7 +199,7 @@ rate server:eth0 egress 1gbit ingress 1gbit   # standalone
 impair switch:br0 delay 5ms jitter 1ms         # standalone
 ```
 
-### 5. Networks (Bridges)
+### 6. Networks (Bridges)
 
 ```nll-ignore
 network fabric {
@@ -302,7 +302,7 @@ Nested loops produce a Cartesian product; see
 [`docs/cookbook/satellite-mesh.md`](cookbook/satellite-mesh.md)
 for a worked 12-node example.
 
-### 6. Interfaces
+### 7. Interfaces
 
 ```nll-ignore
 node vtep1 : router {
@@ -320,7 +320,7 @@ node vtep1 : router {
 }
 ```
 
-### 7. Firewall
+### 8. Firewall
 
 ```nll-ignore
 node server {
@@ -562,7 +562,7 @@ declared order. Validation rules: `firewall-policy`, `firewall-action`,
 `firewall-match-expr`, `firewall-chain-context`, and
 `firewall-iface-exists` (a warning).
 
-### 8. VRF
+### 9. VRF
 
 ```nll-ignore
 node pe : router {
@@ -578,7 +578,7 @@ node pe : router {
 }
 ```
 
-### 9. WireGuard
+### 10. WireGuard
 
 ```nll-ignore
 node gw : gateway {
@@ -621,7 +621,7 @@ wireguard wg-red {
 peer's `listen`); `allowed-ips` a list of prefixes (`default` is
 `0.0.0.0/0`). A malformed one is `wireguard-peer-settings`.
 
-### 10. Process Execution
+### 11. Process Execution
 
 ```nll-ignore
 node server {
@@ -630,7 +630,7 @@ node server {
 }
 ```
 
-### 11. Variables
+### 12. Variables
 
 ```nll-ignore
 let wan_delay = 30ms
@@ -643,7 +643,7 @@ link r1:wan0 -- r2:wan0 {
 }
 ```
 
-### 12. Loops
+### 13. Loops
 
 ```nll-ignore
 for i in 1..4 {
@@ -661,7 +661,7 @@ for s in 1..2 {
 
 Range `1..4` is inclusive: 1, 2, 3, 4.
 
-### 13. Comments
+### 14. Comments
 
 ```nll-ignore
 # Line comments (like TOML, Python, shell)
@@ -676,7 +676,7 @@ All three forms accept any text, including punctuation and non-ASCII.
 
 ---
 
-### 14. IPv6 and Dual-Stack
+### 15. IPv6 and Dual-Stack
 
 Every address position accepts IPv6: link pairs, `network` ports,
 `route … via`, `lo`, `mgmt`, `pool` bases, `subnet()`/`host()`, NAT
@@ -728,7 +728,7 @@ node host {
   `examples/ipv6-dual-stack.nll` documents.
 
 
-### 15. Bonds and VLAN Sub-Interfaces
+### 16. Bonds and VLAN Sub-Interfaces
 
 ```nll-ignore
 node left {
@@ -750,7 +750,7 @@ Members and parents must be interfaces of the same node
 (`bond-member-exists`, `vlan-parent-exists`). Options map to the
 kernel's bonding driver through nlink's `LinkBuilder::bond_*` setters.
 
-### 16. Queue Disciplines
+### 17. Queue Disciplines
 
 `impair` installs netem and `rate` an HTB shaper; a `qdisc` block picks
 any other classless root qdisc for an interface:
@@ -782,7 +782,7 @@ reports the difference. A `prio` gets handle `1:`.
 `link set a:eth0 --qdisc tbf,rate=10mbit,burst=32kb,limit=100kb` changes a
 running lab. See `examples/qdisc-kinds.nll`.
 
-### 17. Dynamic Routing with FRR
+### 18. Dynamic Routing with FRR
 
 `routing frr` swaps static auto-routes for real routing protocols on
 the routers: every forwarding namespace node runs FRR's `zebra` plus
@@ -1576,6 +1576,7 @@ container_props = "cpu" value | "memory" value
                | "labels" string_list | "pull" ("always" | "missing" | "never")
                | "exec" STRING
                | "healthcheck" STRING healthcheck_block?
+               | "healthcheck-interval" DURATION | "healthcheck-timeout" DURATION
                | "startup-delay" DURATION
                | "env-file" STRING | "config" STRING STRING | "overlay" STRING
                | "depends-on" ident_list
@@ -1879,7 +1880,7 @@ modules directly under `crates/nlink-lab/src/parser/nll/`.
   Topology               → The one model every command consumes
     │
     ▼
-  Validator              → 54 rules with stable ids (`validate`)
+  Validator              → rules with stable ids (`validate`, `RULE_IDS`)
 ```
 
 NLL is the only topology input format; `Topology` is also produced by the

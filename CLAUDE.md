@@ -111,7 +111,7 @@ crates/nlink-lab/src/
       value.rs      # Val<T>: typed + spanned literals/deferred values (Duration, Percent, Rate, Size, …)
       lower.rs      # AST → Topology (imports, loops, variables, lowering)
   error.rs          # Error types (includes NllDiagnostic for miette)
-  validator.rs      # Topology validation (80 rules with stable ids, see RULE_IDS)
+  validator.rs      # Topology validation (<!-- count:validator-rules -->80<!-- /count --> rules with stable ids, see RULE_IDS)
   render.rs         # Topology → NLL serializer (for `render` command)
   dns.rs            # DNS /etc/hosts generation, injection, removal
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
@@ -246,7 +246,7 @@ bins/gui/src/       # nlink-lab-gui, the desktop app (iced 0.14, experimental):
 bins/gui/tests/packaging.rs    # desktop entry / metainfo / manifest / release agree
 
 examples/
-  *.nll             # NLL topology examples (47 top-level; 56 incl. cookbook/ and imports/)
+  *.nll             # NLL topology examples (<!-- count:examples -->47<!-- /count --> here; <!-- count:examples-all -->56<!-- /count --> incl. cookbook/ and imports/)
   imports/          # Import composition and parametric module examples
 ```
 
@@ -355,7 +355,7 @@ Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
-CLI commands (40, grouped in `--help`; lab-scoped ones take `-L LAB`, else `$NLINK_LAB`, `use`, or the only lab):
+CLI commands (<!-- count:cli-commands -->40<!-- /count -->, grouped in `--help`; lab-scoped ones take `-L LAB`, else `$NLINK_LAB`, `use`, or the only lab):
 `deploy` (`.nll` or `.nlz`, with `--set`, `--unique`, `--suffix`, `--json`), `use` (`--clear`),
 `destroy` (`LAB…`, `--all`, `--orphans`), `apply` (`[FILE]`, default the recorded source; `--reset-impairments`),
 `ls` (`--scan`, reports orphans + stale labs), `status [LAB]` (nodes, addresses, containers,

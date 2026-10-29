@@ -1098,7 +1098,7 @@ lab: `$NLINK_LAB`, then `nlink-lab use`, then the only lab running.
 | `exec` | Run a command inside a lab node |
 | `validate` | Validate a topology file without deploying |
 | `impair` | Modify link impairment at runtime |
-| `capture` | Capture packets on an interface (tcpdump) |
+| `capture` | Capture packets on an interface (netring, writes pcap) |
 | `diagnose` | Run diagnostics on a lab |
 | `top` | Live view of a lab: nodes, interfaces, flows (`--once --json`: one metrics snapshot) |
 | `init` | Create a topology file from a built-in template |

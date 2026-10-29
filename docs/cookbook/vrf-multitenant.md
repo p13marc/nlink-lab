@@ -110,4 +110,4 @@ containerlab.
 
 ## See also
 
-- [NLL: VRF syntax](../NLL_DSL_DESIGN.md#8-vrf)
+- [NLL: VRF syntax](../NLL_DSL_DESIGN.md#9-vrf)

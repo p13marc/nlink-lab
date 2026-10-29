@@ -146,3 +146,17 @@ fn tree_sitter_grammar_has_no_foreign_keywords() {
         "grammar.js spells keywords the language does not have: {foreign:?}"
     );
 }
+
+/// Zed's extension builds on this repository's tree-sitter grammar, so its
+/// highlighting is the grammar's: one query file, kept in two places
+/// (#345). They had drifted: the grammar's own copy lacked bond, frr,
+/// vlan, qdisc and WireGuard-peer highlighting.
+#[test]
+fn zed_highlights_are_the_tree_sitter_highlights() {
+    let grammar = "editors/tree-sitter-nll/queries/highlights.scm";
+    let zed = "editors/zed-nll/languages/nll/highlights.scm";
+    assert!(
+        read(grammar) == read(zed),
+        "{zed} differs from {grammar}: edit one, copy it over the other"
+    );
+}

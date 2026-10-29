@@ -5640,6 +5640,10 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
     lab.partition("b:eth0").await.expect("partition b failed");
     let cut = Instant::now();
     assert!(blocked(&lab, "a", "eth0") && blocked(&lab, "b", "eth0"));
+    // The neighbour entry for 10.0.0.2 is warm from the TCP stream, so the
+    // datagram reaches the egress hook at once: that is where a drop
+    // reports ENOBUFS (an unresolved neighbour would queue it and hide
+    // the difference).
     udp.send_to(b"ping", "10.0.0.2:9001")
         .expect("a UDP send through a partition must look sent");
 

@@ -2024,10 +2024,12 @@ impl RunningLab {
         Ok(())
     }
 
-    /// Partition an endpoint: drop everything it sends and receives. A
-    /// matchall drop on both hooks of a clsact qdisc, ahead of any other
-    /// filter; its root qdisc and the tree under it (netem, `qdisc`
-    /// block, rate limit, per-pair matrix) stay as they are (#168).
+    /// Partition an endpoint: drop everything it sends and receives, as a
+    /// black hole its own stack cannot see (#347). A matchall on both
+    /// hooks of a clsact qdisc, ahead of any other filter: a drop on
+    /// ingress, a steal on egress. Its root qdisc and the tree under it
+    /// (netem, `qdisc` block, rate limit, per-pair matrix) stay as they
+    /// are (#168).
     pub async fn partition(&mut self, endpoint: &str) -> Result<()> {
         if self.saved_impairments.contains_key(endpoint) {
             return Ok(());
@@ -2054,7 +2056,7 @@ impl RunningLab {
         Ok(())
     }
 
-    /// Heal an endpoint: take its partition's drop filters away. What it
+    /// Heal an endpoint: take its partition's filters away. What it
     /// carried under them is still there.
     pub async fn heal(&mut self, endpoint: &str) -> Result<()> {
         if !self.saved_impairments.contains_key(endpoint) {

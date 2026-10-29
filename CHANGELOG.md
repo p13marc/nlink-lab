@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Migration
+
+- **`impair --partition` is a black hole again** (#347). Since 0.14 its
+  egress filter dropped packets (TC_ACT_SHOT), which the partitioned
+  node's own stack is told about: its TCP took that for local
+  congestion, retried every 500 ms without backing off and closed the
+  connection with `ETIMEDOUT` about 8 s after the cut, and its UDP sends
+  failed with `ENOBUFS` under `IP_RECVERR`. A test of how an application
+  rides out a dead network measured a fast local failure instead. The
+  egress filter now steals the packet (TC_ACT_STOLEN): freed, and
+  reported to the sender as sent, as 0.13's 100%-loss netem was, so
+  connections stay `ESTABLISHED` and back off. Ingress still drops, and
+  the root qdisc stays untouched (#168). `tc filter show dev IF egress`
+  now reads `action stolen`. An endpoint partitioned by 0.14 or 0.15
+  keeps its old filter until it is healed or the lab is `apply`'d (which
+  replaces the filter in place); `verify` reports it as drift until then.
+
 ## [0.15.0] - 2026-10-23
 
 The firewall and conntrack release. NLL's firewall gains `tcp flags`,

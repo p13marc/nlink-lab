@@ -45,10 +45,10 @@ use crate::types::{EndpointRef, RateLimit, Topology};
 /// impairments overlaid on `topology`) takes the root over from a `qdisc`
 /// block or a rate limit until it is cleared.
 ///
-/// A partitioned interface also gets a clsact qdisc with a matchall drop
-/// on both of its hooks, ahead of any other filter there. Its root and
-/// the tree under it stay as they are, so healing finds them intact
-/// (#168).
+/// A partitioned interface also gets a clsact qdisc with a matchall on
+/// both of its hooks, ahead of any other filter there: see
+/// [`partition_filters`]. Its root and the tree under it stay as they
+/// are, so healing finds them intact (#168).
 pub(crate) fn declare_node_tc(
     mut cfg: NetworkConfig,
     node_name: &str,
@@ -104,24 +104,41 @@ pub(crate) fn declare_node_tc(
         }
 
         if partitioned {
-            let drop = || MatchallFilter::new().actions(ActionList::new().with(GactAction::drop()));
+            let [ingress, egress] = partition_filters();
             cfg = cfg.tc(&iface, |t| {
                 t.filter(
                     TcHandle::CLSACT_INGRESS,
                     BLOCK_PRIORITY,
                     EthProto::ALL,
-                    drop(),
+                    ingress,
                 )
                 .filter(
                     TcHandle::CLSACT_EGRESS,
                     BLOCK_PRIORITY,
                     EthProto::ALL,
-                    drop(),
+                    egress,
                 )
             });
         }
     }
     Ok(cfg)
+}
+
+/// A partition's two filters, `[ingress, egress]`: a black hole, which
+/// nothing on either side can tell from a dead network (#347).
+///
+/// The ingress hook drops what arrives (TC_ACT_SHOT); the far sender
+/// cannot see that, and the drop counters show it. The egress hook must
+/// not drop the same way: a TC_ACT_SHOT there returns `NET_XMIT_DROP` to
+/// the endpoint's own stack, its TCP takes that for local congestion,
+/// retries every 500 ms without backing off and gives up with ETIMEDOUT
+/// about 8 s after the cut. It *steals* the packet instead
+/// (TC_ACT_STOLEN): freed, and reported to the sender as sent, as netem's
+/// `loss 100%` would, so its connections back off and wait as they do
+/// when a WAN goes dark.
+pub(crate) fn partition_filters() -> [MatchallFilter; 2] {
+    let with = |action: GactAction| MatchallFilter::new().actions(ActionList::new().with(action));
+    [with(GactAction::drop()), with(GactAction::stolen())]
 }
 
 /// The `RateLimiter` for an endpoint's `rate` declaration.

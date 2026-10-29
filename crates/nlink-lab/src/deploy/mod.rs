@@ -1697,7 +1697,7 @@ link r2:eth1 -- host:eth0 { 10.0.2.1/24 -- 10.0.2.2/24 }
         }
     }
 
-    /// A partition is drop filters under the root (#168): it survives an
+    /// A partition is filters under the root (#168): it survives an
     /// apply, even one that changes the endpoint's impairment, unless
     /// reset or the endpoint is gone.
     #[test]

@@ -1376,13 +1376,15 @@ declarations.
 Simulate network partitions without losing what the link carries:
 
 ```bash
-sudo nlink-lab impair -L mylab router:wan0 --partition  # drops everything, both ways
+sudo nlink-lab impair -L mylab router:wan0 --partition  # a black hole, both ways
 # ... test failure detection ...
 sudo nlink-lab impair -L mylab router:wan0 --heal    # traffic flows again
 ```
 
 **Semantics:**
-- `--partition` drops everything the endpoint sends and receives: a matchall drop filter on both hooks of a clsact qdisc, ahead of any other filter. Its root qdisc and the tree under it (an `impair` netem, a `qdisc` block, a `rate` limit, a network's per-pair matrix) stay as they are
+- `--partition` drops everything the endpoint sends and receives, as a **black hole**: the endpoint's own stack sees its sends succeed, as when a WAN goes dark or a cell dies somewhere in the network. Its TCP connections stay `ESTABLISHED` and back off, its UDP sends report no error, and a peer can only notice through timeouts. It is a matchall filter on both hooks of a clsact qdisc, ahead of any other filter: a drop on ingress, a steal on egress (a drop there would be reported to the sender's stack, and its TCP would give up with `ETIMEDOUT` about 8 s after the cut). Its root qdisc and the tree under it (an `impair` netem, a `qdisc` block, a `rate` limit, a network's per-pair matrix) stay as they are
+- For a fault the endpoint *does* see, a local link failure, take the interface down instead: a scenario's `down EP`, or `nlink-lab exec -L mylab router -- ip link set wan0 down`. The two are different faults to an application: a link failure fails fast, a black hole leaves its connections waiting
+- To cut a link both ways, partition both of its ends
 - `--heal` takes the filters away; the link is exactly as it was before the partition
 - An `apply` while partitioned keeps the partition (`--reset-impairments` drops it); `apply --dry-run` and `verify` do not report it as drift
 - Double partition is a no-op

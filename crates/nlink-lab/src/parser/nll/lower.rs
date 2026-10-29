@@ -561,6 +561,18 @@ fn merge_import(main: &mut types::Topology, alias: &str, imported: types::Topolo
                     }
                     types::ScenarioAction::Exec { node, .. } => *node = pn(node),
                     types::ScenarioAction::Log(_) => {}
+                    types::ScenarioAction::Impair { endpoint, .. }
+                    | types::ScenarioAction::Partition { endpoint, .. }
+                    | types::ScenarioAction::Heal { endpoint, .. } => {
+                        *endpoint = prefix_endpoint(alias, endpoint)
+                    }
+                    types::ScenarioAction::PairImpair {
+                        network, src, dst, ..
+                    } => {
+                        *network = format!("{alias}-{network}");
+                        *src = prefix_endpoint(alias, src);
+                        *dst = prefix_endpoint(alias, dst);
+                    }
                 }
             }
         }
@@ -1587,7 +1599,35 @@ fn prefix_statement(st: ast::Statement, prefix: &str) -> ast::Statement {
                                 cmd,
                             }
                         }
-                        other => other,
+                        ast::ScenarioActionDef::Impair { endpoint, props } => {
+                            ast::ScenarioActionDef::Impair {
+                                endpoint: prefix_ep(prefix, &endpoint),
+                                props,
+                            }
+                        }
+                        ast::ScenarioActionDef::Partition { endpoint, both } => {
+                            ast::ScenarioActionDef::Partition {
+                                endpoint: prefix_ep(prefix, &endpoint),
+                                both,
+                            }
+                        }
+                        ast::ScenarioActionDef::Heal { endpoint, both } => {
+                            ast::ScenarioActionDef::Heal {
+                                endpoint: prefix_ep(prefix, &endpoint),
+                                both,
+                            }
+                        }
+                        // as a site's network and its pair rules are
+                        ast::ScenarioActionDef::PairImpair { network, mut rule } => {
+                            rule.src = prefix_ep(prefix, &rule.src);
+                            rule.dst = prefix_ep(prefix, &rule.dst);
+                            ast::ScenarioActionDef::PairImpair {
+                                network: format!("{prefix}{network}"),
+                                rule,
+                            }
+                        }
+                        // a log line names nothing
+                        ast::ScenarioActionDef::Log(m) => ast::ScenarioActionDef::Log(m),
                     })
                     .collect();
             }
@@ -2227,6 +2267,7 @@ fn interpolate_statement(stmt: &ast::Statement, vars: &BTreeMap<String, String>)
         }),
         ast::Statement::Scenario(sc) => ast::Statement::Scenario(ast::ScenarioDef {
             name: i(&sc.name, vars),
+            keep: sc.keep,
             steps: sc
                 .steps
                 .iter()
@@ -2260,6 +2301,30 @@ fn interpolate_statement(stmt: &ast::Statement, vars: &BTreeMap<String, String>)
                             }
                             ast::ScenarioActionDef::Log(m) => {
                                 ast::ScenarioActionDef::Log(i(m, vars))
+                            }
+                            ast::ScenarioActionDef::Impair { endpoint, props } => {
+                                ast::ScenarioActionDef::Impair {
+                                    endpoint: i(endpoint, vars),
+                                    props: interpolate_impair_props(props, vars),
+                                }
+                            }
+                            ast::ScenarioActionDef::Partition { endpoint, both } => {
+                                ast::ScenarioActionDef::Partition {
+                                    endpoint: i(endpoint, vars),
+                                    both: *both,
+                                }
+                            }
+                            ast::ScenarioActionDef::Heal { endpoint, both } => {
+                                ast::ScenarioActionDef::Heal {
+                                    endpoint: i(endpoint, vars),
+                                    both: *both,
+                                }
+                            }
+                            ast::ScenarioActionDef::PairImpair { network, rule } => {
+                                ast::ScenarioActionDef::PairImpair {
+                                    network: i(network, vars),
+                                    rule: interpolate_network_impair(rule, vars),
+                                }
                             }
                         })
                         .collect(),
@@ -4303,6 +4368,31 @@ fn lower_scenario(s: &ast::ScenarioDef) -> Result<types::Scenario> {
                     node: node.clone(),
                     cmd: cmd.clone(),
                 },
+                ast::ScenarioActionDef::Impair { endpoint, props } => {
+                    types::ScenarioAction::Impair {
+                        endpoint: endpoint.clone(),
+                        impairment: lower_impair_props(props)?,
+                    }
+                }
+                ast::ScenarioActionDef::Partition { endpoint, both } => {
+                    types::ScenarioAction::Partition {
+                        endpoint: endpoint.clone(),
+                        both: *both,
+                    }
+                }
+                ast::ScenarioActionDef::Heal { endpoint, both } => types::ScenarioAction::Heal {
+                    endpoint: endpoint.clone(),
+                    both: *both,
+                },
+                ast::ScenarioActionDef::PairImpair { network, rule } => {
+                    types::ScenarioAction::PairImpair {
+                        network: network.clone(),
+                        src: rule.src.clone(),
+                        dst: rule.dst.clone(),
+                        impairment: lower_impair_props(&rule.props)?,
+                        rate_cap: rule.rate_cap.as_ref().map(ast::Val::to_text).transpose()?,
+                    }
+                }
                 ast::ScenarioActionDef::Validate(assertions) => {
                     let mut typed = Vec::new();
                     for a in assertions {
@@ -4390,6 +4480,7 @@ fn lower_scenario(s: &ast::ScenarioDef) -> Result<types::Scenario> {
     Ok(types::Scenario {
         name: s.name.clone(),
         steps,
+        keep: s.keep,
     })
 }
 
@@ -7355,6 +7446,78 @@ qdisc b:eth0 fq_codel { target 5ms interval 100ms limit 10240 flows 1024 quantum
         let (msg, span) = parse_err_span(src);
         assert_eq!(&src[span], "${t}");
         assert!(msg.contains("scenario 's'"), "{msg}");
+    }
+
+    /// The runtime-fault actions (#326): an endpoint impairment, a pair
+    /// rule, partition and heal with `both`, and `keep`, interpolated and
+    /// prefixed by a site like the other actions.
+    #[test]
+    fn scenario_fault_actions_lower() {
+        use crate::types::ScenarioAction as A;
+        let topo = parse_and_lower(
+            r#"lab "t"
+let d = 40ms
+site s {
+  node a
+  node b
+  node c
+  link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+  network lan {
+    members [a:eth1, c:eth0]
+    subnet 10.1.0.0/24
+  }
+  scenario "f" {
+    keep
+    at 0s {
+      impair a:eth0 delay ${d} loss 1%
+      impair lan a -- c { delay 5ms rate-cap 10mbit }
+    }
+    at 1s {
+      partition a:eth0 both
+      heal a:eth0
+    }
+  }
+}
+"#,
+        );
+        let sc = &topo.scenarios[0];
+        assert!(sc.keep);
+        let acts: Vec<&A> = sc.steps.iter().flat_map(|s| &s.actions).collect();
+        match acts[0] {
+            A::Impair {
+                endpoint,
+                impairment,
+            } => {
+                assert_eq!(endpoint, "s-a:eth0");
+                assert_eq!(impairment.delay.as_deref(), Some("40ms"));
+                assert_eq!(impairment.loss.as_deref(), Some("1%"));
+            }
+            other => panic!("{other:?}"),
+        }
+        match acts[1] {
+            A::PairImpair {
+                network,
+                src,
+                dst,
+                impairment,
+                rate_cap,
+            } => {
+                assert_eq!(
+                    (network.as_str(), src.as_str(), dst.as_str()),
+                    ("s-lan", "s-a", "s-c")
+                );
+                assert_eq!(impairment.delay.as_deref(), Some("5ms"));
+                assert_eq!(rate_cap.as_deref(), Some("10mbit"));
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!(matches!(acts[2], A::Partition { endpoint, both: true } if endpoint == "s-a:eth0"));
+        assert!(matches!(acts[3], A::Heal { endpoint, both: false } if endpoint == "s-a:eth0"));
+        assert!(topo.networks.contains_key("s-lan"));
+
+        let src = "lab \"t\"\nnode a\nscenario \"s\" {\n  at 1s { impair a:eth0 }\n}\n";
+        let (msg, _) = parse_err_span(src);
+        assert!(msg.contains("needs an impairment"), "{msg}");
     }
 
     #[test]

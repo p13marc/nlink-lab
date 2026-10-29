@@ -299,6 +299,14 @@ pub struct SpawnOpts<'a> {
     pub env: &'a [(&'a str, &'a str)],
 }
 
+/// A lab's runtime traffic control (live impairments, partitions), as a
+/// scenario found it (#326).
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RuntimeTc {
+    live: BTreeMap<String, crate::types::Impairment>,
+    partitions: BTreeMap<String, crate::types::Impairment>,
+}
+
 /// Status of a tracked background process.
 ///
 /// **Retention**: tracked processes are *not* removed from the lab's PID
@@ -1967,6 +1975,76 @@ impl RunningLab {
             return Err(e);
         }
         Ok(())
+    }
+
+    /// The runtime traffic control: live impairments and partitions, for a
+    /// scenario to put back when it ends (#326).
+    pub(crate) fn runtime_tc(&self) -> RuntimeTc {
+        RuntimeTc {
+            live: self.live_impairments.clone(),
+            partitions: self.saved_impairments.clone(),
+        }
+    }
+
+    /// Put the runtime traffic control back to `state`: every node with an
+    /// endpoint whose impairment or partition differs is reconciled from
+    /// what it has to what `state` says, as one `impair` or `heal` would
+    /// (#326). Returns the endpoints that changed. If a node fails, the
+    /// runtime state is put back as it was.
+    pub(crate) async fn restore_runtime_tc(&mut self, state: RuntimeTc) -> Result<Vec<String>> {
+        let differs = |a: &BTreeMap<String, crate::types::Impairment>,
+                       b: &BTreeMap<String, crate::types::Impairment>| {
+            a.keys()
+                .chain(b.keys())
+                .filter(|k| a.get(*k) != b.get(*k))
+                .cloned()
+                .collect::<std::collections::BTreeSet<String>>()
+        };
+        let mut changed = differs(&self.live_impairments, &state.live);
+        // a partition is its presence; what it saved is its own business
+        changed.extend(
+            self.saved_impairments
+                .keys()
+                .chain(state.partitions.keys())
+                .filter(|k| {
+                    self.saved_impairments.contains_key(*k) != state.partitions.contains_key(*k)
+                })
+                .cloned(),
+        );
+        if changed.is_empty() {
+            return Ok(Vec::new());
+        }
+        let nodes: std::collections::BTreeSet<String> = changed
+            .iter()
+            .filter_map(|ep| EndpointRef::parse(ep).map(|e| e.node))
+            .collect();
+        let (live, saved) = (
+            self.live_impairments.clone(),
+            self.saved_impairments.clone(),
+        );
+        let before = crate::deploy::live_view(self);
+        self.live_impairments = state.live;
+        self.saved_impairments = state.partitions;
+        let after = crate::deploy::live_view(self);
+        for node in &nodes {
+            let Some(handle) = self.ns_resolver_of(node) else {
+                continue;
+            };
+            if let Err(e) = crate::deploy::reconcile_node_tc(
+                &handle,
+                node,
+                (&before.0, &before.1),
+                (&after.0, &after.1),
+            )
+            .await
+            {
+                self.live_impairments = live;
+                self.saved_impairments = saved;
+                return Err(e);
+            }
+        }
+        self.save_state()?;
+        Ok(changed.into_iter().collect())
     }
 
     /// Whether the given endpoint is currently

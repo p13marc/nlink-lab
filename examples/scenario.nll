@@ -1,7 +1,8 @@
 # Scenario: failover test.
 #
 # Demonstrates timed fault injection and validation. After deploy,
-# run the scenario with: sudo nlink-lab scenario -L run failover failover-test
+# run a scenario with: sudo nlink-lab scenario -L failover failover-test
+# (or wan-faults, below).
 #
 # Timeline:
 #   0s  — verify client can reach server
@@ -40,6 +41,29 @@ scenario "failover-test" {
     up router:eth0
   }
   at 10s {
+    validate { reach client server }
+  }
+}
+
+# Runtime faults (#326): a slow WAN, a black hole on both ends of a link,
+# the heal. When the scenario ends the lab is put back as it found it
+# (impairments, partitions, interfaces taken down); `keep` would leave it.
+scenario "wan-faults" {
+  at 0s {
+    impair router:eth1 delay 50ms
+    validate { reach client server }
+  }
+  at 2s {
+    log "partitioning both ends of router:eth1"
+    partition router:eth1 both
+  }
+  at 3s {
+    validate { no-reach client server }
+  }
+  at 5s {
+    heal router:eth1 both
+  }
+  at 6s {
     validate { reach client server }
   }
 }

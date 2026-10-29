@@ -28,8 +28,25 @@ All notable changes to this project will be documented in this file.
   gone, and the API's `CaptureFilter.expression` is refused with an
   error instead of compiled. `--all-features` builds no longer pull it in.
 
+- **A scenario puts the lab back when it ends** (#326). Its impairments,
+  partitions, pair impairments and the interfaces it took `down` (and
+  did not bring `up`) are restored as it found them, after a failed step
+  and after a cancel too, and the result lists what was put back
+  (`cleanup` in `scenario --json`, one row each in `test --scenarios`). A
+  scenario that relied on leaving its faults in place says `keep` in its
+  block. `exec` steps are not undone.
+
 ### Added
 
+- **Scenario steps change the lab at runtime** (#326): `impair EP
+  <props>` (an `impair` line's properties), `partition EP [both]` and
+  `heal EP [both]` (`both`: the other end of its point-to-point link
+  too, which `impair --partition` leaves to the caller), and `impair
+  NETWORK SRC -- DST { … }` for a network's per-pair impairment. They go
+  through what `nlink-lab impair` does, so events, state and `verify`
+  agree, and every one is in the report's timeline. New rules
+  `scenario-both-needs-link` and `scenario-network-exists`; the editors,
+  the LSP and `render` know the new words.
 - **Support tiers** (#346). [docs/SUPPORT.md](docs/SUPPORT.md) gives every
   subsystem and every command a tier (core, supported, experimental) and
   says what each promises, how a part moves between tiers, and which parts

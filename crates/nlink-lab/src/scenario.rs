@@ -2,13 +2,16 @@
 //!
 //! Runs timed fault-injection scenarios against a deployed lab. Each scenario
 //! consists of timestamped steps with actions like `down`, `up`, `clear`,
-//! `validate`, `exec`, and `log`.
+//! `impair`, `partition`, `heal`, `validate`, `exec`, and `log`. When it
+//! ends, what it changed is put back, unless it says `keep` (#326).
+
+use std::collections::BTreeSet;
 
 use nlink::{Connection, Route};
 
 use crate::error::{Error, Result};
-use crate::running::RunningLab;
-use crate::types::{EndpointRef, Scenario, ScenarioAction, ScenarioStep};
+use crate::running::{RunningLab, RuntimeTc};
+use crate::types::{EndpointRef, NetworkImpairment, Scenario, ScenarioAction, ScenarioStep};
 
 /// Result of running a scenario.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -21,6 +24,10 @@ pub struct ScenarioResult {
     pub passed: bool,
     /// Total duration in milliseconds.
     pub duration_ms: u64,
+    /// What putting the lab back did when the scenario ended: one action
+    /// per kind of change undone (none with `keep`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub cleanup: Vec<ActionResult>,
 }
 
 /// Result of a single scenario step.
@@ -50,8 +57,9 @@ pub async fn run_scenario(lab: &mut RunningLab, scenario: &Scenario) -> Result<S
 }
 
 /// [`run_scenario`], reporting each action to `ctx` and stopping between
-/// steps when it is cancelled (#236). What ran stays done: a scenario has
-/// no journal, `impair --clear` undoes its impairments.
+/// steps when it is cancelled (#236). When it ends, failed or cancelled
+/// too, the lab is put back as it found it: impairments, partitions, pair
+/// impairments, interfaces it took down (#326); `keep` leaves them.
 pub async fn run_scenario_with(
     lab: &mut RunningLab,
     scenario: &Scenario,
@@ -70,9 +78,49 @@ async fn scenario_ctx(
     ctx: &crate::ops::OpCtx,
 ) -> Result<ScenarioResult> {
     let start = std::time::Instant::now();
+    let mut undo = Undo::of(lab);
     let mut step_results = Vec::new();
-    let mut all_passed = true;
+    let ran = run_steps(lab, scenario, ctx, start, &mut undo, &mut step_results).await;
 
+    let cleanup = if scenario.keep {
+        Vec::new()
+    } else {
+        undo.put_back(lab).await
+    };
+    let elapsed = start.elapsed().as_millis() as u64;
+    for action in &cleanup {
+        ctx.emit(nlink_lab_shared::api::OpPhase::ScenarioAction {
+            time_ms: elapsed,
+            description: action.description.clone(),
+            ok: action.ok,
+            detail: action.detail.clone(),
+        });
+    }
+    ran?;
+
+    let passed = step_results
+        .iter()
+        .flat_map(|s: &StepResult| &s.actions)
+        .chain(&cleanup)
+        .all(|a| a.ok);
+    Ok(ScenarioResult {
+        name: scenario.name.clone(),
+        steps: step_results,
+        passed,
+        duration_ms: start.elapsed().as_millis() as u64,
+        cleanup,
+    })
+}
+
+/// The steps, each at its time; stops (with the error) when cancelled.
+async fn run_steps(
+    lab: &mut RunningLab,
+    scenario: &Scenario,
+    ctx: &crate::ops::OpCtx,
+    start: std::time::Instant,
+    undo: &mut Undo,
+    step_results: &mut Vec<StepResult>,
+) -> Result<()> {
     for step in &scenario.steps {
         // Wait until the step's time offset
         let elapsed_ms = start.elapsed().as_millis() as u64;
@@ -82,7 +130,7 @@ async fn scenario_ctx(
         }
         ctx.check()?;
 
-        let step_result = execute_step(lab, &scenario.name, step).await?;
+        let step_result = execute_step(lab, &scenario.name, step, undo).await?;
         for action in &step_result.actions {
             ctx.emit(nlink_lab_shared::api::OpPhase::ScenarioAction {
                 time_ms: step.time_ms,
@@ -91,31 +139,173 @@ async fn scenario_ctx(
                 detail: action.detail.clone(),
             });
         }
-        if step_result.actions.iter().any(|a| !a.ok) {
-            all_passed = false;
-        }
         step_results.push(step_result);
     }
+    Ok(())
+}
 
-    let duration_ms = start.elapsed().as_millis() as u64;
+/// What a scenario changed, kept to put back when it ends (#326): the
+/// runtime traffic control as it found it, each pair rule it touched as
+/// it was before the first touch, and the interfaces it took down and
+/// did not bring back. `exec` steps are not undone.
+struct Undo {
+    tc: RuntimeTc,
+    pairs: Vec<PairWas>,
+    down: BTreeSet<String>,
+}
 
-    Ok(ScenarioResult {
-        name: scenario.name.clone(),
-        steps: step_results,
-        passed: all_passed,
-        duration_ms,
-    })
+/// A network's pair rule `src → dst` before the scenario changed it
+/// (`None`: there was none).
+struct PairWas {
+    network: String,
+    src: String,
+    dst: String,
+    was: Option<NetworkImpairment>,
+}
+
+impl Undo {
+    fn of(lab: &RunningLab) -> Self {
+        Self {
+            tc: lab.runtime_tc(),
+            pairs: Vec::new(),
+            down: BTreeSet::new(),
+        }
+    }
+
+    /// Note the pair rule `action` is about to change, the first time.
+    fn note(&mut self, lab: &RunningLab, action: &ScenarioAction) {
+        match action {
+            ScenarioAction::PairImpair {
+                network, src, dst, ..
+            } if !self
+                .pairs
+                .iter()
+                .any(|p| p.network == *network && p.src == *src && p.dst == *dst) =>
+            {
+                let was = lab.topology().networks.get(network).and_then(|n| {
+                    n.impairments
+                        .iter()
+                        .find(|i| i.src == *src && i.dst == *dst)
+                        .cloned()
+                });
+                self.pairs.push(PairWas {
+                    network: network.clone(),
+                    src: src.clone(),
+                    dst: dst.clone(),
+                    was,
+                });
+            }
+            _ => {}
+        }
+    }
+
+    /// Track what `action` did to the interfaces' admin state.
+    fn done(&mut self, action: &ScenarioAction) {
+        match action {
+            ScenarioAction::Down(ep) => {
+                self.down.insert(ep.clone());
+            }
+            ScenarioAction::Up(ep) => {
+                self.down.remove(ep);
+            }
+            _ => {}
+        }
+    }
+
+    /// Put the lab back: the interfaces up, the pair rules as they were
+    /// (one `apply`), then the runtime traffic control. One result per
+    /// kind of change that needed undoing.
+    async fn put_back(self, lab: &mut RunningLab) -> Vec<ActionResult> {
+        let mut out = Vec::new();
+        for ep in &self.down {
+            let description = format!("cleanup: up {ep}");
+            out.push(match set_link_state(lab, ep, true).await {
+                Ok(()) => ActionResult::ok(description),
+                Err(e) => ActionResult::failed(description, e),
+            });
+        }
+
+        let edits: Vec<crate::edit::Edit> = self
+            .pairs
+            .iter()
+            .filter(|p| {
+                let now = lab.topology().networks.get(&p.network).and_then(|n| {
+                    n.impairments
+                        .iter()
+                        .find(|i| i.src == p.src && i.dst == p.dst)
+                });
+                now != p.was.as_ref()
+            })
+            .map(|p| crate::edit::Edit::SetPairImpairment {
+                network: p.network.clone(),
+                src: p.src.clone(),
+                dst: p.dst.clone(),
+                impairment: p.was.as_ref().map(|w| w.impairment.clone()),
+                rate_cap: p.was.as_ref().and_then(|w| w.rate_cap.clone()),
+            })
+            .collect();
+        if !edits.is_empty() {
+            let description = format!("cleanup: {} pair impairment(s) as they were", edits.len());
+            // its own context: an apply reports started/finished, which are
+            // the scenario's to report
+            let restored = async {
+                let edited = crate::edit::edited(lab.topology(), &edits)?;
+                crate::edit::apply_edited_with(lab, &edited, &crate::ops::OpCtx::default()).await
+            }
+            .await;
+            out.push(match restored {
+                Ok(_) => ActionResult::ok(description),
+                Err(e) => ActionResult::failed(description, e),
+            });
+        }
+
+        match lab.restore_runtime_tc(self.tc).await {
+            Ok(changed) if changed.is_empty() => {}
+            Ok(changed) => out.push(ActionResult::ok(format!(
+                "cleanup: impairments and partitions as they were ({})",
+                changed.join(", ")
+            ))),
+            Err(e) => out.push(ActionResult::failed(
+                "cleanup: impairments and partitions as they were".into(),
+                e,
+            )),
+        }
+        out
+    }
+}
+
+impl ActionResult {
+    fn ok(description: String) -> Self {
+        Self {
+            description,
+            ok: true,
+            detail: None,
+        }
+    }
+
+    fn failed(description: String, e: impl std::fmt::Display) -> Self {
+        Self {
+            description,
+            ok: false,
+            detail: Some(e.to_string()),
+        }
+    }
 }
 
 async fn execute_step(
     lab: &mut RunningLab,
     scenario_name: &str,
     step: &ScenarioStep,
+    undo: &mut Undo,
 ) -> Result<StepResult> {
     let mut action_results = Vec::new();
 
     for action in &step.actions {
+        undo.note(lab, action);
         let result = execute_action(lab, action).await;
+        if result.ok {
+            undo.done(action);
+        }
         action_results.push(result);
     }
 
@@ -252,7 +442,94 @@ async fn execute_action(lab: &mut RunningLab, action: &ScenarioAction) -> Action
                 detail: None,
             }
         }
+        ScenarioAction::Impair {
+            endpoint,
+            impairment,
+        } => {
+            let desc = format!("impair {endpoint} {}", impairment_summary(impairment));
+            match lab.set_impairment(endpoint, impairment).await {
+                Ok(()) => ActionResult::ok(desc),
+                Err(e) => ActionResult::failed(desc, e),
+            }
+        }
+        ScenarioAction::Partition { endpoint, both } => {
+            let desc = format!("partition {endpoint}{}", if *both { " both" } else { "" });
+            match ends(lab, endpoint, *both) {
+                Ok(eps) => {
+                    for ep in &eps {
+                        if let Err(e) = lab.partition(ep).await {
+                            return ActionResult::failed(desc, format!("{ep}: {e}"));
+                        }
+                    }
+                    ActionResult::ok(desc)
+                }
+                Err(e) => ActionResult::failed(desc, e),
+            }
+        }
+        ScenarioAction::Heal { endpoint, both } => {
+            let desc = format!("heal {endpoint}{}", if *both { " both" } else { "" });
+            match ends(lab, endpoint, *both) {
+                Ok(eps) => {
+                    // healing what is not partitioned is fine here: the
+                    // scenario says how the link should end up
+                    let cut: Vec<String> = eps
+                        .into_iter()
+                        .filter(|ep| lab.is_partitioned(ep))
+                        .collect();
+                    for ep in &cut {
+                        if let Err(e) = lab.heal(ep).await {
+                            return ActionResult::failed(desc, format!("{ep}: {e}"));
+                        }
+                    }
+                    ActionResult::ok(desc)
+                }
+                Err(e) => ActionResult::failed(desc, e),
+            }
+        }
+        ScenarioAction::PairImpair {
+            network,
+            src,
+            dst,
+            impairment,
+            rate_cap,
+        } => {
+            let desc = format!(
+                "impair {network} {src} -- {dst} {}",
+                impairment_summary(impairment)
+            );
+            let edit = crate::edit::Edit::SetPairImpairment {
+                network: network.clone(),
+                src: src.clone(),
+                dst: dst.clone(),
+                impairment: Some(impairment.clone()),
+                rate_cap: rate_cap.clone(),
+            };
+            let applied = async {
+                let edited = crate::edit::edited(lab.topology(), &[edit])?;
+                crate::edit::apply_edited_with(lab, &edited, &crate::ops::OpCtx::default()).await
+            }
+            .await;
+            match applied {
+                Ok(_) => ActionResult::ok(desc),
+                Err(e) => ActionResult::failed(desc, e),
+            }
+        }
     }
+}
+
+/// `endpoint`, and with `both` the other end of its link.
+fn ends(lab: &RunningLab, endpoint: &str, both: bool) -> Result<Vec<String>> {
+    let mut eps = vec![endpoint.to_string()];
+    if both {
+        eps.push(lab.peer_endpoint(endpoint)?);
+    }
+    Ok(eps)
+}
+
+/// An impairment's properties in one line (`delay 50ms loss 1%`), for the
+/// report.
+fn impairment_summary(imp: &crate::types::Impairment) -> String {
+    crate::render::impairment_props(imp).unwrap_or_else(|_| format!("{imp:?}"))
 }
 
 /// Set interface up or down via netlink.
@@ -310,6 +587,7 @@ mod tests {
             }],
             passed: false,
             duration_ms: 5000,
+            cleanup: Vec::new(),
         };
         assert!(!result.passed);
         assert_eq!(result.steps[0].actions.len(), 2);

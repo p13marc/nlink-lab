@@ -96,6 +96,8 @@ pub const RULE_IDS: &[&str] = &[
     "vrf-interface-exists",
     "assertion-node-exists",
     "assertion-endpoint-exists",
+    "scenario-both-needs-link",
+    "scenario-network-exists",
     "container-requires-image",
     "empty-image",
     "container-pull",
@@ -2018,6 +2020,30 @@ fn validate_impairment_values(topology: &Topology, issues: &mut Vec<ValidationIs
         }
     }
 
+    for (s, scenario) in topology.scenarios.iter().enumerate() {
+        for (t, step) in scenario.steps.iter().enumerate() {
+            for (k, action) in step.actions.iter().enumerate() {
+                let at = format!("scenarios[{s}].steps[{t}].actions[{k}]");
+                match action {
+                    ScenarioAction::Impair { impairment, .. } => {
+                        check_impairment(impairment, &format!("{at}.impairment"), issues);
+                    }
+                    ScenarioAction::PairImpair {
+                        impairment,
+                        rate_cap,
+                        ..
+                    } => {
+                        check_impairment(impairment, &format!("{at}.impairment"), issues);
+                        if let Some(cap) = rate_cap {
+                            check_value(ValueKind::Rate, cap, format!("{at}.rate_cap"), issues);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
     for (key, rl) in sorted(&topology.rate_limits) {
         for (name, value, kind) in [
             ("egress", &rl.egress, ValueKind::Rate),
@@ -2945,6 +2971,75 @@ fn validate_vrf_interfaces(
     }
 }
 
+/// A scenario's `impair NETWORK SRC -- DST`: the network exists, and SRC
+/// and DST are two of its members (the rules a network's own `impair`
+/// lines follow).
+fn check_pair_ref(
+    topology: &Topology,
+    network: &str,
+    src: &str,
+    dst: &str,
+    location: &str,
+    issues: &mut Vec<ValidationIssue>,
+) {
+    let Some(net) = topology.networks.get(network) else {
+        if !check_unresolved(network, format!("{location}.network"), issues) {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "scenario-network-exists",
+                message: format!("network '{network}' does not exist"),
+                location: Some(format!("{location}.network")),
+            });
+        }
+        return;
+    };
+    if net.subnet.is_none() {
+        issues.push(ValidationIssue {
+            severity: Severity::Error,
+            rule: "network-impair-needs-subnet",
+            message: format!(
+                "network '{network}' has no subnet: a per-pair impairment needs one to \
+                 resolve the destination's address"
+            ),
+            location: Some(format!("{location}.network")),
+        });
+    }
+    if src == dst {
+        issues.push(ValidationIssue {
+            severity: Severity::Error,
+            rule: "network-impair-self-pair",
+            message: format!("impair {network} {src} -- {dst}: src and dst must differ"),
+            location: Some(location.to_string()),
+        });
+        return;
+    }
+    let members: std::collections::BTreeSet<String> = net
+        .members
+        .iter()
+        .filter_map(|m| EndpointRef::parse(m).map(|e| e.node))
+        .collect();
+    for (which, who) in [("src", src), ("dst", dst)] {
+        if check_unresolved(who, format!("{location}.{which}"), issues) {
+            continue;
+        }
+        if !topology.nodes.contains_key(who) {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "dangling-node-ref",
+                message: format!("node '{who}' does not exist"),
+                location: Some(format!("{location}.{which}")),
+            });
+        } else if !members.contains(who) {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "network-impair-member",
+                message: format!("node '{who}' is not a member of network '{network}'"),
+                location: Some(format!("{location}.{which}")),
+            });
+        }
+    }
+}
+
 fn check_node_ref(
     topology: &Topology,
     name: &str,
@@ -3063,6 +3158,42 @@ fn validate_test_refs(
                         check_node_ref(topology, node, format!("{location}.node"), issues);
                     }
                     ScenarioAction::Validate(_) | ScenarioAction::Log(_) => {}
+                    ScenarioAction::Impair { endpoint, .. } => {
+                        check_endpoint_ref(topology, interfaces, endpoint, location, issues);
+                    }
+                    ScenarioAction::Partition { endpoint, both }
+                    | ScenarioAction::Heal { endpoint, both } => {
+                        check_endpoint_ref(
+                            topology,
+                            interfaces,
+                            endpoint,
+                            location.clone(),
+                            issues,
+                        );
+                        // `both` is the endpoint and the other end of its
+                        // link: a bridge member has no single other end
+                        let on_link = topology
+                            .links
+                            .iter()
+                            .any(|l| l.endpoints.iter().any(|e| e == endpoint));
+                        if *both && !on_link {
+                            issues.push(ValidationIssue {
+                                severity: Severity::Error,
+                                rule: "scenario-both-needs-link",
+                                message: format!(
+                                    "`{endpoint} both` names the two ends of a point-to-point \
+                                     link, and '{endpoint}' is not on one (on a network, \
+                                     partition each member)"
+                                ),
+                                location: Some(format!("{location}.both")),
+                            });
+                        }
+                    }
+                    ScenarioAction::PairImpair {
+                        network, src, dst, ..
+                    } => {
+                        check_pair_ref(topology, network, src, dst, &location, issues);
+                    }
                 }
             }
         }
@@ -4658,6 +4789,72 @@ scenario "s" {
         assert_eq!(nodes.len(), 2, "{:?}", result.issues());
     }
 
+    /// `both` needs a point-to-point link; a pair rule needs an existing
+    /// network whose members are the two nodes; impairment values are
+    /// checked as anywhere else (#326).
+    #[test]
+    fn test_scenario_fault_action_refs() {
+        let result = parse_and_validate(
+            r#"lab "t"
+node a
+node b
+node c
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+network lan {
+  members [a:eth1, c:eth0]
+  subnet 10.1.0.0/24
+}
+scenario "s" {
+  at 1s {
+    partition a:eth0 both
+    partition a:eth1 both
+    heal c:eth0
+    impair lan a -- b { delay 5ms }
+    impair wan a -- c { delay 5ms }
+    impair lan a -- a { delay 5ms }
+  }
+}
+"#,
+        );
+        let both = rules_of(&result, "scenario-both-needs-link");
+        assert_eq!(both.len(), 1, "{:?}", result.issues());
+        assert_eq!(
+            both[0].location.as_deref(),
+            Some("scenarios[0].steps[0].actions[1].both")
+        );
+        assert_eq!(rules_of(&result, "network-impair-member").len(), 1);
+        assert_eq!(rules_of(&result, "scenario-network-exists").len(), 1);
+        assert_eq!(rules_of(&result, "network-impair-self-pair").len(), 1);
+
+        // NLL refuses a bad value when it parses; a topology built in Rust
+        // (or read back from TOML) is checked here
+        let mut topo = parser::parse(
+            "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }\n",
+        )
+        .unwrap();
+        topo.scenarios.push(crate::types::Scenario {
+            name: "s".into(),
+            steps: vec![crate::types::ScenarioStep {
+                time_ms: 0,
+                actions: vec![ScenarioAction::Impair {
+                    endpoint: "a:eth0".into(),
+                    impairment: Impairment {
+                        loss: Some("150%".into()),
+                        ..Default::default()
+                    },
+                }],
+            }],
+            keep: false,
+        });
+        let result = validate_topo(topo);
+        assert!(
+            result.issues().iter().any(|i| i.location.as_deref()
+                == Some("scenarios[0].steps[0].actions[0].impairment.loss")),
+            "{:?}",
+            result.issues()
+        );
+    }
+
     #[test]
     fn test_benchmark_node_missing() {
         let result = parse_and_validate(
@@ -4722,6 +4919,7 @@ benchmark "perf" {
                 time_ms: 0,
                 actions: vec![ScenarioAction::Down("a:eth${i}".into())],
             }],
+            keep: false,
         });
         let result = validate_topo(topo);
         let hits = rules_of(&result, "unresolved-interpolation");

@@ -1558,7 +1558,7 @@ fn implied_ports(net: &Network) -> std::collections::BTreeSet<String> {
 /// Always a single line: the link-block parser re-enters
 /// `parse_impair_props` per line and the last line wins, so splitting
 /// properties across lines would lose all but the last.
-fn impairment_props(imp: &Impairment) -> Result<String> {
+pub(crate) fn impairment_props(imp: &Impairment) -> Result<String> {
     let mut parts: Vec<String> = Vec::new();
     if let Some(d) = &imp.delay {
         parts.push(format!("delay {}", lit_duration(d)?));
@@ -1901,6 +1901,9 @@ fn render_assertions(out: &mut String, topo: &Topology) -> Result<()> {
 fn render_scenarios(out: &mut String, topo: &Topology) -> Result<()> {
     for scenario in &topo.scenarios {
         writeln!(out, "scenario {} {{", nll_string(&scenario.name)?).unwrap();
+        if scenario.keep {
+            out.push_str("  keep\n");
+        }
         for step in &scenario.steps {
             if step.time_ms % 1000 == 0 {
                 writeln!(out, "  at {}s {{", step.time_ms / 1000).unwrap();
@@ -1930,6 +1933,52 @@ fn render_scenarios(out: &mut String, topo: &Topology) -> Result<()> {
                     }
                     ScenarioAction::Validate(assertions) => {
                         render_assertion_block(out, "    ", assertions)?;
+                    }
+                    ScenarioAction::Impair {
+                        endpoint,
+                        impairment,
+                    } => {
+                        writeln!(
+                            out,
+                            "    impair {} {}",
+                            nll_endpoint(endpoint)?,
+                            impairment_props(impairment)?
+                        )
+                        .unwrap();
+                    }
+                    ScenarioAction::Partition { endpoint, both }
+                    | ScenarioAction::Heal { endpoint, both } => {
+                        let verb = if matches!(action, ScenarioAction::Partition { .. }) {
+                            "partition"
+                        } else {
+                            "heal"
+                        };
+                        let both = if *both { " both" } else { "" };
+                        writeln!(out, "    {verb} {}{both}", nll_endpoint(endpoint)?).unwrap();
+                    }
+                    ScenarioAction::PairImpair {
+                        network,
+                        src,
+                        dst,
+                        impairment,
+                        rate_cap,
+                    } => {
+                        write!(
+                            out,
+                            "    impair {} {} -- {} {{",
+                            nll_name(network)?,
+                            nll_name(src)?,
+                            nll_name(dst)?
+                        )
+                        .unwrap();
+                        let props = impairment_props(impairment)?;
+                        if !props.is_empty() {
+                            write!(out, " {props}").unwrap();
+                        }
+                        if let Some(rc) = rate_cap {
+                            write!(out, " rate-cap {}", lit_rate(rc)?).unwrap();
+                        }
+                        out.push_str(" }\n");
                     }
                 }
             }

@@ -1110,21 +1110,13 @@ impl RunningLab {
         })
     }
 
-    /// Spawn a background process in a lab node.
+    /// Spawn a background process in a lab node: [`spawn_with_logs`]
+    /// into the lab's log directory, so `ps` reports its exit code and
+    /// `logs` its output (#320).
+    ///
+    /// [`spawn_with_logs`]: Self::spawn_with_logs
     pub fn spawn(&mut self, node: &str, cmd: &[&str]) -> Result<u32> {
-        if cmd.is_empty() {
-            return Err(Error::invalid_topology("empty command"));
-        }
-        let ns_name = self.namespace_for(node)?;
-
-        let mut command = std::process::Command::new(cmd[0]);
-        command.args(&cmd[1..]);
-
-        let pid = crate::ns_exec::spawn_detached(ns_name, command)
-            .map_err(|e| Error::nlink(format!("spawn in '{node}' failed"), e))?;
-        self.track_pid(node, pid);
-        self.attach_cgroup(node, pid);
-        Ok(pid)
+        self.spawn_with_logs_with_opts(node, cmd, SpawnOpts::default())
     }
 
     /// Re-save the current state to disk (e.g., after spawning a new process).

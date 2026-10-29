@@ -21,6 +21,25 @@ All notable changes to this project will be documented in this file.
   keeps its old filter until it is healed or the lab is `apply`'d (which
   replaces the filter in place); `verify` reports it as drift until then.
 
+### Fixed
+
+- **A topology's `run … background` reports its exit code** (#320). It
+  was started without the reaper `spawn` uses, so when a deployed service
+  died, `ps` showed it exited with no code and the `ProcessExited` event
+  carried none: the case a test most needs to diagnose. Namespace and
+  container nodes now both get `<node>-<cmd>-<pid>.rc` next to the
+  process's logs (a container's code is its `exec` client's, which is
+  the command's).
+
+### Changed
+
+- **`RunningLab::spawn` logs and reports an exit code** (#320). It is now
+  `spawn_with_logs` into the lab's log directory: the process's output
+  goes to `<node>-<cmd>-<pid>.{stdout,stderr}` there instead of the
+  caller's stdout and stderr, `ps` and `ProcessExited` carry its exit
+  code, and it records a `spawned` event. It also works on container
+  nodes.
+
 ## [0.15.0] - 2026-10-23
 
 The firewall and conntrack release. NLL's firewall gains `tcp flags`,

@@ -168,5 +168,5 @@ containerlab. nlink-lab uses the kernel's nftables only.
 
 ## See also
 
-- [NLL: firewall syntax](../NLL_DSL_DESIGN.md#7-firewall)
+- [NLL: firewall syntax](../NLL_DSL_DESIGN.md#8-firewall)
 - [vrf-multitenant.md](vrf-multitenant.md) — combine VRF + firewall for per-tenant policy

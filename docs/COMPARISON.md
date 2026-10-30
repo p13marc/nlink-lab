@@ -32,8 +32,10 @@ Use **nlink-lab** if any of:
   `#[lab_test]` deploys, runs assertions, tears down inside
   `cargo test`, with no Docker daemon.
 - You can't (or don't want to) **run a Docker daemon** —
-  locked-down CI, embedded host, unprivileged rootless container,
-  CIs without nested virtualization.
+  locked-down CI, embedded host, a CI container granted
+  `CAP_NET_ADMIN` + `CAP_SYS_ADMIN`, CIs without nested
+  virtualization. (A deploy needs those two capabilities; there is no
+  rootless mode yet, see #327.)
 - Your DSL needs **loops, parametric imports, glob patterns, IP
   arithmetic** without YAML's quote-and-anchor gymnastics.
 - Your impairment use case includes **distance-dependent /
@@ -64,13 +66,13 @@ because the comparison is honest about both wins and losses.
 | Bridge VLAN filtering (802.1Q) | ⚠️ kind-specific | ✅ first-class |
 | Multi-host clustering | ✅ via `clab tools cert` + inventory | ❌ single-host |
 | Web UI / topology graph | ✅ `clab graph` web view | ⚠️ DOT/Mermaid/ASCII output; an experimental desktop app (draw, edit, deploy, change live labs) |
-| Save / restore live state | ✅ `clab save` | ⚠️ via NLL re-deploy; lab archive in **Plan 153** |
-| Reconcile (apply config diff) | ⚠️ partial | ✅ `apply` (full coverage in **Plan 152**) |
+| Save / restore live state | ✅ `clab save` | ✅ `snapshot save`/`restore` (the topology plus runtime impairments and partitions) and portable `.nlz` archives (`archive create`/`extract`) |
+| Reconcile (apply config diff) | ⚠️ partial | ✅ `apply`: links, addresses, routes, traffic control, nftables, WireGuard, processes; `verify` is the drift gate |
 | Library API | Go (undocumented) | Rust (first-class, `#[lab_test]`) |
 | DSL features | static YAML + Go templates | NLL: loops, imports, parametric, glob, arithmetic |
 | Deploy speed | seconds (Docker pull + boot) | sub-second |
 | CI footprint | Docker daemon | namespace + `CAP_NET_ADMIN`+`CAP_SYS_ADMIN` |
-| Topology validation | YAML-schema via clab | 20-rule pre-deploy validator with miette source spans |
+| Topology validation | YAML-schema via clab | <!-- count:validator-rules -->80<!-- /count -->-rule pre-deploy validator (stable rule ids) with miette source spans, plus `lint` |
 | Packet capture | external (`tcpdump` exec) | built-in `capture` (zero-copy via netring, BPF filter) |
 | Healthcheck-gated startup | ✅ Docker healthchecks | ✅ `depends-on` + healthcheck polling (containers and processes) |
 | Performance benchmarks in topology | ⚠️ external | ✅ `benchmark` block with `assert avg below 50ms` |

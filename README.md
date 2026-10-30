@@ -61,8 +61,8 @@ async fn test_connectivity(lab: RunningLab) {
   netem, HTB, flower, u32, matchall), nftables, VRF, WireGuard
   (with auto-key generation), macvlan, ipvlan, VXLAN, bonds,
   bridges with VLAN filtering — all via netlink directly. Runs in
-  any CI runner with `CAP_NET_ADMIN` + `CAP_SYS_ADMIN`. No daemon.
-  Sub-second deploy.
+  any CI runner with `CAP_NET_ADMIN` + `CAP_SYS_ADMIN`. No daemon
+  needed (`nlink-labd` is optional). Sub-second deploy.
 - **A real DSL, not stringly-typed YAML.** `for` loops, `let`
   variables, parametric `import`, glob patterns, IP arithmetic
   (`subnet()`, `host()`), conditional blocks. Errors come with
@@ -124,7 +124,7 @@ side-by-side examples, and migration notes — lives at
 - [Testing guide](docs/TESTING_GUIDE.md) — the `#[lab_test]` macro and integration-test patterns.
 - [Harness guide](docs/HARNESS_GUIDE.md) — building Rust test harnesses: spawn ordering, capture endpoint selection, failure-mode debugging, parallel-lab concurrency.
 - [Live views and the GUI](docs/GUI.md) — the daemon, `nlink-lab top`, the experimental desktop app.
-- [Examples](examples/) — 49 NLL files (40 top-level, 3 cookbook, 6 import modules), every one parse-tested in CI.
+- [Examples](examples/) — <!-- count:examples-all -->56<!-- /count --> NLL files (<!-- count:examples -->47<!-- /count --> in `examples/`, the rest in `cookbook/` and `imports/`), every one parse-tested in CI.
 
 **When something breaks, or you want to change it**
 

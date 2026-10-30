@@ -144,4 +144,4 @@ implementation only.
 
 ## See also
 
-- [NLL: networks (bridges)](../NLL_DSL_DESIGN.md#5-networks-bridges)
+- [NLL: networks (bridges)](../NLL_DSL_DESIGN.md#6-networks-bridges)

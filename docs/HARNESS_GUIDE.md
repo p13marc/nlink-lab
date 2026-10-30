@@ -20,8 +20,10 @@ first. This guide assumes familiarity with `deploy`, `spawn`,
 >
 > - Spawned processes enter only `CLONE_NEWNET` (and `CLONE_NEWNS`
 >   if `dns hosts`). **No `CLONE_NEWPID`** — host PID == namespace PID.
-> - Spawned processes run as the caller's UID. `check_root` enforces
->   root, so they're root.
+> - Spawned processes run as the caller's UID. The CLI requires
+>   `CAP_NET_ADMIN` + `CAP_SYS_ADMIN` (`ctx::require_root`, on
+>   `privileges::has_privileges`); under `sudo` or the daemon that
+>   UID is root.
 > - `/proc/<pid>/{stat,status,cmdline,comm}` is world-readable from
 >   the host. `/proc/<pid>/fd/` is mode 0700 owned by root — readable
 >   only as root or via `nlink-lab stats NODE --pid PID`.

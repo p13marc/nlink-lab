@@ -16,13 +16,18 @@ resolved IP addresses an auto-assigned subnet would produce.
 
 `validate` does not require root. Safe to run anywhere.
 
-The validator runs ~20 rules covering CIDR validity, endpoint
-format (`node:iface`), dangling node references, profile
-references, interface uniqueness, VLAN range, impairment
-endpoints, rate-limit endpoints, route configuration, interface
-name length, WireGuard peer keys, VRF table uniqueness, duplicate
-link endpoints, and warning-level rules for unique IPs, MTU
-consistency, route reachability, and unreferenced nodes.
+The validator runs <!-- count:validator-rules -->80<!-- /count --> rules, each with a stable id
+(<!-- count:validator-errors -->66<!-- /count --> errors, which block a deploy, and
+<!-- count:validator-warnings -->14<!-- /count --> warnings): CIDR validity, endpoint format
+(`node:iface`), dangling node and profile references, interface
+uniqueness and name length, VLAN ranges, impairment, rate-limit and
+qdisc endpoints, routes, WireGuard peers, VRF tables, firewall and NAT
+rules, containers, FRR, Wi-Fi, scenarios and benchmarks. Warnings cover
+unique IPs, MTU consistency, route reachability and unreferenced nodes.
+Every issue names its rule id; `--deny ID` makes a warning an error,
+`--allow ID` silences one, `--strict` promotes them all, and
+`--list-rules` prints every id with its severity. `lint` adds
+<!-- count:lint-rules -->6<!-- /count --> style rules on top.
 
 ## Arguments
 

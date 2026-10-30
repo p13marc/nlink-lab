@@ -31,6 +31,22 @@ All notable changes to this project will be documented in this file.
   process's logs (a container's code is its `exec` client's, which is
   the command's).
 
+- **The tree-sitter grammar's `highlights.scm` highlights everything
+  Zed's does** (#345): `bond`, `vlan`, `frr` (`ospf`, `bgp` and their
+  properties), `qdisc` blocks, WireGuard `peer` blocks and sizes were
+  only highlighted in the Zed extension's copy. The two files are now
+  one (a test keeps them equal), so Neovim and Helix users get them too.
+- **The docs state the right counts** (#345): rules, commands and
+  examples are generated (`<!-- count:… -->` markers, filled by
+  `docs-gen` and checked in CI), as is the CLI reference's command
+  index (from the `--help` groups), and a test refuses a count written
+  by hand. Stale facts fixed: the validator has 80 rules (the docs said
+  20, 53 and 54), `check_root` is `ctx::require_root`, `/etc/hosts` edits
+  are locked, a deploy needs `CAP_NET_ADMIN` + `CAP_SYS_ADMIN` (there is
+  no rootless mode), the NLL feature walkthrough in ARCHITECTURE.md
+  follows today's modules, and the git dependency examples pin a tag
+  that exists.
+
 ### Changed
 
 - **`RunningLab::spawn` logs and reports an exit code** (#320). It is now

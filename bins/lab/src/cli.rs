@@ -400,6 +400,22 @@ pub const GROUPS: &[(&str, &[&str])] = &[
     ("Host", &["doctor", "completions", "lsp"]),
 ];
 
+/// A command's one-line summary: the first clause of its about text (what
+/// the grouped help and the CLI reference's index show).
+pub fn summary(cmd: &clap::Command, name: &str) -> String {
+    let about = cmd
+        .find_subcommand(name)
+        .and_then(|c| c.get_about())
+        .map(|a| a.to_string())
+        .unwrap_or_default();
+    about
+        .split("; ")
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches('.')
+        .to_string()
+}
+
 /// The top-level help template: the commands under their [`GROUPS`]
 /// headings (clap lists subcommands in one block only).
 pub fn grouped_help(cmd: &clap::Command) -> String {
@@ -412,18 +428,9 @@ pub fn grouped_help(cmd: &clap::Command) -> String {
     // one line each: the first clause, cut to 100 columns
     let room = 100 - width - 4;
     let about = |name: &str| {
-        let about = cmd
-            .find_subcommand(name)
-            .and_then(|c| c.get_about())
-            .map(|a| a.to_string())
-            .unwrap_or_default();
-        let first = about
-            .split("; ")
-            .next()
-            .unwrap_or_default()
-            .trim_end_matches('.');
+        let first = summary(cmd, name);
         if first.chars().count() <= room {
-            first.to_string()
+            first
         } else {
             let cut: String = first.chars().take(room - 1).collect();
             format!("{}…", cut.trim_end())

@@ -49,7 +49,7 @@ code compile). Add `tokio` only if your test bodies call it directly:
 
 ```toml
 [dev-dependencies]
-nlink-lab = { git = "https://git.marcpardo.eu/marcpardo/nlink-lab", version = "0.11" }
+nlink-lab = { git = "https://git.marcpardo.eu/marcpardo/nlink-lab", tag = "0.15.0" }
 # Optional — only if your test bodies use tokio APIs (sleep, timeout, …).
 tokio = { version = "1", features = ["time"] }
 ```

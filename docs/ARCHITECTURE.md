@@ -24,13 +24,13 @@ nlink-lab/                        ← workspace root
 │   │   │   │       ├── parser.rs  recursive-descent parser → AST
 │   │   │   │       ├── value.rs   Val<T>: typed + spanned literals
 │   │   │   │       └── lower.rs   AST → Topology, imports, loops
-│   │   │   ├── validator.rs      53-rule validator (stable ids)
+│   │   │   ├── validator.rs      validator (stable rule ids, RULE_IDS)
 │   │   │   ├── lint.rs           style hints (`lint`)
 │   │   │   ├── fmt.rs            NLL formatter (`fmt`)
 │   │   │   ├── render.rs         Topology → flat NLL serializer
 │   │   │   ├── deploy/           plan + execute (see below)
 │   │   │   ├── running.rs        RunningLab — interact with deployed lab
-│   │   │   ├── state.rs          Persistence (XDG state dir, flock)
+│   │   │   ├── state.rs          Persistence (/var/lib/nlink-lab, flock)
 │   │   │   ├── events.rs         Lifecycle event log (events.ndjson)
 │   │   │   ├── diff.rs           TopologyDiff — drives `apply`
 │   │   │   ├── watch.rs          nftables + RTNETLINK drift watch
@@ -41,7 +41,7 @@ nlink-lab/                        ← workspace root
 │   │   │   ├── frr.rs            FRR daemons (zebra, ospfd, bgpd)
 │   │   │   ├── wifi.rs           hostapd/wpa_supplicant + hwsim radios
 │   │   │   ├── container.rs      Docker / Podman wrapper
-│   │   │   ├── cgroup.rs         cpu/memory limits for container nodes
+│   │   │   ├── cgroup.rs         cpu/memory limits for namespace nodes
 │   │   │   ├── ns_exec.rs        setns + spawn (detached, reaped)
 │   │   │   ├── netns_tag.rs      Ownership tag; the orphan reaper's gate
 │   │   │   ├── proc_stat.rs      /proc reads that need root
@@ -62,7 +62,7 @@ nlink-lab/                        ← workspace root
 │   ├── nlink-labd/               The host daemon: every lab behind one authenticated API, its telemetry (Zenoh, HTTP)
 │   └── gui/                      `nlink-lab-gui`, the experimental desktop app (iced)
 ├── dist/                         systemd units, sysusers, tmpfiles for nlink-labd
-├── examples/                     49 .nll files, all parse-tested
+├── examples/                     .nll topologies (+ cookbook/, imports/), all parse-tested
 ├── flatpak/                      Desktop app packaging (manifest, metainfo, icon)
 ├── docs/                         User-facing docs (this dir)
 └── editors/                      VS Code / Neovim / Helix / Zed
@@ -86,7 +86,7 @@ parser/nll/parser.rs       ──→  ast::Document  (Statements, NodeDefs, Netw
    ↓
 types::Topology            ──→  The fully-resolved, flat, immutable form
    │
-   │  validator.rs         ──→  54 rules (stable ids): CIDRs valid, endpoints exist, no cycles, ...
+   │  validator.rs         ──→  rules with stable ids: CIDRs valid, endpoints exist, no cycles, ...
    ↓
 ValidationResult            ──→  Errors block deploy; warnings reported but allowed
    │
@@ -227,12 +227,13 @@ state directory's `.locks/`. It is held for the duration of
 `deploy`, `destroy`, and `apply`. Different labs use different
 lock files and run in parallel without contention.
 
-**Global state caveat**: a few subsystems mutate host-global state
-without per-lab locks — `dns::inject_hosts` rewrites `/etc/hosts`,
-the mac80211_hwsim module is host-global, etc. Two
-parallel deploys that both touch one of these surfaces can race.
-The "Process & namespace model" section below has the full
-inventory.
+**Global state caveat**: host-global state is not all behind a
+lock. `/etc/hosts` is: `dns::inject_hosts` and its removals take
+`state::hosts_lock()`, one flock for every lab. The mgmt subnet is
+not: two labs can be given overlapping `mgmt` subnets and nothing
+checks across labs (#332). Runtime mutations (`impair`, `spawn`, …)
+change the kernel without taking the lab lock (#332 too). The
+"Process & namespace model" section below has the full inventory.
 
 ## Process & namespace model
 
@@ -276,8 +277,10 @@ start time first. Foreground `exec`s stay attached and are waited on.
 
 ### UID
 
-`nlink-lab` enforces root via `check_root` before any deploy / exec
-/ spawn that touches netlink. Spawned processes inherit the
+The CLI checks privileges with `ctx::require_root` (built on
+`privileges::has_privileges`, which looks for `CAP_NET_ADMIN` +
+`CAP_SYS_ADMIN` in the effective set) before any deploy / exec / spawn
+that touches netlink. Spawned processes inherit the
 caller's UID — which is always root in practice. Without
 `CLONE_NEWUSER`, this is *real* root: no UID mapping, full
 capabilities.
@@ -330,17 +333,19 @@ Despite per-lab `flock` (see "Concurrency" above), some subsystems
 touch host-global state without coordinating across labs. Two
 parallel deploys that both exercise one of these can race:
 
-- **`/etc/hosts`** — `crates/nlink-lab/src/dns.rs` rewrites the
-  managed section non-atomically across labs. Only matters when
-  `dns hosts` is set in the topology.
+- **`/etc/hosts`** is *not* in this list any more: `dns.rs` takes
+  `state::hosts_lock()` (a flock on `labs/.hosts.lock`) around every
+  rewrite of its managed section, so parallel labs with `dns hosts`
+  serialise there.
 - **`mac80211_hwsim`** — the module is host-global, but its radios
   are not shared: each lab makes its own over netlink, in one of its
   namespaces, so they hear one another and no other lab's (#176). The
   module is loaded (`radios=0`) once and never unloaded.
 - **Default network namespace** — `mgmt host-reachable` adds a
   bridge to the *host* network namespace; the bridge name is
-  hash-derived per lab, so no name collision, but allocation of
-  bridge IPs from a shared subnet is not coordinated.
+  hash-derived per lab, so no name collision, but the `mgmt`
+  subnet is whatever the topology says: two labs given overlapping
+  subnets are not detected (#332).
 - **The `nlink-lab` process pool** — `nlink-lab ls --scan`
   walks `/run/netns` and `ip link show` from the host's POV; it
   doesn't take a global lock, so two `--scan` invocations can
@@ -367,15 +372,19 @@ For per-pair impair, the answer was no — `delay`, `loss`, `rate`,
 etc. are all existing keywords; `--` is `Token::DashDash` (already
 used by point-to-point links); node names are just identifiers.
 
-If you do need a new keyword, add it to the logos enum:
+Usually not. Most words lex as `Token::Ident` and the parser matches
+them in context with `eat_kw` / `check_kw` / `expect_kw`, so a new
+property needs no lexer change. Only a word that must never be an
+identifier gets its own token:
 
 ```rust
 #[token("yourkeyword")]
 YourKeyword,
 ```
 
-Add to the `Display` impl and the alphabetical-help table at the
-bottom of the file.
+Then add it to the `Display` impl (`lexer.rs`). A token that is a
+statement keyword also needs an entry in `analysis/symbols.rs`'s
+`STATEMENT_KEYWORDS` (a test checks that every one is reserved).
 
 ### 2. AST (`parser/nll/ast.rs`)
 
@@ -392,9 +401,10 @@ pub struct NetworkImpairDef {
 // And an `impairments: Vec<NetworkImpairDef>` field on NetworkDef.
 ```
 
-Keep AST nodes string-typed where the parser uses string forms
-(durations like `"50ms"` are still strings here — they get parsed
-to `Duration` at lower time).
+Literals are `Val<T>` (`parser/nll/value.rs`): typed and spanned
+when the parser could read them (`Val<Duration>`, `Val<Percent>`,
+`Val<Rate>`, …), deferred when they hold `${…}` interpolation, which
+lowering resolves. Diagnostics point at the span.
 
 ### 3. Parser (`parser/nll/parser.rs`)
 
@@ -477,57 +487,101 @@ for imp in &net.impairments {
 }
 ```
 
-The round-trip property is: `parse(render(t)) == t` (as a
-Topology). It's not currently a test invariant for every feature,
-but you should hand-check it for non-trivial additions.
+The round-trip property is `parse(render(t)) == t` (as a Topology),
+and it is a test invariant: `tests/render_roundtrip.rs` checks it, and
+that rendering is idempotent, for every example (its
+`KNOWN_FAILURES` list is empty). An example that uses the new feature
+is therefore its round-trip test. `fmt.rs` is token-level and needs no
+change for a new keyword.
 
-### 8. Deploy (`deploy.rs`)
+### 8. Deploy (`deploy/plan/`, `deploy/apply.rs`)
 
-The actual kernel op. Per-pair impair added a Step 14b:
+Deploy is plan + execute. The kernel side of a feature is almost
+always a **declaration** that a pure planner adds to the node's
+`nlink::facade::Stack`; nothing there touches the kernel:
 
-```rust
-async fn apply_network_impairments(
-    topology: &Topology,
-    node_handles: &HashMap<String, NodeHandle>,
-) -> Result<()> {
-    // Group rules by source node.
-    // For each (network, src), build a PerPeerImpairer.
-    // Resolve dst IPs from network's auto-assigned subnet.
-    // impairer.apply(&conn).await
-}
-```
+- links, addresses, routes: `deploy/plan/network.rs`;
+- traffic control (netem, `qdisc` blocks, rate limits, per-pair
+  matrices, partitions): `deploy/plan/tc.rs`. Per-pair impair is
+  `per_pair_sources` → `PerPeerImpairer::declare`, which resolves each
+  destination's IP from the network's ports;
+- nftables: `deploy/plan/nftables.rs`; WireGuard:
+  `deploy/plan/wireguard.rs`.
 
-Use existing helper patterns (`build_netem`, `node_handle_for`,
-`Connection<Route>`). The `nlink` upstream is the right place for
-new TC primitives — file an issue there before adding netlink
-plumbing in nlink-lab.
+Only when the feature is a new *kind* of host work (a namespace, a
+daemon, a file) does it add an `Op` (`deploy/op.rs`: its `Stage`,
+`key`, `inverse` for rollback, `describe`), emitted by
+`plan/topology.rs` or `plan/mod.rs` and executed by
+`deploy/apply.rs`'s `execute_one`, the only module that touches the
+kernel. Its inverse is journalled (`deploy/rollback.rs`).
+
+Declared state is reconciled for free: `apply` diffs the running
+lab's plan against the new one, and `verify` reports drift, with no
+feature-specific code. Helpers worth reusing: `build_netem` and
+`build_qdisc` (`deploy/plan/qdisc.rs`), `node_handle_for`
+(`deploy/mod.rs`). New TC or netlink primitives belong upstream in
+`nlink`: file an issue there before adding netlink plumbing here.
 
 ### 9. Tests
 
 Three layers:
 
-- **Unit tests** for parser, lower, validator, render. In the
-  same file as the code (`#[cfg(test)] mod tests`). Should not
-  require root.
-- **Integration tests** in `crates/nlink-lab/tests/`. Root-gated
-  via `#[ignore]`; CI flips them on with `--include-ignored` on
-  privileged runners.
-- **Doc-examples**: any NLL snippet in
-  `docs/cookbook/*.md` should be a real file in
-  `examples/cookbook/`, picked up by
-  `test_all_nll_examples_parse` (in `lower.rs`).
+- **Unit tests** for parser, lower, validator, render and the
+  planner, in the same file as the code (`#[cfg(test)] mod tests`).
+  They do not need root. `plan/mod.rs`'s tests assert what a topology
+  declares (`stack_of(&plan, "node")`) without a kernel.
+- **Root tests** in `crates/nlink-lab/tests/integration.rs`: a
+  `#[lab_test("examples/x.nll")]` (deploys the file, hands the test a
+  `RunningLab`, destroys it) or a `#[tokio::test]` that starts with
+  `if !privileged("name") { return; }`. Without CAP_NET_ADMIN and
+  CAP_SYS_ADMIN they fail loudly, unless `NLINK_LAB_SKIP_ROOT_TESTS=1`
+  (set in ci.yml's rootless lanes) makes them skip. `just
+  test-integration` runs them (build as you, run the binary as root);
+  integration.yml runs them in CI.
+- **Examples**: every `examples/**/*.nll` must parse
+  (`test_all_nll_examples_parse` in `lower.rs`), plan
+  (`every_example_plans` in `plan/mod.rs`), round-trip
+  (`tests/render_roundtrip.rs`), stay `fmt`-clean (CI's `fmt --check
+  examples`) and parse with the tree-sitter grammar (CI's tree-sitter
+  job). Every ```` ```nll ```` block in `docs/` must parse and validate,
+  and every relative link there must resolve (`tests/docs_examples.rs`;
+  `nll-ignore` / `nll-no-validate` opt a fragment out).
 
-### 10. Documentation
+### 10. Editors and the LSP
+
+A new keyword reaches four more places, and two tests hold them
+together:
+
+| File | What |
+|------|------|
+| `editors/tree-sitter-nll/grammar.js` | The rule (then `tree-sitter generate`: CI diffs `src/`), plus a case under `test/corpus/` |
+| `editors/tree-sitter-nll/queries/highlights.scm`, `editors/zed-nll/languages/nll/highlights.scm` | Highlighting (Zed uses the tree-sitter grammar) |
+| `editors/vscode-nll/syntaxes/nll.tmLanguage.json` | `repository.keywords.patterns` |
+| `crates/nlink-lab/src/analysis/symbols.rs` | `STATEMENT_KEYWORDS` (hover, completion), `BLOCK_KEYWORDS` (completion inside a block) |
+| `crates/nlink-lab/src/analysis/locate.rs` | Only if the `Topology` field and the keyword are spelled differently (`source_word`) |
+
+`tests/editor_keywords.rs` scrapes every keyword from the lexer and
+the parser's `eat_kw`/`check_kw`/`expect_kw` calls and fails if the
+VS Code grammar or `grammar.js` lacks one (or `grammar.js` spells a
+keyword the language does not have); it also checks that both
+`highlights.scm` files highlight the same words. `diff.rs` (what
+`apply` compares) picks a new field up through `changed_fields` over
+the serialized node, link or lab; a field that must *not* count as a
+change goes in its skip list.
+
+### 11. Documentation
 
 | File | What |
 |------|------|
 | `CLAUDE.md` | Type list + feature paragraph + deploy-sequence list |
-| `docs/NLL_DSL_DESIGN.md` | Syntax + constraints + examples |
+| `docs/NLL_DSL_DESIGN.md` | Syntax (the Grammar section too) + constraints + examples |
+| `docs/USER_GUIDE.md` | How to use it |
 | `docs/cookbook/<recipe>.md` | If the feature deserves a worked recipe |
 | `examples/cookbook/<recipe>.nll` | Paired runnable example |
-| `docs/cli/<cmd>.md` | If a CLI flag changed |
+| `docs/cli/<cmd>.md` | Prose above the generated block if a CLI flag changed; `just docs-cli` regenerates the block (CI diffs it) |
+| `CHANGELOG.md` | An `[Unreleased]` entry; a breaking change gets a `### Migration` one |
 
-### 11. Plan file
+### 12. Plan file
 
 Per-pair impair lived as `docs/plans/128-...md` with:
 

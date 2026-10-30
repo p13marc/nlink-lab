@@ -12,30 +12,9 @@
 
 use std::path::{Path, PathBuf};
 
-/// The files checked: README.md, CLAUDE.md and docs/, minus the
-/// historical plans.
-fn doc_files(root: &Path) -> Vec<PathBuf> {
-    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-        let Ok(entries) = std::fs::read_dir(dir) else {
-            return;
-        };
-        for e in entries.flatten() {
-            let p = e.path();
-            if p.is_dir() {
-                if p.file_name().is_some_and(|n| n == "plans") {
-                    continue;
-                }
-                walk(&p, out);
-            } else if p.extension().is_some_and(|x| x == "md") {
-                out.push(p);
-            }
-        }
-    }
-    let mut out = vec![root.join("README.md"), root.join("CLAUDE.md")];
-    walk(&root.join("docs"), &mut out);
-    out.sort();
-    out
-}
+// The files checked: README.md, CLAUDE.md and docs/, minus the historical
+// plans.
+use crate::cmd::docs_gen::doc_files;
 
 /// Words of a shell line, with quotes removed; `None` marks an operator
 /// that ends a command.
@@ -358,5 +337,42 @@ fn every_documented_command_line_parses() {
         "{} documented command line(s) do not parse:\n{}",
         failures.len(),
         failures.join("\n")
+    );
+}
+
+/// Every count of the project's own parts the docs state is generated
+/// (#345): a number of rules, CLI commands or example files written
+/// outside a `<!-- count:NAME -->N<!-- /count -->` marker goes stale
+/// unnoticed (the docs said 20, 53 and 54 rules when there were 80).
+#[test]
+fn counts_in_the_docs_are_generated() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let marker = regex::Regex::new(r"<!-- count:[^>]*-->[^<]*<!-- /count -->").unwrap();
+    let stray = regex::Regex::new(
+        r"(?i)\b\d+[- ](validator |lint |validation )?rules?\b|\b\d+ (visible |top-level )?(cli )?(sub)?commands\b|\b\d+ (top-level )?(\.nll|nll) (files|examples|topolog)|\b\d+ \.nll\b|\b\d+ top-level\b",
+    )
+    .unwrap();
+    let mut stale = Vec::new();
+    for file in doc_files(&root) {
+        let Ok(text) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        for (i, line) in text.lines().enumerate() {
+            let line = marker.replace_all(line, "");
+            if let Some(m) = stray.find(&line) {
+                stale.push(format!(
+                    "{}:{}: `{}`",
+                    file.strip_prefix(&root).unwrap_or(&file).display(),
+                    i + 1,
+                    m.as_str()
+                ));
+            }
+        }
+    }
+    assert!(
+        stale.is_empty(),
+        "counts written by hand (use <!-- count:NAME -->N<!-- /count -->, \
+         names in docs_gen::counts, then `just docs-cli`):\n{}",
+        stale.join("\n")
     );
 }

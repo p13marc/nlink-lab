@@ -141,5 +141,5 @@ uses the mainline kernel WG driver only.
 
 ## See also
 
-- [NLL: WireGuard syntax](../NLL_DSL_DESIGN.md#9-wireguard)
+- [NLL: WireGuard syntax](../NLL_DSL_DESIGN.md#10-wireguard)
 - [vrf-multitenant.md](vrf-multitenant.md) — combine VRF + WG for L3VPN-style isolation

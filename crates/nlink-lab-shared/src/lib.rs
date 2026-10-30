@@ -1,17 +1,18 @@
-//! Shared types for nlink-lab Zenoh communication.
+//! The types nlink-lab's daemon and its clients share.
 //!
-//! This crate defines the message types and topic helpers used by the
-//! nlink-lab daemon and its clients (`top`, the desktop app).
-//!
-//! # Architecture
+//! - [`api`]: the daemon API (`docs/API.md`): requests and their roles,
+//!   responses, stream items and notifications, `OpEvent` progress, the
+//!   error document, DTOs, and the unix-socket frame codec.
+//! - [`messages`], [`metrics`], [`topics`]: lab events and metrics
+//!   snapshots, and the Zenoh topics `nlink-labd` publishes them on.
 //!
 //! ```text
-//! Frontend (unprivileged)          Backend (CAP_NET_ADMIN)
-//! ├── nlink-lab metrics CLI        ├── nlink-lab daemon
-//! ├── desktop app (nlink-lab-gui)  │
-//! └── External tools               └── Publishes via Zenoh
-//!     │                                 │
-//!     └── nlink-lab-shared types ───────┘
+//! nlink-labd (root)                     clients
+//! ├── the API: unix socket, ssh        ├── nlink-lab top --daemon
+//! │   dial-stdio, Zenoh bridge         ├── nlink-lab-gui (desktop app)
+//! └── Zenoh topics (events, metrics)   └── nlink-lab-client, external tools
+//!          │                                     │
+//!          └──────── nlink-lab-shared types ─────┘
 //! ```
 //!
 //! # Wire compatibility

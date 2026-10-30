@@ -2028,7 +2028,9 @@ impl RunningLab {
         let after = crate::deploy::live_view(self);
         for node in &nodes {
             let Some(handle) = self.ns_resolver_of(node) else {
-                continue;
+                self.live_impairments = live;
+                self.saved_impairments = saved;
+                return Err(Error::NodeNotFound { name: node.clone() });
             };
             if let Err(e) = crate::deploy::reconcile_node_tc(
                 &handle,

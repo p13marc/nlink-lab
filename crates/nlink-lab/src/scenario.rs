@@ -89,6 +89,15 @@ async fn scenario_ctx(
     };
     let elapsed = start.elapsed().as_millis() as u64;
     for action in &cleanup {
+        // also when the scenario was cancelled: then no result carries it
+        if !action.ok {
+            tracing::warn!(
+                "scenario '{}': {} failed: {}",
+                scenario.name,
+                action.description,
+                action.detail.as_deref().unwrap_or_default()
+            );
+        }
         ctx.emit(nlink_lab_shared::api::OpPhase::ScenarioAction {
             time_ms: elapsed,
             description: action.description.clone(),
@@ -172,9 +181,15 @@ impl Undo {
         }
     }
 
-    /// Note the pair rule `action` is about to change, the first time.
+    /// Note what `action` is about to change: a pair rule (the first
+    /// time), an interface it takes down (before it runs, so one that
+    /// fails half way is still brought up: `up` on an up link is
+    /// harmless).
     fn note(&mut self, lab: &RunningLab, action: &ScenarioAction) {
         match action {
+            ScenarioAction::Down(ep) => {
+                self.down.insert(ep.clone());
+            }
             ScenarioAction::PairImpair {
                 network, src, dst, ..
             } if !self
@@ -199,16 +214,11 @@ impl Undo {
         }
     }
 
-    /// Track what `action` did to the interfaces' admin state.
+    /// Track what `action`, which succeeded, did: an interface it
+    /// brought up needs no cleanup.
     fn done(&mut self, action: &ScenarioAction) {
-        match action {
-            ScenarioAction::Down(ep) => {
-                self.down.insert(ep.clone());
-            }
-            ScenarioAction::Up(ep) => {
-                self.down.remove(ep);
-            }
-            _ => {}
+        if let ScenarioAction::Up(ep) = action {
+            self.down.remove(ep);
         }
     }
 

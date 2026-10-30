@@ -20,6 +20,23 @@ All notable changes to this project will be documented in this file.
   now reads `action stolen`. An endpoint partitioned by 0.14 or 0.15
   keeps its old filter until it is healed or the lab is `apply`'d (which
   replaces the filter in place); `verify` reports it as drift until then.
+- **`capture --filter EXPR` and the `legacy-tcpdump-filter` feature are
+  removed** (#346). The feature kept a `tcpdump -dd` shell-out beside the
+  typed filters; release builds never had it. `--filter` is now a usage
+  error that names the typed flags (`tcp port 80` is `--filter-tcp
+  --filter-port 80`), the library's `capture::compile_bpf_filter` is
+  gone, and the API's `CaptureFilter.expression` is refused with an
+  error instead of compiled. `--all-features` builds no longer pull it in.
+
+### Added
+
+- **Support tiers** (#346). [docs/SUPPORT.md](docs/SUPPORT.md) gives every
+  subsystem and every command a tier (core, supported, experimental) and
+  says what each promises, how a part moves between tiers, and which parts
+  are candidates for removal (reviewed every release). The desktop app says
+  it is experimental on its home screen and in its `--help`; `nlink-lab
+  --help` marks an experimental command (there is none today); a process
+  that deploys a Wi-Fi topology logs once that Wi-Fi is experimental.
 
 ### Fixed
 

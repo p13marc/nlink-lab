@@ -400,6 +400,53 @@ pub const GROUPS: &[(&str, &[&str])] = &[
     ("Host", &["doctor", "completions", "lsp"]),
 ];
 
+/// A command's support tier (`docs/SUPPORT.md`, #346): what may change, and
+/// how it is announced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tier {
+    /// Breaks only with a CHANGELOG Migration note and a release that
+    /// still accepts the old form (a removed command or flag says what
+    /// replaced it: `removed.rs`).
+    Core,
+    /// Breaks with a Migration note; tested in CI.
+    Supported,
+    /// May change or go in any minor release; marked in `--help`.
+    Experimental,
+}
+
+impl Tier {
+    pub fn name(self) -> &'static str {
+        match self {
+            Tier::Core => "Core",
+            Tier::Supported => "Supported",
+            Tier::Experimental => "Experimental",
+        }
+    }
+}
+
+/// The core commands: the lab lifecycle, running things in a node, and
+/// `impair` (#346). Every other command is supported, unless listed in
+/// [`EXPERIMENTAL`].
+pub const CORE: &[&str] = &[
+    "deploy", "apply", "destroy", "use", "ls", "status", "verify", "exec", "shell", "spawn",
+    "wait", "ps", "kill", "logs", "impair", "validate",
+];
+
+/// The experimental commands, marked `(experimental)` in `--help`. None
+/// today: what is experimental (the desktop app, Wi-Fi) is not a command.
+pub const EXPERIMENTAL: &[&str] = &[];
+
+/// A command's tier.
+pub fn tier(name: &str) -> Tier {
+    if CORE.contains(&name) {
+        Tier::Core
+    } else if EXPERIMENTAL.contains(&name) {
+        Tier::Experimental
+    } else {
+        Tier::Supported
+    }
+}
+
 /// A command's one-line summary: the first clause of its about text (what
 /// the grouped help and the CLI reference's index show).
 pub fn summary(cmd: &clap::Command, name: &str) -> String {
@@ -419,6 +466,12 @@ pub fn summary(cmd: &clap::Command, name: &str) -> String {
 /// The top-level help template: the commands under their [`GROUPS`]
 /// headings (clap lists subcommands in one block only).
 pub fn grouped_help(cmd: &clap::Command) -> String {
+    grouped_help_marking(cmd, EXPERIMENTAL)
+}
+
+/// [`grouped_help`], with `experimental` marked as such.
+fn grouped_help_marking(cmd: &clap::Command, experimental: &[&str]) -> String {
+    const MARK: &str = " (experimental)";
     let width = GROUPS
         .iter()
         .flat_map(|(_, names)| names.iter())
@@ -429,11 +482,16 @@ pub fn grouped_help(cmd: &clap::Command) -> String {
     let room = 100 - width - 4;
     let about = |name: &str| {
         let first = summary(cmd, name);
+        let (mark, room) = if experimental.contains(&name) {
+            (MARK, room - MARK.len())
+        } else {
+            ("", room)
+        };
         if first.chars().count() <= room {
-            first
+            format!("{first}{mark}")
         } else {
             let cut: String = first.chars().take(room - 1).collect();
-            format!("{}…", cut.trim_end())
+            format!("{}…{mark}", cut.trim_end())
         }
     };
     let mut out = String::from("{before-help}{about-with-newline}\n{usage-heading} {usage}\n");
@@ -545,6 +603,56 @@ mod tests {
             help.contains("Lifecycle:") && help.contains("  deploy "),
             "{help}"
         );
+    }
+
+    /// The tier lists name real commands, none twice (#346).
+    #[test]
+    fn tier_lists_name_commands() {
+        let grouped: Vec<&str> = super::GROUPS
+            .iter()
+            .flat_map(|(_, names)| names.iter().copied())
+            .collect();
+        for name in super::CORE.iter().chain(super::EXPERIMENTAL) {
+            assert!(
+                grouped.contains(name),
+                "a tier lists `{name}`, no such command"
+            );
+        }
+        for name in super::CORE {
+            assert!(
+                !super::EXPERIMENTAL.contains(name),
+                "`{name}` is core and experimental"
+            );
+        }
+        assert_eq!(super::tier("deploy"), super::Tier::Core);
+        assert_eq!(super::tier("capture"), super::Tier::Supported);
+    }
+
+    /// `--help` marks an experimental command, and keeps its line in 100
+    /// columns.
+    #[test]
+    fn help_marks_experimental_commands() {
+        let cmd = crate::command();
+        let help = super::grouped_help_marking(&cmd, &["lsp", "status"]);
+        let line = |name: &str| {
+            help.lines()
+                .find(|l| l.trim_start().starts_with(&format!("{name} ")))
+                .unwrap_or_else(|| panic!("no help line for {name}:\n{help}"))
+                .to_string()
+        };
+        for name in ["lsp", "status"] {
+            let l = line(name);
+            assert!(l.ends_with(" (experimental)"), "{l}");
+            assert!(
+                l.chars().count() <= 100,
+                "{} columns: {l}",
+                l.chars().count()
+            );
+        }
+        assert!(!line("deploy").contains("experimental"));
+        if super::EXPERIMENTAL.is_empty() {
+            assert!(!super::grouped_help(&cmd).contains("(experimental)"));
+        }
     }
 
     /// Every JSON Schema under `docs/json-schemas/` must be valid JSON,

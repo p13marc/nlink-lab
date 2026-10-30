@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use crate::ctx::{Ctx, require_root};
-use crate::util::{compile_legacy_bpf_filter, parse_filter_cidr};
+use crate::util::parse_filter_cidr;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -21,13 +21,6 @@ pub struct Args {
     /// Capture N packets then stop.
     #[arg(short, long)]
     pub count: Option<u64>,
-
-    /// Legacy: full tcpdump filter expression (e.g., "tcp port
-    /// 80"). Requires nlink-lab built with the
-    /// `legacy-tcpdump-filter` feature *and* `tcpdump` on PATH.
-    /// Default builds prefer the typed `--filter-*` flags below.
-    #[arg(long)]
-    pub filter: Option<String>,
 
     /// Match only TCP (sets ip_proto=6).
     #[arg(long = "filter-tcp")]
@@ -243,12 +236,10 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     Ok(())
 }
 
-/// The capture's BPF filter: the legacy `--filter` expression, or the
-/// typed `--filter-*` flags built with netring's builder. `None` without
-/// either.
+/// The capture's BPF filter: the typed `--filter-*` flags built with
+/// netring's builder. `None` without any.
 fn build_filter(args: &Args) -> nlink_lab::Result<Option<netring::BpfFilter>> {
     let &Args {
-        ref filter,
         filter_tcp,
         filter_udp,
         filter_icmp,
@@ -273,10 +264,6 @@ fn build_filter(args: &Args) -> nlink_lab::Result<Option<netring::BpfFilter>> {
         filter_not,
         ..
     } = args;
-    // Reject combining the legacy `--filter` expression with
-    // any typed `--filter-*` flag — the two paths describe
-    // the same logical thing and mixing them produces
-    // surprising AND-of-AND semantics.
     let any_typed_filter = filter_tcp
         || filter_udp
         || filter_icmp
@@ -299,15 +286,6 @@ fn build_filter(args: &Args) -> nlink_lab::Result<Option<netring::BpfFilter>> {
         || !filter_src_ports.is_empty()
         || !filter_dst_ports.is_empty()
         || filter_not;
-    if filter.is_some() && any_typed_filter {
-        return Err(nlink_lab::Error::invalid_argument(
-            "cannot combine --filter \"<expr>\" with typed --filter-* flags",
-        ));
-    }
-
-    if let Some(expr) = filter {
-        return compile_legacy_bpf_filter(expr).map(Some);
-    }
     if !any_typed_filter {
         return Ok(None);
     }

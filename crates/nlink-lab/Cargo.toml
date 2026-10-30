@@ -18,12 +18,6 @@ default = ["wireguard"]
 # Key generation and derivation are nlink's (`PrivateKey`, the
 # `wireguard-keys` feature its `full` includes).
 wireguard = []
-# Opt-in: keep `nlink_lab::capture::compile_bpf_filter` (and the
-# CLI's `--filter "<tcpdump expr>"` flag) wired to a `tcpdump -dd`
-# shell-out. Requires `tcpdump` + `libpcap` on PATH at runtime.
-# Default builds use the typed `netring::BpfFilter::builder()` API
-# instead — pure Rust, no external tooling.
-legacy-tcpdump-filter = []
 
 [dependencies]
 nlink-lab-shared = { workspace = true }

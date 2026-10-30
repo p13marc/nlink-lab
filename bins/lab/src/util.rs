@@ -15,25 +15,6 @@ pub fn parse_filter_cidr(flag: &str, s: &str) -> nlink_lab::Result<netring::IpNe
         .map_err(|e| nlink_lab::Error::invalid_argument(format!("invalid {flag} value {s:?}: {e}")))
 }
 
-/// Legacy `--filter "<tcpdump expr>"` path. Default builds reject
-/// at parse time with a migration suggestion; opting into the
-/// `legacy-tcpdump-filter` feature reinstates the `tcpdump -dd`
-/// shell-out.
-#[cfg(feature = "legacy-tcpdump-filter")]
-pub fn compile_legacy_bpf_filter(expr: &str) -> nlink_lab::Result<netring::BpfFilter> {
-    nlink_lab::capture::compile_bpf_filter(expr)
-}
-
-#[cfg(not(feature = "legacy-tcpdump-filter"))]
-pub fn compile_legacy_bpf_filter(_expr: &str) -> nlink_lab::Result<netring::BpfFilter> {
-    Err(nlink_lab::Error::invalid_argument(
-        "--filter \"<tcpdump expr>\" requires nlink-lab built with the \
-         `legacy-tcpdump-filter` feature (which shells out to `tcpdump -dd`). \
-         Default builds use the typed --filter-tcp / --filter-dst-port / \
-         --filter-host / --filter-src-net flags instead.",
-    ))
-}
-
 /// `impair --show`'s human line for an endpoint: its root qdisc, netem's
 /// values, and whether it is partitioned.
 pub fn impair_show_line(entry: Option<&nlink_lab::impair_parse::ShownImpairment>) -> String {

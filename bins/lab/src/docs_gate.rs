@@ -376,3 +376,18 @@ fn counts_in_the_docs_are_generated() {
         stale.join("\n")
     );
 }
+
+/// docs/SUPPORT.md places every command in a tier (#346): its table is
+/// generated between markers, and this fails if the markers go or the
+/// table is stale (CI regenerates it too).
+#[test]
+fn support_tiers_list_every_command() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let text = std::fs::read_to_string(root.join("docs/SUPPORT.md")).unwrap();
+    for name in crate::cli::GROUPS.iter().flat_map(|(_, n)| n.iter()) {
+        assert!(
+            text.contains(&format!("[`{name}`](cli/{name}.md)")),
+            "docs/SUPPORT.md does not place `{name}` in a tier: run `just docs-cli`"
+        );
+    }
+}

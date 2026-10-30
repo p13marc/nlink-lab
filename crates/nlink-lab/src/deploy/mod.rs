@@ -131,6 +131,21 @@ async fn deploy_ctx(
     }
 }
 
+/// Log, once per process, that a topology uses an experimental feature
+/// (`docs/SUPPORT.md`, #346): what may change in any minor release. The
+/// daemon's log says it the first time one of its labs does.
+fn note_experimental(topology: &Topology) {
+    static WIFI: std::sync::Once = std::sync::Once::new();
+    if topology.nodes.values().any(|n| !n.wifi.is_empty()) {
+        WIFI.call_once(|| {
+            tracing::info!(
+                "Wi-Fi emulation is experimental: it may change in any minor release, and CI \
+                 cannot test it (docs/SUPPORT.md)"
+            );
+        });
+    }
+}
+
 async fn deploy_inner(
     topology: &Topology,
     journal: &mut Journal,
@@ -144,6 +159,7 @@ async fn deploy_inner(
         ops: plan.ops.len(),
         removals: 0,
     });
+    note_experimental(topology);
     let mut env = apply::ApplyEnv::for_deploy(topology)?;
     env.ctx = ctx.clone();
     apply::execute(&plan, &mut env, journal).await?;

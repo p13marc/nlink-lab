@@ -138,7 +138,8 @@ side-by-side examples, and migration notes — lives at
 
 Beta. NLL syntax and the Rust API are stable across patch
 releases; breaking changes are flagged in the CHANGELOG with a
-migration note. Built on
+migration note. What each part promises (core, supported or
+experimental) is in [docs/SUPPORT.md](docs/SUPPORT.md). Built on
 [`nlink`](https://git.marcpardo.eu/marcpardo/nlink) 0.33.
 
 Current release: **0.15.0** (2026-10-23) — the firewall and

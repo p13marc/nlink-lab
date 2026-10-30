@@ -205,8 +205,13 @@ pub enum Commands {
 
     /// Run a `scenario` block from a deployed lab's topology.
     ///
+    /// When it ends, failed or cancelled too, the lab is put back as the
+    /// scenario found it (impairments, partitions, pair impairments,
+    /// interfaces it took down), unless the scenario says `keep`.
+    ///
     /// JSON OUTPUT (with `--json`): the full `ScenarioResult` (steps,
-    /// actions, assertion outcomes, timings). Exit 2 when any step fails.
+    /// actions, assertion outcomes, timings, and `cleanup`: what was put
+    /// back). Exit 2 when any step or the cleanup fails.
     Scenario(cmd::scenario::Args),
 
     /// Run a `benchmark` block from a deployed lab's topology.

@@ -4332,10 +4332,15 @@ fn parse_scenario(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ScenarioDe
     expect(tokens, pos, &Token::LBrace)?;
 
     let mut steps = Vec::new();
+    let mut keep = false;
     loop {
         skip_newlines(tokens, pos);
         if eat(tokens, pos, &Token::RBrace) {
             break;
+        }
+        if eat_kw(tokens, pos, "keep") {
+            keep = true;
+            continue;
         }
         expect_kw(tokens, pos, "at")?;
         let time = expect_duration(tokens, pos)?;
@@ -4370,6 +4375,47 @@ fn parse_scenario(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ScenarioDe
             } else if eat_kw(tokens, pos, "log") {
                 let msg = expect_string(tokens, pos)?;
                 actions.push(ast::ScenarioActionDef::Log(msg));
+            } else if check(tokens, *pos, &Token::Impair) {
+                *pos += 1;
+                // `impair NODE:IFACE <props>`, or a network's pair rule
+                // `impair NETWORK SRC -- DST { … }` (#326)
+                if matches!(at(tokens, *pos + 1), Some(Token::Colon)) {
+                    let (node, iface) = parse_endpoint(tokens, pos)?;
+                    let before = *pos;
+                    let props = parse_impair_props(tokens, pos)?;
+                    if *pos == before {
+                        return Err(err(
+                            tokens,
+                            *pos,
+                            format!(
+                                "`impair {node}:{iface}` needs an impairment (delay, loss, rate, …); \
+                                 `clear {node}:{iface}` removes one"
+                            ),
+                        ));
+                    }
+                    actions.push(ast::ScenarioActionDef::Impair {
+                        endpoint: format!("{node}:{iface}"),
+                        props,
+                    });
+                } else {
+                    let network = parse_name(tokens, pos)?;
+                    let rule = parse_network_impair(tokens, pos)?;
+                    actions.push(ast::ScenarioActionDef::PairImpair { network, rule });
+                }
+            } else if eat_kw(tokens, pos, "partition") {
+                let (node, iface) = parse_endpoint(tokens, pos)?;
+                let both = eat_kw(tokens, pos, "both");
+                actions.push(ast::ScenarioActionDef::Partition {
+                    endpoint: format!("{node}:{iface}"),
+                    both,
+                });
+            } else if eat_kw(tokens, pos, "heal") {
+                let (node, iface) = parse_endpoint(tokens, pos)?;
+                let both = eat_kw(tokens, pos, "both");
+                actions.push(ast::ScenarioActionDef::Heal {
+                    endpoint: format!("{node}:{iface}"),
+                    both,
+                });
             } else {
                 match at(tokens, *pos) {
                     Some(other) => {
@@ -4377,7 +4423,8 @@ fn parse_scenario(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ScenarioDe
                             tokens,
                             *pos,
                             format!(
-                                "expected scenario action (down, up, clear, validate, exec, log), found {other}"
+                                "expected scenario action (down, up, clear, impair, partition, heal, validate, \
+                                 exec, log), found {other}"
                             ),
                         ));
                     }
@@ -4395,7 +4442,7 @@ fn parse_scenario(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ScenarioDe
         steps.push(ast::ScenarioStepDef { time, actions });
     }
 
-    Ok(ast::ScenarioDef { name, steps })
+    Ok(ast::ScenarioDef { name, keep, steps })
 }
 
 // ─── Benchmark ───────────────────────────────────────────

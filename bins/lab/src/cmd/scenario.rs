@@ -59,17 +59,22 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 red("FAIL")
             }
         );
+        let line = |action: &nlink_lab::scenario::ActionResult| {
+            let mark = if action.ok { green("ok") } else { red("FAIL") };
+            let detail = action
+                .detail
+                .as_deref()
+                .map(|d| format!(" — {d}"))
+                .unwrap_or_default();
+            println!("    {mark}  {}{detail}", action.description);
+        };
         for (index, step) in result.steps.iter().enumerate() {
             println!("  t={:>6}ms  step {index}", step.time_ms);
-            for action in &step.actions {
-                let mark = if action.ok { green("ok") } else { red("FAIL") };
-                let detail = action
-                    .detail
-                    .as_deref()
-                    .map(|d| format!(" — {d}"))
-                    .unwrap_or_default();
-                println!("    {mark}  {}{detail}", action.description);
-            }
+            step.actions.iter().for_each(line);
+        }
+        if !result.cleanup.is_empty() {
+            println!("  put back");
+            result.cleanup.iter().for_each(line);
         }
     }
     if !result.passed {

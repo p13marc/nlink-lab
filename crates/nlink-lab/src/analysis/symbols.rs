@@ -433,7 +433,21 @@ pub const BLOCK_KEYWORDS: &[(&str, &[&str])] = &[
             "dns-resolves",
         ],
     ),
-    ("scenario", &["at", "down", "up", "clear", "validate"]),
+    ("scenario", &["keep", "at"]),
+    (
+        "at",
+        &[
+            "down",
+            "up",
+            "clear",
+            "impair",
+            "partition",
+            "heal",
+            "validate",
+            "exec",
+            "log",
+        ],
+    ),
     ("benchmark", &["ping", "iperf3", "assert"]),
     ("frr", &["ospf", "bgp"]),
     // a firewall block, and its chains (#302)

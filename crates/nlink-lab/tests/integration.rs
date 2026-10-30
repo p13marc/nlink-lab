@@ -3935,8 +3935,13 @@ async fn pattern_ring_deploy(lab: RunningLab) {
 
 #[lab_test("examples/scenario.nll")]
 async fn scenario_parses_and_deploys(lab: RunningLab) {
-    assert_eq!(lab.topology().scenarios.len(), 1);
-    assert_eq!(lab.topology().scenarios[0].name, "failover-test");
+    let names: Vec<&str> = lab
+        .topology()
+        .scenarios
+        .iter()
+        .map(|s| s.name.as_str())
+        .collect();
+    assert_eq!(names, ["failover-test", "wan-faults"]);
     assert!(lab.topology().scenarios[0].steps.len() >= 4);
 }
 
@@ -8608,7 +8613,8 @@ link a:eth1 -- c:eth0 { 10.0.1.1/30 -- 10.0.1.2/30 }"#,
 /// resolved namespace nodes only and failed), and `clear` is
 /// `impair --clear`: the netem goes, the declared rate limit stays, and
 /// the state file records the clear. It deleted the whole root qdisc and
-/// told nobody.
+/// told nobody. (`keep`: without it the scenario puts the netem back when
+/// it ends, #326.)
 #[tokio::test]
 async fn a_scenario_acts_on_a_container_node_and_clears_like_impair() {
     if !privileged("a_scenario_acts_on_a_container_node_and_clears_like_impair") {
@@ -8632,6 +8638,7 @@ link c:eth0 -- h:eth0 {{
   rate egress 10mbit
 }}
 scenario "flap" {{
+  keep
   at 0s {{ down c:eth0 }}
   at 1s {{ up c:eth0 }}
   at 2s {{ clear c:eth0 }}
@@ -9269,6 +9276,114 @@ async fn wait_all_reports_progress_and_stops_on_cancel(lab: RunningLab) {
         .await;
     assert!(matches!(r, Err(nlink_lab::Error::Cancelled(_))), "{r:?}");
     assert!(started.elapsed() < Duration::from_secs(5));
+}
+
+/// A scenario changes the lab at runtime and puts it back (#326): it
+/// impairs an endpoint over its declared impairment, sets a pair rule,
+/// partitions both ends of a link (a `no-reach` passes then, and the
+/// report's timeline shows the partition before it), heals, takes an
+/// interface down; when it ends, the declared impairment, the pair
+/// rules, the partitions and the interface are as they were, and the lab
+/// has no drift. A `keep` scenario leaves its change.
+#[tokio::test]
+async fn a_scenario_impairs_partitions_and_puts_the_lab_back() {
+    if !privileged("a_scenario_impairs_partitions_and_puts_the_lab_back") {
+        return;
+    }
+    let lab_name = format!("scf-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        r#"lab "{lab_name}"
+node a
+node b
+node c
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}
+network lan {{
+  members [a:eth1, c:eth0]
+  subnet 10.1.0.0/24
+}}
+impair a:eth0 delay 5ms
+scenario "faults" {{
+  at 0s {{
+    impair a:eth0 delay 30ms
+    impair lan a -- c {{ delay 100ms }}
+  }}
+  at 1s {{
+    partition a:eth0 both
+    validate {{ no-reach a b }}
+  }}
+  # the no-reach ping waits out its 2 s; the gaps after it and after the
+  # heal let a's ARP for b, whose probes the partition swallowed, give up
+  # and start over, as an application's retries would
+  at 4s {{ heal a:eth0 both }}
+  at 6s {{
+    validate {{ reach a b }}
+    down b:eth0
+  }}
+}}
+scenario "kept" {{
+  keep
+  at 0s {{ impair a:eth0 delay 77ms }}
+}}
+"#
+    ))
+    .unwrap();
+    let mut lab = topo.clone().deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let netem = |lab: &RunningLab| root_qdisc(lab, "a", "eth0").0;
+    assert!(netem(&lab).contains("delay 5ms"), "{}", netem(&lab));
+
+    let faults = topo.scenarios.iter().find(|s| s.name == "faults").unwrap();
+    let r = nlink_lab::scenario::run_scenario(&mut lab, faults)
+        .await
+        .expect("scenario failed to run");
+    assert!(r.passed, "{r:#?}");
+    let at_1s: Vec<&str> = r.steps[1]
+        .actions
+        .iter()
+        .map(|a| a.description.as_str())
+        .collect();
+    assert_eq!(at_1s, ["partition a:eth0 both", "validate"], "{r:#?}");
+    let cleanup: Vec<&str> = r.cleanup.iter().map(|a| a.description.as_str()).collect();
+    assert!(
+        cleanup.contains(&"cleanup: up b:eth0")
+            && cleanup.iter().any(|c| c.contains("pair impairment"))
+            && cleanup
+                .iter()
+                .any(|c| c.contains("impairments and partitions")),
+        "{cleanup:?}"
+    );
+
+    // as it was before the scenario
+    assert!(netem(&lab).contains("delay 5ms"), "{}", netem(&lab));
+    assert!(!lab.is_partitioned("a:eth0") && !lab.is_partitioned("b:eth0"));
+    assert!(
+        lab.live_impairments().is_empty(),
+        "{:?}",
+        lab.live_impairments()
+    );
+    assert!(lab.topology().networks["lan"].impairments.is_empty());
+    let link = lab
+        .exec("b", "ip", &["-o", "link", "show", "eth0"])
+        .unwrap()
+        .stdout;
+    assert!(link.contains("state UP") || link.contains(",UP"), "{link}");
+    let ping = lab
+        .exec("a", "ping", &["-c", "1", "-W", "2", "10.0.0.2"])
+        .unwrap();
+    assert_eq!(ping.exit_code, 0, "{}", ping.stdout);
+    let layered = nlink_lab::compute_layered_diff(&lab, &topo).await.unwrap();
+    assert!(layered.is_empty(), "the scenario left drift:\n{layered}");
+
+    let kept = topo.scenarios.iter().find(|s| s.name == "kept").unwrap();
+    let r = nlink_lab::scenario::run_scenario(&mut lab, kept)
+        .await
+        .unwrap();
+    assert!(r.passed && r.cleanup.is_empty(), "{r:#?}");
+    assert!(netem(&lab).contains("delay 77ms"), "{}", netem(&lab));
+    assert!(lab.live_impairments().contains_key("a:eth0"));
+    lab.destroy().await.expect("destroy failed");
 }
 
 /// C7: `test --scenarios` runs every scenario after the assertions, each

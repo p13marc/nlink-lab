@@ -799,6 +799,8 @@ pub enum QdiscKindDef {
 #[derive(Debug, Clone)]
 pub struct ScenarioDef {
     pub name: String,
+    /// `keep`: what the scenario changed stays when it ends.
+    pub keep: bool,
     pub steps: Vec<ScenarioStepDef>,
 }
 
@@ -816,8 +818,31 @@ pub enum ScenarioActionDef {
     Up(String),
     Clear(String),
     Validate(Vec<AssertionDef>),
-    Exec { node: String, cmd: Vec<String> },
+    Exec {
+        node: String,
+        cmd: Vec<String>,
+    },
     Log(String),
+    /// `impair NODE:IFACE <props>`.
+    Impair {
+        endpoint: String,
+        props: ImpairProps,
+    },
+    /// `partition NODE:IFACE [both]`.
+    Partition {
+        endpoint: String,
+        both: bool,
+    },
+    /// `heal NODE:IFACE [both]`.
+    Heal {
+        endpoint: String,
+        both: bool,
+    },
+    /// `impair NETWORK SRC -- DST { <props> [rate-cap R] }`.
+    PairImpair {
+        network: String,
+        rule: NetworkImpairDef,
+    },
 }
 
 /// Variable binding.

@@ -3429,7 +3429,15 @@
           "named": true
         },
         {
+          "type": "impairment_properties",
+          "named": true
+        },
+        {
           "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "rate",
           "named": true
         },
         {
@@ -4125,6 +4133,10 @@
     "named": false
   },
   {
+    "type": "both",
+    "named": false
+  },
+  {
     "type": "burst",
     "named": false
   },
@@ -4353,6 +4365,10 @@
     "named": false
   },
   {
+    "type": "heal",
+    "named": false
+  },
+  {
     "type": "healthcheck",
     "named": false
   },
@@ -4486,6 +4502,10 @@
   },
   {
     "type": "jitter",
+    "named": false
+  },
+  {
+    "type": "keep",
     "named": false
   },
   {
@@ -4683,6 +4703,10 @@
   },
   {
     "type": "parent",
+    "named": false
+  },
+  {
+    "type": "partition",
     "named": false
   },
   {

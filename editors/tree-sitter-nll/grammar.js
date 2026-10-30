@@ -681,7 +681,7 @@ module.exports = grammar({
       ),
 
     scenario_block: ($) =>
-      seq("scenario", $.string, "{", repeat($.scenario_step), "}"),
+      seq("scenario", $.string, "{", repeat(choice("keep", $.scenario_step)), "}"),
 
     scenario_step: ($) =>
       seq("at", optional("+"), $.duration, "{", repeat($.scenario_action), "}"),
@@ -694,6 +694,19 @@ module.exports = grammar({
         seq("validate", "{", repeat($.assertion), "}"),
         seq("exec", $._name, repeat1($.string)),
         seq("log", $.string),
+        seq("impair", $.endpoint, $.impairment_properties),
+        seq(
+          "impair",
+          $._name,
+          $._name,
+          "--",
+          $._name,
+          "{",
+          repeat(choice($.impairment_properties, seq("rate-cap", $.rate))),
+          "}",
+        ),
+        seq("partition", $.endpoint, optional("both")),
+        seq("heal", $.endpoint, optional("both")),
       ),
 
     benchmark_block: ($) =>

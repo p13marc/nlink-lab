@@ -407,6 +407,41 @@ scenario "wan-flap" PASSED in 15.022s
 
 If any `validate` fails, that step is marked failed, the scenario
 still runs to its last step, and the command exits 2.
+
+A step can also change the lab the way `nlink-lab impair` does:
+
+```nll-ignore
+scenario "wan-faults" {
+  at 0s  { impair site-b-router:wan delay 80ms loss 1% }
+  at 5s  { partition site-b-router:wan both }      # a black hole, both ends
+  at 8s  { validate { no-reach site-a-client site-b-server } }
+  at 12s { heal site-b-router:wan both }
+}
+```
+
+- `impair EP <props>` sets an endpoint's impairment (the properties of
+  an `impair` line); `clear EP` removes it.
+- `partition EP` / `heal EP` cut an endpoint off and back, as `impair
+  --partition` / `--heal` do (see [Partition and Heal](#partition-and-heal)).
+  `both` also does the other end of its point-to-point link.
+- `impair NETWORK SRC -- DST { delay 200ms }` sets a per-pair impairment
+  on a bridge network SRC and DST are members of, as `impair --pair` does.
+
+A `heal` restores the path, not every packet: a neighbour (ARP) entry
+whose probes went into the black hole can take a second or two to give
+up and resolve again, so a one-shot `validate { reach … }` right after
+the heal can fail. Leave a couple of seconds before it (or check with
+`tcp-connect … retries`), as an application's own retries would. Steps
+also run one after another: a `validate` that waits (a `no-reach` waits
+out its ping) delays the steps after it.
+
+**When a scenario ends, the lab is put back** as it found it: its
+impairments, partitions, pair impairments, and the interfaces it took
+`down` and did not bring `up`. That happens after a failed step and
+after Ctrl-C too, so a broken scenario does not leave the lab broken for
+the next one, and the report lists what was put back. Put `keep` in the
+scenario's block to leave its changes instead. `exec` steps are not
+undone.
 This is the difference between a real test and a bash script
 that calls `iptables` and prays — declarative, validated,
 reproducible.

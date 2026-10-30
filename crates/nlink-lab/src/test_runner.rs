@@ -157,6 +157,14 @@ async fn test_ctx(
                             ));
                         }
                     }
+                    // putting the lab back is part of the scenario's result
+                    for a in r.cleanup {
+                        assertions.push(row(
+                            format!("scenario {}: {}", r.name, a.description),
+                            a.ok,
+                            a.detail,
+                        ));
+                    }
                 }
                 Err(e) => assertions.push(row(
                     format!("scenario {}", sc.name),

@@ -197,6 +197,12 @@ pub struct Scenario {
     pub name: String,
     /// Ordered steps (sorted by time).
     pub steps: Vec<ScenarioStep>,
+    /// Leave what the scenario changed as it is when it ends (`keep`).
+    /// Without it, its impairments, partitions, pair impairments and the
+    /// interfaces it took down are put back as they were before it ran
+    /// (#326).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub keep: bool,
 }
 
 /// A single step in a scenario, executed at a specific time offset.
@@ -223,6 +229,26 @@ pub enum ScenarioAction {
     Exec { node: String, cmd: Vec<String> },
     /// Print a log message.
     Log(String),
+    /// Set an endpoint's impairment, as `impair EP …` does (#326).
+    Impair {
+        endpoint: String,
+        impairment: Impairment,
+    },
+    /// Partition an endpoint, and with `both` the other end of its link,
+    /// as `impair EP --partition` does (#326).
+    Partition { endpoint: String, both: bool },
+    /// End a partition (`both`: of the link's two ends) (#326).
+    Heal { endpoint: String, both: bool },
+    /// Set a network's impairment from `src` to `dst`, as `impair --pair`
+    /// does (#326).
+    PairImpair {
+        network: String,
+        src: String,
+        dst: String,
+        impairment: Impairment,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rate_cap: Option<String>,
+    },
 }
 
 /// Post-deploy reachability assertion.

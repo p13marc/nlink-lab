@@ -64,6 +64,16 @@ fn action_text(a: &nlink_lab::types::ScenarioAction) -> String {
         ),
         ScenarioAction::Exec { node, cmd } => format!("exec {node} {}", cmd.join(" ")),
         ScenarioAction::Log(m) => format!("log {m}"),
+        ScenarioAction::Impair { endpoint, .. } => format!("impair {endpoint}"),
+        ScenarioAction::Partition { endpoint, both } => {
+            format!("partition {endpoint}{}", if *both { " both" } else { "" })
+        }
+        ScenarioAction::Heal { endpoint, both } => {
+            format!("heal {endpoint}{}", if *both { " both" } else { "" })
+        }
+        ScenarioAction::PairImpair {
+            network, src, dst, ..
+        } => format!("impair {network} {src} -- {dst}"),
     }
 }
 

@@ -1642,10 +1642,14 @@ assertion      = "reach" IDENT IDENT | "no-reach" IDENT IDENT
                | "counter" IDENT IDENT ("packets" | "bytes")? ("==" | "!=" | ">" | ">=" | "<" | "<=") INT
 
 # ── Scenario ────────────────────────────────────
-scenario       = "scenario" STRING "{" step* "}"
+scenario       = "scenario" STRING "{" ("keep" | step)* "}"
+                 (* "keep": what it changed stays when it ends *)
 step           = "at" "+"? DURATION "{" action* "}"
                  (* "+" is relative to the previous step *)
 action         = "down" endpoint | "up" endpoint | "clear" endpoint
+               | "impair" endpoint impair_props
+               | "impair" IDENT IDENT "--" IDENT "{" (impair_props | "rate-cap" RATE)* "}"
+               | ("partition" | "heal") endpoint "both"?
                | "validate" "{" assertion* "}"
                | "exec" IDENT STRING+ | "log" STRING
 

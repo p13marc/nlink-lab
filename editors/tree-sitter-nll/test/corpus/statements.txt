@@ -74,3 +74,49 @@ benchmark "b" {
       (benchmark_property
         (identifier)
         (percent)))))
+
+================
+scenario fault actions and keep
+================
+scenario "faults" {
+  keep
+  at 0s {
+    impair wan:eth0 delay 50ms loss 1%
+    partition r1:eth0 both
+  }
+  at 5s {
+    heal r1:eth0 both
+    impair lan h1 -- h2 { delay 200ms rate-cap 10mbit }
+  }
+}
+---
+
+(source_file
+  (scenario_block
+    (string)
+    (scenario_step
+      (duration)
+      (scenario_action
+        (endpoint
+          (identifier)
+          (identifier))
+        (impairment_properties
+          (duration)
+          (percent)))
+      (scenario_action
+        (endpoint
+          (identifier)
+          (identifier))))
+    (scenario_step
+      (duration)
+      (scenario_action
+        (endpoint
+          (identifier)
+          (identifier)))
+      (scenario_action
+        (identifier)
+        (identifier)
+        (identifier)
+        (impairment_properties
+          (duration))
+        (rate)))))

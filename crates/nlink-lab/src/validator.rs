@@ -3697,7 +3697,6 @@ fn check_argv(cmd: &[String], location: &str, issues: &mut Vec<ValidationIssue>)
     }
 }
 
-/// Container field validation: cmd/env/volumes require image.
 /// Foreign nodes (#344): nlink-lab links to them and changes nothing else
 /// in them, so what it would have to run, create or configure inside one
 /// is refused, and what it would configure only on request is checked
@@ -3916,6 +3915,7 @@ fn validate_foreign_nodes(topology: &Topology, issues: &mut Vec<ValidationIssue>
     }
 }
 
+/// Container field validation: cmd/env/volumes require image.
 fn validate_container_fields(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
     for (node_name, node) in &topology.nodes {
         if node.image.is_none() {

@@ -2080,14 +2080,16 @@ impl RunningLab {
     /// nlink-lab otherwise only sets an MTU when it creates a veth; this is
     /// the runtime path (`edit --set-mtu`) a path-MTU fault needs.
     pub async fn set_link_mtu(&mut self, endpoint: &str, mtu: u32) -> Result<()> {
-        let m = self.begin("mtu").await?;
-        let peer = self.peer_endpoint(endpoint)?;
         // both ends change: a foreign one only when the lab manages it
+        // (checked before the lock: a refusal waits for nothing)
+        let peer = self.peer_endpoint(endpoint)?;
         for ep in [endpoint, peer.as_str()] {
             if let Some(r) = EndpointRef::parse(ep) {
                 self.tc_is_ours(&r.node)?;
             }
         }
+        let m = self.begin("mtu").await?;
+        let peer = self.peer_endpoint(endpoint)?;
         for ep in [endpoint.to_string(), peer] {
             let r = EndpointRef::parse(&ep).ok_or_else(|| Error::InvalidEndpoint {
                 endpoint: ep.clone(),

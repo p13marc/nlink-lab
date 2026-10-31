@@ -1,0 +1,114 @@
+name: Diag
+# Privileged runner lane (label `integration`); wireguard module preloaded
+# on the runner VM (myserver docs/vm-runner.md).
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: diag-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # shared compiler cache: sccache (mounted from the runner VM) -> garage S3
+  # on vm-runner-01; S3 endpoint+credentials come from the runner's env_file.
+  # Guarded by the first step so a missing mount does not fail the build.
+  RUSTC_WRAPPER: /srv/cache/bin/sccache
+  CARGO_INCREMENTAL: "0"
+  # Cap build parallelism, same as ci.yml: cargo otherwise defaults to nproc
+  # (6 on vm-runner-01). This lane's job runs beside the standard lane's
+  # three, in the same 10 GB VM.
+  CARGO_BUILD_JOBS: "2"
+  # debug info is most of target/ and of the linker's memory (#293)
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
+  # A test whose kernel feature or tool is missing skips, unless this names
+  # it: then it fails, so a runner that lost a module or a package turns
+  # the lane red instead of passing every test that needs it (#298). What
+  # the runner has: the modules the guard step checks (the VM preloads
+  # them, myserver setup/ci-integration.conf) and the packages installed
+  # below. Every step also unsets NLINK_LAB_SKIP_ROOT_TESTS, so a test that
+  # needs root fails without it.
+  NLINK_LAB_STRICT_FEATURES: nftables,nf_conntrack_netlink,vrf,wireguard,bridge-vlan-filtering,bonding,wg,iperf3,frr,bgpd
+
+jobs:
+  integration:
+    runs-on: integration
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v7.0.1
+      - name: sccache guard
+        run: test -x "$RUSTC_WRAPPER" || { echo "::warning::sccache missing at $RUSTC_WRAPPER; building without it"; echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"; }
+      # The tests exec `ip`/`nft`/`ping`/`tc`/`wg`/`getent` INSIDE the lab
+      # namespaces, which share this job's rootfs (only the net namespace
+      # changes) — so every one of those binaries must be installed here.
+      - run: sudo apt-get update && sudo apt-get install -y iproute2 nftables iputils-ping procps libc-bin wireguard-tools iperf3 frr
+      # The FRR tests run zebra/ospfd/bgpd from /usr/lib/frr inside lab
+      # namespaces; the package's host service must not compete for them.
+      - run: sudo systemctl disable --now frr 2>/dev/null || true
+      - uses: https://github.com/dtolnay/rust-toolchain@stable
+      - uses: https://github.com/Swatinem/rust-cache@v2.9.2
+        with:
+          key: integration
+          cache-targets: false
+      - name: Guard that kernel modules are preloaded on the runner VM
+        run: |
+          missing=0
+          for m in nf_tables nf_conntrack_netlink vrf wireguard bridge bonding; do
+            test -d "/sys/module/$m" || { echo "::error::module $m not loaded on the runner VM"; missing=1; }
+          done
+          exit $missing
+      - run: cargo build --bin nlink-lab
+      # Gating since wave 3 of the deep-analysis series: 62/62 pass on a
+      # Debian 13 host once iproute2/nftables/iputils are installed and
+      # /usr/sbin is on PATH under sudo (tc/nft live there). The earlier
+      # "6/62" was those packages missing from the job container (#52).
+      # Build as the runner user, run only the test binary as root, so
+      # target/ stays user-owned. The binary path comes from cargo's JSON
+      # messages: the human output is coloured under CARGO_TERM_COLOR=always
+      # (set by the toolchain action), which made a text grep miss and left
+      # `$bin` empty — the cause of the red lane between runs 79 and 81 (#81).
+      # One binary per area (#339): root-host, root-frr and root-wifi one
+      # test at a time, the others four at once. scripts/root-tests.sh
+      # prints each binary's wall time.
+      # as integration.yml, the output still a pipe, also kept for #349
+      - name: Integration tests
+        run: |
+          scripts/root-tests.sh 2>&1 | tee -a /tmp/it.log
+          exit ${PIPESTATUS[0]}
+      - name: Integration tests (all features)
+        run: |
+          scripts/root-tests.sh --all-features 2>&1 | tee -a /tmp/it.log
+          exit ${PIPESTATUS[0]}
+      - name: Daemon end-to-end
+        run: |
+          bin=$(cargo test -p nlink-labd --test e2e --no-run --message-format=json 2>/dev/null | grep -oP '"executable":"\K[^"]*/deps/e2e-[^"]+' | head -1)
+          test -n "$bin" || { echo "::error::daemon e2e test binary not found"; exit 1; }
+          sudo -E env "PATH=$PATH:/usr/sbin:/sbin" NLINK_LAB_SKIP_ROOT_TESTS= "$bin" --test-threads=1
+      - name: Desktop app against a real lab
+        run: |
+          bin=$(cargo test -p nlink-lab-gui --no-run --message-format=json 2>/dev/null | grep -oP '"executable":"\K[^"]*/deps/nlink_lab_gui-[^"]+' | head -1)
+          test -n "$bin" || { echo "::error::desktop app test binary not found"; exit 1; }
+          sudo -E env "PATH=$PATH:/usr/sbin:/sbin" NLINK_LAB_SKIP_ROOT_TESTS= "$bin" --exact daemon_tests::sessions_reach_a_real_lab daemon_tests::workflows_reach_a_real_daemon
+      - name: No lab debris left behind
+        if: always()
+        run: scripts/lab-debris.sh
+      - name: Post the log's failures to #349
+        if: failure()
+        env:
+          API: ${{ github.api_url }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "diag run ${GITHUB_RUN_NUMBER} on ${GITHUB_SHA}, kernel $(uname -r)"
+            echo
+            echo '```'
+            grep -E '^=== |^FAILED|found .* root test binaries' /tmp/it.log | head -60
+            echo
+            grep -E '^test .*\.\.\. ' /tmp/it.log | grep -v ' ok$' | head -40
+            echo
+            grep -E 'panicked at|^error|leftover' -A12 /tmp/it.log | head -250
+            echo
+            tail -40 /tmp/it.log
+            echo '```'
+          } > /tmp/body.md
+          curl -sS -o /dev/null -w '%{http_code}\n' -X POST -H "Authorization: token $TOKEN" \
+            --data-urlencode "body@/tmp/body.md" "$API/repos/$GITHUB_REPOSITORY/issues/349/comments"

@@ -98,6 +98,7 @@ pub const RULE_IDS: &[&str] = &[
     "assertion-endpoint-exists",
     "scenario-both-needs-link",
     "scenario-network-exists",
+    "scenario-replay-trace",
     "container-requires-image",
     "empty-image",
     "container-pull",
@@ -3200,6 +3201,35 @@ fn validate_test_refs(
                     } => {
                         check_pair_ref(topology, network, src, dst, &location, issues);
                     }
+                    ScenarioAction::Replay { target, file, .. } => {
+                        match target {
+                            crate::replay::ReplayTarget::Endpoint { endpoint, .. } => {
+                                check_endpoint_ref(
+                                    topology,
+                                    interfaces,
+                                    endpoint,
+                                    location.clone(),
+                                    issues,
+                                );
+                            }
+                            crate::replay::ReplayTarget::Pair { network, src, dst } => {
+                                check_pair_ref(topology, network, src, dst, &location, issues);
+                            }
+                        }
+                        // the trace, read where the topology's file is (a
+                        // topology parsed from text has no place to look)
+                        if let Some(dir) = &topology.source_dir
+                            && let Err(e) =
+                                crate::trace::Trace::load(&std::path::Path::new(dir).join(file))
+                        {
+                            issues.push(ValidationIssue {
+                                severity: Severity::Error,
+                                rule: "scenario-replay-trace",
+                                message: e.to_string(),
+                                location: Some(format!("{location}.file")),
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -4090,6 +4120,36 @@ network lan {
     /// #152: `loss-correlation` lowers the loss rate instead of making it
     /// bursty, and nothing used to say so. Both places an impairment can be
     /// written must warn, with the rate netem will actually produce.
+    #[test]
+    fn a_replay_needs_a_readable_trace_and_a_real_target() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("ok.csv"), "t_ms,delay_ms\n0,1\n").unwrap();
+        std::fs::write(dir.path().join("bad.csv"), "delay_ms\n1\n").unwrap();
+        let mut t = crate::parser::parse(
+            r#"lab "r"
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+scenario "s" {
+  at 0s {
+    replay a:eth0 "ok.csv"
+    replay a:eth0 "bad.csv"
+    replay a:eth0 "missing.csv"
+    replay a:eth9 "ok.csv"
+  }
+}
+"#,
+        )
+        .unwrap();
+        // a topology from text has nowhere to read traces from
+        assert!(rules_of(&t.validate(), "scenario-replay-trace").is_empty());
+        t.source_dir = Some(dir.path().display().to_string());
+        let result = t.validate();
+        let traces = rules_of(&result, "scenario-replay-trace");
+        assert_eq!(traces.len(), 2, "{traces:?}");
+        assert!(!rules_of(&result, "assertion-endpoint-exists").is_empty());
+    }
+
     #[test]
     fn loss_correlation_warns_with_the_effective_rate() {
         let result = parse_and_validate(

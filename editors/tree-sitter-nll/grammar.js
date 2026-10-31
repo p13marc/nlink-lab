@@ -709,7 +709,16 @@ module.exports = grammar({
         ),
         seq("partition", $.endpoint, optional("both")),
         seq("heal", $.endpoint, optional("both")),
+        seq(
+          "replay",
+          choice($.endpoint, seq($._name, $._name, "--", $._name)),
+          $.string,
+          optional(seq("{", repeat($.replay_option), "}")),
+        ),
       ),
+
+    replay_option: ($) =>
+      choice("loop", seq("step", $._value), seq("dir", choice("out", "in", "both"))),
 
     benchmark_block: ($) =>
       seq("benchmark", $.string, "{", repeat($.benchmark_test), "}"),

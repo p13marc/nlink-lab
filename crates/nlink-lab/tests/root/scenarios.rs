@@ -304,3 +304,116 @@ async fn a_test_runs_scenarios_and_keeps_a_failed_lab() {
         .await
         .unwrap();
 }
+
+/// The netem delays (ms) on `iface` of `node`: its root's and every
+/// per-pair leaf's, read over netlink.
+async fn netem_delays(lab: &RunningLab, node: &str, iface: &str) -> Vec<f64> {
+    use nlink::netlink::tc_options::QdiscOptions;
+    let conn: nlink::Connection<nlink::Route> =
+        lab.ns_resolver_of(node).unwrap().connection().unwrap();
+    let mut out: Vec<f64> = conn
+        .get_qdiscs_by_name(iface)
+        .await
+        .unwrap()
+        .iter()
+        .filter_map(|q| match q.options() {
+            Some(QdiscOptions::Netem(n)) => n.delay().map(|d| d.as_secs_f64() * 1000.0),
+            _ => None,
+        })
+        .collect();
+    out.sort_by(f64::total_cmp);
+    out
+}
+
+/// A replayed trace reaches the kernel in time (#340): a scenario plays a
+/// trace that goes from 10 ms to 50 ms in 2 s, on an endpoint and on a
+/// per-pair rule. Sampled mid-way, both netems are where the trace is,
+/// within a step or so; after the scenario both are back at 1 ms.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_replayed_trace_reaches_the_kernel_in_time() {
+    use std::time::{Duration, Instant};
+    if !privileged("a_replayed_trace_reaches_the_kernel_in_time") {
+        return;
+    }
+    let lab_name = format!("rpl-{}", std::process::id());
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("ramp.csv"),
+        "t_ms,delay_ms\n0,10\n2000,50\n",
+    )
+    .unwrap();
+    let file = dir.path().join("lab.nll");
+    std::fs::write(
+        &file,
+        format!(
+            r#"lab "{lab_name}"
+node a
+node b
+node c
+link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24  delay 1ms }}
+network net {{
+  members [a:eth1, b:eth1, c:eth0]
+  subnet 10.0.5.0/24
+  impair a -- b {{ delay 1ms }}
+}}
+scenario "ramp" {{
+  at 0s {{
+    replay a:eth0 "ramp.csv" {{ step 100ms }}
+    replay net a -- b "ramp.csv" {{ step 100ms }}
+  }}
+  at 3s {{ log "done" }}
+}}
+"#
+        ),
+    )
+    .unwrap();
+    let topo = nlink_lab::parser::parse_file(&file).unwrap();
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let scenario = lab.topology().scenarios[0].clone();
+    let mut runner = lab.clone();
+    let started = Instant::now();
+    let run = tokio::spawn(async move {
+        nlink_lab::scenario::run_scenario_with(&mut runner, &scenario, &nlink_lab::OpCtx::default())
+            .await
+    });
+    for at in [Duration::from_millis(700), Duration::from_millis(1400)] {
+        tokio::time::sleep_until((started + at).into()).await;
+        let want = 10.0 + 20.0 * started.elapsed().as_secs_f64();
+        let root = netem_delays(&lab, "a", "eth0").await;
+        let leaves = netem_delays(&lab, "a", "eth1").await;
+        // a step is 2 ms of this ramp; allow for the scheduling around it
+        let near = |v: f64| (v - want).abs() < 8.0;
+        assert!(
+            root.iter().any(|v| near(*v)),
+            "endpoint {root:?}, trace at {want:.1}"
+        );
+        assert!(
+            leaves.iter().any(|v| near(*v)),
+            "pair {leaves:?}, trace at {want:.1}"
+        );
+    }
+    let result = run.await.unwrap().expect("the scenario ran");
+    assert!(result.passed, "{result:?}");
+    assert!(
+        result
+            .cleanup
+            .iter()
+            .any(|a| a.description.contains("replay") && a.description.contains("put back")),
+        "{:?}",
+        result.cleanup
+    );
+    assert_eq!(
+        netem_delays(&lab, "a", "eth0").await,
+        [1.0],
+        "the endpoint is back"
+    );
+    assert!(
+        netem_delays(&lab, "a", "eth1").await.contains(&1.0),
+        "the pair rule is back"
+    );
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}

@@ -573,6 +573,16 @@ fn merge_import(main: &mut types::Topology, alias: &str, imported: types::Topolo
                         *src = prefix_endpoint(alias, src);
                         *dst = prefix_endpoint(alias, dst);
                     }
+                    types::ScenarioAction::Replay { target, .. } => match target {
+                        crate::replay::ReplayTarget::Endpoint { endpoint, .. } => {
+                            *endpoint = prefix_endpoint(alias, endpoint)
+                        }
+                        crate::replay::ReplayTarget::Pair { network, src, dst } => {
+                            *network = format!("{alias}-{network}");
+                            *src = prefix_endpoint(alias, src);
+                            *dst = prefix_endpoint(alias, dst);
+                        }
+                    },
                 }
             }
         }
@@ -1626,6 +1636,30 @@ fn prefix_statement(st: ast::Statement, prefix: &str) -> ast::Statement {
                                 rule,
                             }
                         }
+                        ast::ScenarioActionDef::Replay {
+                            target,
+                            file,
+                            step,
+                            looped,
+                            dir,
+                        } => ast::ScenarioActionDef::Replay {
+                            target: match target {
+                                ast::ReplayTargetDef::Endpoint(ep) => {
+                                    ast::ReplayTargetDef::Endpoint(prefix_ep(prefix, &ep))
+                                }
+                                ast::ReplayTargetDef::Pair { network, src, dst } => {
+                                    ast::ReplayTargetDef::Pair {
+                                        network: format!("{prefix}{network}"),
+                                        src: prefix_ep(prefix, &src),
+                                        dst: prefix_ep(prefix, &dst),
+                                    }
+                                }
+                            },
+                            file,
+                            step,
+                            looped,
+                            dir,
+                        },
                         // a log line names nothing
                         ast::ScenarioActionDef::Log(m) => ast::ScenarioActionDef::Log(m),
                     })
@@ -2326,6 +2360,30 @@ fn interpolate_statement(stmt: &ast::Statement, vars: &BTreeMap<String, String>)
                                     rule: interpolate_network_impair(rule, vars),
                                 }
                             }
+                            ast::ScenarioActionDef::Replay {
+                                target,
+                                file,
+                                step,
+                                looped,
+                                dir,
+                            } => ast::ScenarioActionDef::Replay {
+                                target: match target {
+                                    ast::ReplayTargetDef::Endpoint(ep) => {
+                                        ast::ReplayTargetDef::Endpoint(i(ep, vars))
+                                    }
+                                    ast::ReplayTargetDef::Pair { network, src, dst } => {
+                                        ast::ReplayTargetDef::Pair {
+                                            network: i(network, vars),
+                                            src: i(src, vars),
+                                            dst: i(dst, vars),
+                                        }
+                                    }
+                                },
+                                file: i(file, vars),
+                                step: iv(step, vars),
+                                looped: *looped,
+                                dir: dir.as_ref().map(|d| i(d, vars)),
+                            },
                         })
                         .collect(),
                 })
@@ -4399,6 +4457,56 @@ fn lower_scenario(s: &ast::ScenarioDef) -> Result<types::Scenario> {
                         dst: rule.dst.clone(),
                         impairment: lower_impair_props(&rule.props)?,
                         rate_cap: rule.rate_cap.as_ref().map(ast::Val::to_text).transpose()?,
+                    }
+                }
+                ast::ScenarioActionDef::Replay {
+                    target,
+                    file,
+                    step,
+                    looped,
+                    dir,
+                } => {
+                    use nlink_lab_shared::api::Direction;
+                    let target = match target {
+                        ast::ReplayTargetDef::Endpoint(endpoint) => {
+                            let dir = match dir.as_deref() {
+                                None | Some("out") => Direction::Out,
+                                Some("in") => Direction::In,
+                                Some("both") => Direction::Both,
+                                Some(other) => {
+                                    return Err(crate::Error::NllParse(format!(
+                                        "replay {endpoint}: `dir {other}` (expected out, in or both)"
+                                    )));
+                                }
+                            };
+                            crate::replay::ReplayTarget::Endpoint {
+                                endpoint: endpoint.clone(),
+                                dir,
+                            }
+                        }
+                        ast::ReplayTargetDef::Pair { network, src, dst } => {
+                            if dir.is_some() {
+                                return Err(crate::Error::NllParse(format!(
+                                    "replay {network} {src} -- {dst}: `dir` is for an endpoint; a pair \
+                                     rule has its direction"
+                                )));
+                            }
+                            crate::replay::ReplayTarget::Pair {
+                                network: network.clone(),
+                                src: src.clone(),
+                                dst: dst.clone(),
+                            }
+                        }
+                    };
+                    let step_ms = match step {
+                        Some(s) => s.to_value()?.as_millis() as u64,
+                        None => types::DEFAULT_REPLAY_STEP_MS,
+                    };
+                    types::ScenarioAction::Replay {
+                        target,
+                        file: file.clone(),
+                        step_ms,
+                        looped: *looped,
                     }
                 }
                 ast::ScenarioActionDef::Validate(assertions) => {

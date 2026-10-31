@@ -120,3 +120,34 @@ scenario "faults" {
         (impairment_properties
           (duration))
         (rate)))))
+
+================
+Scenario replays
+================
+scenario "lte" {
+  at 0s {
+    replay wan:eth0 "traces/lte.csv" { loop step 100ms dir both }
+    replay lan h1 -- h2 "traces/wifi.csv"
+  }
+}
+---
+
+(source_file
+  (scenario_block
+    (string)
+    (scenario_step
+      (duration)
+      (scenario_action
+        (endpoint
+          (identifier)
+          (identifier))
+        (string)
+        (replay_option)
+        (replay_option
+          (duration))
+        (replay_option))
+      (scenario_action
+        (identifier)
+        (identifier)
+        (identifier)
+        (string)))))

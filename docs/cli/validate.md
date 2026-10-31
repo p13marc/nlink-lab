@@ -16,8 +16,8 @@ resolved IP addresses an auto-assigned subnet would produce.
 
 `validate` does not require root. Safe to run anywhere.
 
-The validator runs <!-- count:validator-rules -->82<!-- /count --> rules, each with a stable id
-(<!-- count:validator-errors -->68<!-- /count --> errors, which block a deploy, and
+The validator runs <!-- count:validator-rules -->83<!-- /count --> rules, each with a stable id
+(<!-- count:validator-errors -->69<!-- /count --> errors, which block a deploy, and
 <!-- count:validator-warnings -->14<!-- /count --> warnings): CIDR validity, endpoint format
 (`node:iface`), dangling node and profile references, interface
 uniqueness and name length, VLAN ranges, impairment, rate-limit and

@@ -38,6 +38,21 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Replay a recorded link** (#340). A scenario step `replay EP
+  "trace.csv" { loop  step 100ms  dir both }` (or `replay NETWORK SRC --
+  DST "trace.csv"`) plays a CSV of delay, jitter, loss and rate over time
+  (`t_s,delay_ms,jitter_ms,loss_pct,rate_kbit`, units in the header)
+  beside the rest of the scenario: every `step` the interpolated values
+  become the endpoint's or the pair rule's impairment (the HTB cap of a
+  rule with a `rate-cap`), changing only what changed; `loop` starts over.
+  The ticks hold the lab's lock but do not rewrite its state; when the
+  scenario ends the lab is put back (or kept, with `keep`). In a seeded
+  lab each tick gets a netem seed of its own. `nlink-lab impair EP
+  --replay FILE [--step D] [--loop]` (and `--pair`) plays one in the
+  foreground. Validator rule `scenario-replay-trace` reads the trace;
+  `RunningLab::set_pair_impairment` changes one pair rule and reconciles
+  only its source node. `examples/scenario-replay.nll` plays
+  `examples/traces/lte-synthetic.csv`, a synthetic trace.
 - **Failure bundles** (#338): everything needed to debug a failed lab
   test, kept after the lab is gone. A `#[lab_test]` whose body panics or
   times out writes `target/nlink-lab/<test>/` (or

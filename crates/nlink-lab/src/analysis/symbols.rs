@@ -445,6 +445,7 @@ pub const BLOCK_KEYWORDS: &[(&str, &[&str])] = &[
             "impair",
             "partition",
             "heal",
+            "replay",
             "validate",
             "exec",
             "log",

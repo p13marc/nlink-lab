@@ -74,6 +74,7 @@ fn action_text(a: &nlink_lab::types::ScenarioAction) -> String {
         ScenarioAction::PairImpair {
             network, src, dst, ..
         } => format!("impair {network} {src} -- {dst}"),
+        ScenarioAction::Replay { target, file, .. } => format!("replay {target} {file}"),
     }
 }
 

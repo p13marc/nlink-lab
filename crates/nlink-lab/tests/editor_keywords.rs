@@ -110,7 +110,7 @@ fn tree_sitter_grammar_mentions_every_keyword() {
 /// but are accepted contextually by the parser as plain identifiers
 /// (enum-like values such as `hosts`/`off`, `ipv4`/`ipv6`, `above`/`below`).
 const GRAMMAR_VALUE_WORDS: &[&str] = &[
-    "above", "auto", "below", "hosts", "ipv4", "ipv6", "manual", "off",
+    "above", "auto", "below", "hosts", "ipv4", "ipv6", "manual", "off", "out",
 ];
 
 /// The reverse gate: every quoted word in `grammar.js` that looks like a

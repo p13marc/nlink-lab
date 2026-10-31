@@ -723,3 +723,109 @@ async fn a_failed_test_run_names_its_bundle() {
     assert!(tap.contains("failure bundle"), "{tap}");
     assert!(!nlink_lab::state::exists(&name), "the lab is destroyed");
 }
+
+// ─── #328: the lab handles ───
+
+fn handles_topology() -> nlink_lab::Topology {
+    nlink_lab::parser::parse(&format!(
+        r#"lab "hnd-{}"
+node server
+node client
+node a
+node b
+link client:eth0 -- server:eth0 {{ 10.0.0.2/24 -- 10.0.0.1/24 }}
+network lan {{
+  members [a:eth0, b:eth0]
+  subnet 10.0.5.0/24
+}}
+"#,
+        std::process::id()
+    ))
+    .unwrap()
+}
+
+/// The first IPv4 address of `node`'s `iface`, without its prefix.
+fn v4_of(node: &nlink_lab::Node, iface: &str) -> String {
+    let addrs = node.addresses().unwrap();
+    addrs[iface]
+        .iter()
+        .find(|a| !a.contains(':'))
+        .and_then(|a| a.split('/').next())
+        .unwrap_or_else(|| panic!("{} has no IPv4 on {iface}: {addrs:?}", node.name()))
+        .to_string()
+}
+
+/// #328: `#[lab_test]` hands out a `Lab`. Its lookups name the close
+/// matches; one task waits on a process while another impairs the link,
+/// through clones; partition and heal; a per-pair rule on a network;
+/// spawn and kill check the node.
+#[lab_test(topology = handles_topology)]
+async fn the_lab_handles_drive_a_lab(lab: Lab) {
+    use nlink_lab::prelude::*;
+    let err = lab.node("serer").unwrap_err().to_string();
+    assert!(err.contains("did you mean server"), "{err}");
+    let (server, client) = (lab.node("server").unwrap(), lab.node("client").unwrap());
+    assert!(client.iface("eth9").is_err());
+    let eth0 = lab.endpoint("client:eth0").unwrap();
+    assert_eq!(eth0.peer().unwrap().endpoint(), "server:eth0");
+
+    // a wait and an impairment at the same time, from two tasks
+    let pid = server.spawn(&["sleep", "30"]).await.unwrap();
+    let (waiter, impairer) = (server.clone(), eth0.clone());
+    let wait = tokio::spawn(async move { waiter.wait_for_exec("true", secs(10)).await });
+    let imp = tokio::spawn(async move { impairer.impair(&Netem::new().delay(ms(40))).await });
+    imp.await.unwrap().unwrap();
+    wait.await.unwrap().unwrap();
+    let rtt = avg_rtt_ms(&lab.engine().unwrap(), "client", "10.0.0.1");
+    assert!(rtt >= 40.0, "rtt {rtt} ms, 40 ms delay");
+
+    // partition and heal, from a clone
+    let cut = eth0.clone();
+    tokio::spawn(async move { cut.partition().await })
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(eth0.is_partitioned().unwrap());
+    let ping = client.exec("ping", &["-c1", "-W1", "10.0.0.1"]).unwrap();
+    assert_ne!(ping.exit_code, 0, "a partitioned link carries nothing");
+    eth0.heal().await.unwrap();
+    assert!(!eth0.is_partitioned().unwrap());
+    eth0.clear_impairment().await.unwrap();
+
+    // a per-pair rule
+    let (a, b) = (lab.node("a").unwrap(), lab.node("b").unwrap());
+    let to_b = v4_of(&b, "eth0");
+    lab.network("lan")
+        .unwrap()
+        .impair_pair(&a, &b, &Netem::new().delay(ms(30)))
+        .await
+        .unwrap();
+    let rtt = avg_rtt_ms(&lab.engine().unwrap(), "a", &to_b);
+    assert!(rtt >= 30.0, "rtt {rtt} ms over the pair rule");
+
+    // processes belong to their node
+    assert_eq!(server.processes().unwrap().len(), 1);
+    assert!(client.kill(pid).is_err(), "not the client's process");
+    assert!(server.kill(pid).unwrap());
+}
+
+/// #328: once a lab is destroyed, every handle from it fails cleanly.
+#[tokio::test]
+async fn a_destroyed_labs_handles_fail() {
+    if !privileged("a_destroyed_labs_handles_fail") {
+        return;
+    }
+    let mut topo = handles_topology();
+    unique(&mut topo, "a_destroyed_labs_handles_fail");
+    let lab = nlink_lab::Lab::deploy(&topo).await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    let node = lab.node("client").unwrap();
+    let iface = node.iface("eth0").unwrap();
+    std::mem::forget(_guard);
+    lab.clone().destroy().await.expect("destroy failed");
+    assert!(node.exec("true", &[]).is_err());
+    assert!(iface.partition().await.is_err());
+    assert!(lab.node("client").is_err());
+}

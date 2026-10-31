@@ -1,6 +1,9 @@
 pub mod nlink_lab
+pub use nlink_lab::AssertionResult
 pub use nlink_lab::CancelToken
+pub use nlink_lab::LabInfo
 pub use nlink_lab::OpCtx
+pub use nlink_lab::ProcStat
 pub use nlink_lab::ProgressSink
 pub use nlink_lab::api
 pub use nlink_lab::lab_test
@@ -189,6 +192,11 @@ pub nlink_lab::error::Error::State::op: &'static str
 pub nlink_lab::error::Error::State::path: std::path::PathBuf
 pub nlink_lab::error::Error::TimedOut(alloc::string::String)
 pub nlink_lab::error::Error::Timeout(core::time::Duration)
+pub nlink_lab::error::Error::Unknown
+pub nlink_lab::error::Error::Unknown::hint: alloc::string::String
+pub nlink_lab::error::Error::Unknown::lab: alloc::string::String
+pub nlink_lab::error::Error::Unknown::name: alloc::string::String
+pub nlink_lab::error::Error::Unknown::what: &'static str
 pub nlink_lab::error::Error::Unsupported(alloc::string::String)
 pub nlink_lab::error::Error::Validation(alloc::string::String)
 pub nlink_lab::error::Error::ValidationErrors(alloc::vec::Vec<nlink_lab::validator::ValidationIssue>)
@@ -223,6 +231,108 @@ pub fn nlink_lab::error::NllDiagnostic::help(&self) -> core::option::Option<allo
 pub fn nlink_lab::error::NllDiagnostic::labels(&self) -> core::option::Option<alloc::boxed::Box<(dyn core::iter::traits::iterator::Iterator<Item = miette::protocol::LabeledSpan> + '_)>>
 pub fn nlink_lab::error::NllDiagnostic::source_code(&self) -> core::option::Option<&dyn miette::protocol::SourceCode>
 pub type nlink_lab::error::Result<T> = core::result::Result<T, nlink_lab::error::Error>
+pub mod nlink_lab::lab
+pub struct nlink_lab::lab::Iface
+impl nlink_lab::lab::Iface
+pub async fn nlink_lab::lab::Iface::clear_impairment(&self) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::lab::Iface::endpoint(&self) -> alloc::string::String
+pub async fn nlink_lab::lab::Iface::heal(&self) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Iface::impair(&self, netem: &nlink_lab::lab::Netem) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Iface::impair_dir(&self, netem: &nlink_lab::lab::Netem, dir: nlink_lab_shared::api::dto::Direction) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::lab::Iface::is_partitioned(&self) -> nlink_lab::error::Result<bool>
+pub fn nlink_lab::lab::Iface::name(&self) -> &str
+pub fn nlink_lab::lab::Iface::node(&self) -> nlink_lab::lab::Node
+pub async fn nlink_lab::lab::Iface::partition(&self) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::lab::Iface::peer(&self) -> nlink_lab::error::Result<nlink_lab::lab::Iface>
+pub async fn nlink_lab::lab::Iface::set_mtu(&self, mtu: u32) -> nlink_lab::error::Result<()>
+impl core::fmt::Debug for nlink_lab::lab::Iface
+pub fn nlink_lab::lab::Iface::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct nlink_lab::lab::Lab(_)
+impl nlink_lab::lab::Lab
+pub fn nlink_lab::lab::Lab::assertion_results(&self) -> nlink_lab::error::Result<alloc::vec::Vec<crate::test_runner::AssertionResult>>
+pub fn nlink_lab::lab::Lab::attach(name: &str) -> nlink_lab::error::Result<nlink_lab::lab::Lab>
+pub async fn nlink_lab::lab::Lab::collect_bundle(&self, dir: &std::path::Path, opts: &nlink_lab::bundle::BundleOptions) -> nlink_lab::error::Result<nlink_lab::bundle::BundleReport>
+pub async fn nlink_lab::lab::Lab::deploy(topology: &nlink_lab::types::Topology) -> nlink_lab::error::Result<nlink_lab::lab::Lab>
+pub async fn nlink_lab::lab::Lab::deploy_with(topology: &nlink_lab::types::Topology, ctx: &crate::OpCtx) -> nlink_lab::error::Result<nlink_lab::lab::Lab>
+pub async fn nlink_lab::lab::Lab::destroy(self) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Lab::diagnose(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::NodeDiagnostic>>
+pub fn nlink_lab::lab::Lab::endpoint(&self, endpoint: &str) -> nlink_lab::error::Result<nlink_lab::lab::Iface>
+pub fn nlink_lab::lab::Lab::list() -> nlink_lab::error::Result<alloc::vec::Vec<crate::state::LabInfo>>
+pub fn nlink_lab::lab::Lab::name(&self) -> &str
+pub fn nlink_lab::lab::Lab::network(&self, name: &str) -> nlink_lab::error::Result<nlink_lab::lab::Network>
+pub fn nlink_lab::lab::Lab::node(&self, name: &str) -> nlink_lab::error::Result<nlink_lab::lab::Node>
+pub fn nlink_lab::lab::Lab::nodes(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::lab::Node>>
+pub fn nlink_lab::lab::Lab::processes(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::ProcessInfo>>
+pub fn nlink_lab::lab::Lab::seed(&self) -> nlink_lab::error::Result<core::option::Option<u64>>
+pub fn nlink_lab::lab::Lab::topology(&self) -> nlink_lab::error::Result<nlink_lab::types::Topology>
+impl core::fmt::Debug for nlink_lab::lab::Lab
+pub fn nlink_lab::lab::Lab::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct nlink_lab::lab::Netem
+impl nlink_lab::lab::Netem
+pub fn nlink_lab::lab::Netem::corrupt(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::delay(self, value: core::time::Duration) -> Self
+pub fn nlink_lab::lab::Netem::delay_correlation(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::duplicate(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::jitter(self, value: core::time::Duration) -> Self
+pub fn nlink_lab::lab::Netem::limit(self, value: u32) -> Self
+pub fn nlink_lab::lab::Netem::loss(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::loss_correlation(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::new() -> Self
+pub fn nlink_lab::lab::Netem::rate(self, value: nlink_lab::lab::Rate) -> Self
+pub fn nlink_lab::lab::Netem::reorder(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::seed(self, value: u64) -> Self
+pub fn nlink_lab::lab::Netem::to_impairment(&self) -> nlink_lab::types::Impairment
+pub struct nlink_lab::lab::Network
+impl nlink_lab::lab::Network
+pub async fn nlink_lab::lab::Network::clear_pair(&self, src: &nlink_lab::lab::Node, dst: &nlink_lab::lab::Node) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Network::impair_pair(&self, src: &nlink_lab::lab::Node, dst: &nlink_lab::lab::Node, netem: &nlink_lab::lab::Netem) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::lab::Network::name(&self) -> &str
+impl core::fmt::Debug for nlink_lab::lab::Network
+pub fn nlink_lab::lab::Network::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct nlink_lab::lab::Node
+impl nlink_lab::lab::Node
+pub fn nlink_lab::lab::Node::addresses(&self) -> nlink_lab::error::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::vec::Vec<alloc::string::String>>>
+pub async fn nlink_lab::lab::Node::conntrack(&self, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab_shared::api::dto::ConntrackFlow>>
+pub async fn nlink_lab::lab::Node::diagnose(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::NodeDiagnostic>>
+pub fn nlink_lab::lab::Node::exec(&self, cmd: &str, args: &[&str]) -> nlink_lab::error::Result<nlink_lab::running::ExecOutput>
+pub fn nlink_lab::lab::Node::exec_attached(&self, cmd: &str, args: &[&str]) -> nlink_lab::error::Result<i32>
+pub fn nlink_lab::lab::Node::exec_with_opts(&self, cmd: &str, args: &[&str], opts: nlink_lab::running::ExecOpts<'_>) -> nlink_lab::error::Result<nlink_lab::running::ExecOutput>
+pub async fn nlink_lab::lab::Node::firewall_counters(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::FirewallCounter>>
+pub async fn nlink_lab::lab::Node::flush_conntrack(&self, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<usize>
+pub fn nlink_lab::lab::Node::iface(&self, name: &str) -> nlink_lab::error::Result<nlink_lab::lab::Iface>
+pub fn nlink_lab::lab::Node::ifaces(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::lab::Iface>>
+pub fn nlink_lab::lab::Node::kill(&self, pid: u32) -> nlink_lab::error::Result<bool>
+pub fn nlink_lab::lab::Node::lab(&self) -> &nlink_lab::lab::Lab
+pub fn nlink_lab::lab::Node::name(&self) -> &str
+pub fn nlink_lab::lab::Node::proc_stat(&self, pid: u32) -> nlink_lab::error::Result<crate::proc_stat::ProcStat>
+pub fn nlink_lab::lab::Node::proc_stat_all(&self) -> nlink_lab::error::Result<alloc::vec::Vec<crate::proc_stat::ProcStat>>
+pub fn nlink_lab::lab::Node::processes(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::ProcessInfo>>
+pub async fn nlink_lab::lab::Node::routes_to(&self, dst: core::net::ip_addr::IpAddr, prefix_len: u8) -> nlink_lab::error::Result<alloc::vec::Vec<alloc::vec::Vec<nlink_lab::running::RouteHop>>>
+pub fn nlink_lab::lab::Node::signal(&self, pid: u32, signal: nlink_lab::running::Signal) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::spawn(&self, cmd: &[&str]) -> nlink_lab::error::Result<u32>
+pub async fn nlink_lab::lab::Node::spawn_with(&self, cmd: &[&str], env: &[(&str, &str)], workdir: core::option::Option<&std::path::Path>, log_dir: core::option::Option<&std::path::Path>) -> nlink_lab::error::Result<u32>
+pub fn nlink_lab::lab::Node::tcp_connect(&self, addr: core::net::socket_addr::SocketAddr, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::wait_for_exec(&self, cmd: &str, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::wait_for_file(&self, path: &str, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::wait_for_log_line(&self, pid: u32, pattern: &regex::regex::string::Regex, stream: nlink_lab::running::LogStream, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::wait_for_port(&self, pid: core::option::Option<u32>, port: u16, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::wait_for_tcp(&self, ip: &str, port: u16, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+impl core::fmt::Debug for nlink_lab::lab::Node
+pub fn nlink_lab::lab::Node::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct nlink_lab::lab::Percent(_)
+impl core::fmt::Display for nlink_lab::lab::Percent
+pub fn nlink_lab::lab::Percent::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct nlink_lab::lab::Rate(_)
+impl core::fmt::Display for nlink_lab::lab::Rate
+pub fn nlink_lab::lab::Rate::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn nlink_lab::lab::bps(n: u64) -> nlink_lab::lab::Rate
+pub fn nlink_lab::lab::gbit(n: u64) -> nlink_lab::lab::Rate
+pub fn nlink_lab::lab::kbit(n: u64) -> nlink_lab::lab::Rate
+pub fn nlink_lab::lab::mbit(n: u64) -> nlink_lab::lab::Rate
+pub fn nlink_lab::lab::ms(n: u64) -> core::time::Duration
+pub fn nlink_lab::lab::pct(n: f64) -> nlink_lab::lab::Percent
+pub fn nlink_lab::lab::secs(n: u64) -> core::time::Duration
+pub fn nlink_lab::lab::us(n: u64) -> core::time::Duration
 pub mod nlink_lab::parser
 pub mod nlink_lab::parser::nll
 pub mod nlink_lab::parser::nll::lexer
@@ -370,6 +480,11 @@ pub nlink_lab::prelude::Error::State::op: &'static str
 pub nlink_lab::prelude::Error::State::path: std::path::PathBuf
 pub nlink_lab::prelude::Error::TimedOut(alloc::string::String)
 pub nlink_lab::prelude::Error::Timeout(core::time::Duration)
+pub nlink_lab::prelude::Error::Unknown
+pub nlink_lab::prelude::Error::Unknown::hint: alloc::string::String
+pub nlink_lab::prelude::Error::Unknown::lab: alloc::string::String
+pub nlink_lab::prelude::Error::Unknown::name: alloc::string::String
+pub nlink_lab::prelude::Error::Unknown::what: &'static str
 pub nlink_lab::prelude::Error::Unsupported(alloc::string::String)
 pub nlink_lab::prelude::Error::Validation(alloc::string::String)
 pub nlink_lab::prelude::Error::ValidationErrors(alloc::vec::Vec<nlink_lab::validator::ValidationIssue>)
@@ -395,6 +510,21 @@ pub struct nlink_lab::prelude::ExecOutput
 pub nlink_lab::prelude::ExecOutput::exit_code: i32
 pub nlink_lab::prelude::ExecOutput::stderr: alloc::string::String
 pub nlink_lab::prelude::ExecOutput::stdout: alloc::string::String
+pub struct nlink_lab::prelude::Iface
+impl nlink_lab::lab::Iface
+pub async fn nlink_lab::lab::Iface::clear_impairment(&self) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::lab::Iface::endpoint(&self) -> alloc::string::String
+pub async fn nlink_lab::lab::Iface::heal(&self) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Iface::impair(&self, netem: &nlink_lab::lab::Netem) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Iface::impair_dir(&self, netem: &nlink_lab::lab::Netem, dir: nlink_lab_shared::api::dto::Direction) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::lab::Iface::is_partitioned(&self) -> nlink_lab::error::Result<bool>
+pub fn nlink_lab::lab::Iface::name(&self) -> &str
+pub fn nlink_lab::lab::Iface::node(&self) -> nlink_lab::lab::Node
+pub async fn nlink_lab::lab::Iface::partition(&self) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::lab::Iface::peer(&self) -> nlink_lab::error::Result<nlink_lab::lab::Iface>
+pub async fn nlink_lab::lab::Iface::set_mtu(&self, mtu: u32) -> nlink_lab::error::Result<()>
+impl core::fmt::Debug for nlink_lab::lab::Iface
+pub fn nlink_lab::lab::Iface::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct nlink_lab::prelude::Impairment
 pub nlink_lab::prelude::Impairment::corrupt: core::option::Option<alloc::string::String>
 pub nlink_lab::prelude::Impairment::delay: core::option::Option<alloc::string::String>
@@ -418,6 +548,78 @@ impl core::convert::From<&nlink_lab::types::Impairment> for nlink_lab_shared::ap
 pub fn nlink_lab_shared::api::dto::ImpairmentSpec::from(i: &nlink_lab::types::Impairment) -> Self
 impl core::convert::From<&nlink_lab_shared::api::dto::ImpairmentSpec> for nlink_lab::types::Impairment
 pub fn nlink_lab::types::Impairment::from(s: &nlink_lab_shared::api::dto::ImpairmentSpec) -> Self
+pub struct nlink_lab::prelude::Lab(_)
+impl nlink_lab::lab::Lab
+pub fn nlink_lab::lab::Lab::assertion_results(&self) -> nlink_lab::error::Result<alloc::vec::Vec<crate::test_runner::AssertionResult>>
+pub fn nlink_lab::lab::Lab::attach(name: &str) -> nlink_lab::error::Result<nlink_lab::lab::Lab>
+pub async fn nlink_lab::lab::Lab::collect_bundle(&self, dir: &std::path::Path, opts: &nlink_lab::bundle::BundleOptions) -> nlink_lab::error::Result<nlink_lab::bundle::BundleReport>
+pub async fn nlink_lab::lab::Lab::deploy(topology: &nlink_lab::types::Topology) -> nlink_lab::error::Result<nlink_lab::lab::Lab>
+pub async fn nlink_lab::lab::Lab::deploy_with(topology: &nlink_lab::types::Topology, ctx: &crate::OpCtx) -> nlink_lab::error::Result<nlink_lab::lab::Lab>
+pub async fn nlink_lab::lab::Lab::destroy(self) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Lab::diagnose(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::NodeDiagnostic>>
+pub fn nlink_lab::lab::Lab::endpoint(&self, endpoint: &str) -> nlink_lab::error::Result<nlink_lab::lab::Iface>
+pub fn nlink_lab::lab::Lab::list() -> nlink_lab::error::Result<alloc::vec::Vec<crate::state::LabInfo>>
+pub fn nlink_lab::lab::Lab::name(&self) -> &str
+pub fn nlink_lab::lab::Lab::network(&self, name: &str) -> nlink_lab::error::Result<nlink_lab::lab::Network>
+pub fn nlink_lab::lab::Lab::node(&self, name: &str) -> nlink_lab::error::Result<nlink_lab::lab::Node>
+pub fn nlink_lab::lab::Lab::nodes(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::lab::Node>>
+pub fn nlink_lab::lab::Lab::processes(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::ProcessInfo>>
+pub fn nlink_lab::lab::Lab::seed(&self) -> nlink_lab::error::Result<core::option::Option<u64>>
+pub fn nlink_lab::lab::Lab::topology(&self) -> nlink_lab::error::Result<nlink_lab::types::Topology>
+impl core::fmt::Debug for nlink_lab::lab::Lab
+pub fn nlink_lab::lab::Lab::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct nlink_lab::prelude::Netem
+impl nlink_lab::lab::Netem
+pub fn nlink_lab::lab::Netem::corrupt(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::delay(self, value: core::time::Duration) -> Self
+pub fn nlink_lab::lab::Netem::delay_correlation(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::duplicate(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::jitter(self, value: core::time::Duration) -> Self
+pub fn nlink_lab::lab::Netem::limit(self, value: u32) -> Self
+pub fn nlink_lab::lab::Netem::loss(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::loss_correlation(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::new() -> Self
+pub fn nlink_lab::lab::Netem::rate(self, value: nlink_lab::lab::Rate) -> Self
+pub fn nlink_lab::lab::Netem::reorder(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::seed(self, value: u64) -> Self
+pub fn nlink_lab::lab::Netem::to_impairment(&self) -> nlink_lab::types::Impairment
+pub struct nlink_lab::prelude::Network
+impl nlink_lab::lab::Network
+pub async fn nlink_lab::lab::Network::clear_pair(&self, src: &nlink_lab::lab::Node, dst: &nlink_lab::lab::Node) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Network::impair_pair(&self, src: &nlink_lab::lab::Node, dst: &nlink_lab::lab::Node, netem: &nlink_lab::lab::Netem) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::lab::Network::name(&self) -> &str
+impl core::fmt::Debug for nlink_lab::lab::Network
+pub fn nlink_lab::lab::Network::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct nlink_lab::prelude::Node
+impl nlink_lab::lab::Node
+pub fn nlink_lab::lab::Node::addresses(&self) -> nlink_lab::error::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::vec::Vec<alloc::string::String>>>
+pub async fn nlink_lab::lab::Node::conntrack(&self, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab_shared::api::dto::ConntrackFlow>>
+pub async fn nlink_lab::lab::Node::diagnose(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::NodeDiagnostic>>
+pub fn nlink_lab::lab::Node::exec(&self, cmd: &str, args: &[&str]) -> nlink_lab::error::Result<nlink_lab::running::ExecOutput>
+pub fn nlink_lab::lab::Node::exec_attached(&self, cmd: &str, args: &[&str]) -> nlink_lab::error::Result<i32>
+pub fn nlink_lab::lab::Node::exec_with_opts(&self, cmd: &str, args: &[&str], opts: nlink_lab::running::ExecOpts<'_>) -> nlink_lab::error::Result<nlink_lab::running::ExecOutput>
+pub async fn nlink_lab::lab::Node::firewall_counters(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::FirewallCounter>>
+pub async fn nlink_lab::lab::Node::flush_conntrack(&self, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<usize>
+pub fn nlink_lab::lab::Node::iface(&self, name: &str) -> nlink_lab::error::Result<nlink_lab::lab::Iface>
+pub fn nlink_lab::lab::Node::ifaces(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::lab::Iface>>
+pub fn nlink_lab::lab::Node::kill(&self, pid: u32) -> nlink_lab::error::Result<bool>
+pub fn nlink_lab::lab::Node::lab(&self) -> &nlink_lab::lab::Lab
+pub fn nlink_lab::lab::Node::name(&self) -> &str
+pub fn nlink_lab::lab::Node::proc_stat(&self, pid: u32) -> nlink_lab::error::Result<crate::proc_stat::ProcStat>
+pub fn nlink_lab::lab::Node::proc_stat_all(&self) -> nlink_lab::error::Result<alloc::vec::Vec<crate::proc_stat::ProcStat>>
+pub fn nlink_lab::lab::Node::processes(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::ProcessInfo>>
+pub async fn nlink_lab::lab::Node::routes_to(&self, dst: core::net::ip_addr::IpAddr, prefix_len: u8) -> nlink_lab::error::Result<alloc::vec::Vec<alloc::vec::Vec<nlink_lab::running::RouteHop>>>
+pub fn nlink_lab::lab::Node::signal(&self, pid: u32, signal: nlink_lab::running::Signal) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::spawn(&self, cmd: &[&str]) -> nlink_lab::error::Result<u32>
+pub async fn nlink_lab::lab::Node::spawn_with(&self, cmd: &[&str], env: &[(&str, &str)], workdir: core::option::Option<&std::path::Path>, log_dir: core::option::Option<&std::path::Path>) -> nlink_lab::error::Result<u32>
+pub fn nlink_lab::lab::Node::tcp_connect(&self, addr: core::net::socket_addr::SocketAddr, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::wait_for_exec(&self, cmd: &str, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::wait_for_file(&self, path: &str, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::wait_for_log_line(&self, pid: u32, pattern: &regex::regex::string::Regex, stream: nlink_lab::running::LogStream, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::wait_for_port(&self, pid: core::option::Option<u32>, port: u16, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::wait_for_tcp(&self, ip: &str, port: u16, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+impl core::fmt::Debug for nlink_lab::lab::Node
+pub fn nlink_lab::lab::Node::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct nlink_lab::prelude::RunningLab
 impl nlink_lab::running::RunningLab
 pub fn nlink_lab::running::RunningLab::assertion_results(&self) -> &[crate::test_runner::AssertionResult]
@@ -546,8 +748,16 @@ pub fn nlink_lab::builder::TopologyBuilder::profile(self, name: &str, f: impl co
 pub fn nlink_lab::builder::TopologyBuilder::qdisc(self, endpoint: &str, kind: nlink_lab::types::QdiscKind) -> Self
 pub fn nlink_lab::builder::TopologyBuilder::rate_limit(self, endpoint: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::RateLimitBuilder) -> nlink_lab::builder::RateLimitBuilder) -> Self
 pub fn nlink_lab::builder::TopologyBuilder::runtime(self, runtime: nlink_lab::types::ContainerRuntime) -> Self
+pub fn nlink_lab::prelude::bps(n: u64) -> nlink_lab::lab::Rate
 pub fn nlink_lab::prelude::feature(test_name: &str, what: &str, present: bool) -> bool
+pub fn nlink_lab::prelude::gbit(n: u64) -> nlink_lab::lab::Rate
+pub fn nlink_lab::prelude::kbit(n: u64) -> nlink_lab::lab::Rate
+pub fn nlink_lab::prelude::mbit(n: u64) -> nlink_lab::lab::Rate
+pub fn nlink_lab::prelude::ms(n: u64) -> core::time::Duration
+pub fn nlink_lab::prelude::pct(n: f64) -> nlink_lab::lab::Percent
 pub fn nlink_lab::prelude::privileged(test_name: &str) -> bool
+pub fn nlink_lab::prelude::secs(n: u64) -> core::time::Duration
+pub fn nlink_lab::prelude::us(n: u64) -> core::time::Duration
 pub type nlink_lab::prelude::Result<T> = core::result::Result<T, nlink_lab::error::Error>
 pub mod nlink_lab::running
 pub enum nlink_lab::running::LogStream
@@ -1382,6 +1592,11 @@ pub nlink_lab::Error::State::op: &'static str
 pub nlink_lab::Error::State::path: std::path::PathBuf
 pub nlink_lab::Error::TimedOut(alloc::string::String)
 pub nlink_lab::Error::Timeout(core::time::Duration)
+pub nlink_lab::Error::Unknown
+pub nlink_lab::Error::Unknown::hint: alloc::string::String
+pub nlink_lab::Error::Unknown::lab: alloc::string::String
+pub nlink_lab::Error::Unknown::name: alloc::string::String
+pub nlink_lab::Error::Unknown::what: &'static str
 pub nlink_lab::Error::Unsupported(alloc::string::String)
 pub nlink_lab::Error::Validation(alloc::string::String)
 pub nlink_lab::Error::ValidationErrors(alloc::vec::Vec<nlink_lab::validator::ValidationIssue>)
@@ -1481,6 +1696,21 @@ pub nlink_lab::FirewallRule::reject_with: core::option::Option<nlink_lab::types:
 pub nlink_lab::FirewallRule::set_mark: core::option::Option<nlink_lab::types::MarkValue>
 impl nlink_lab::types::FirewallRule
 pub fn nlink_lab::types::FirewallRule::has_statement(&self) -> bool
+pub struct nlink_lab::Iface
+impl nlink_lab::lab::Iface
+pub async fn nlink_lab::lab::Iface::clear_impairment(&self) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::lab::Iface::endpoint(&self) -> alloc::string::String
+pub async fn nlink_lab::lab::Iface::heal(&self) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Iface::impair(&self, netem: &nlink_lab::lab::Netem) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Iface::impair_dir(&self, netem: &nlink_lab::lab::Netem, dir: nlink_lab_shared::api::dto::Direction) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::lab::Iface::is_partitioned(&self) -> nlink_lab::error::Result<bool>
+pub fn nlink_lab::lab::Iface::name(&self) -> &str
+pub fn nlink_lab::lab::Iface::node(&self) -> nlink_lab::lab::Node
+pub async fn nlink_lab::lab::Iface::partition(&self) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::lab::Iface::peer(&self) -> nlink_lab::error::Result<nlink_lab::lab::Iface>
+pub async fn nlink_lab::lab::Iface::set_mtu(&self, mtu: u32) -> nlink_lab::error::Result<()>
+impl core::fmt::Debug for nlink_lab::lab::Iface
+pub fn nlink_lab::lab::Iface::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct nlink_lab::Impairment
 pub nlink_lab::Impairment::corrupt: core::option::Option<alloc::string::String>
 pub nlink_lab::Impairment::delay: core::option::Option<alloc::string::String>
@@ -1517,6 +1747,26 @@ pub nlink_lab::InterfaceConfig::remote: core::option::Option<alloc::string::Stri
 pub nlink_lab::InterfaceConfig::underlay: core::option::Option<alloc::string::String>
 pub nlink_lab::InterfaceConfig::vlan_protocol: core::option::Option<nlink_lab::types::VlanProtocol>
 pub nlink_lab::InterfaceConfig::vni: core::option::Option<u32>
+pub struct nlink_lab::Lab(_)
+impl nlink_lab::lab::Lab
+pub fn nlink_lab::lab::Lab::assertion_results(&self) -> nlink_lab::error::Result<alloc::vec::Vec<crate::test_runner::AssertionResult>>
+pub fn nlink_lab::lab::Lab::attach(name: &str) -> nlink_lab::error::Result<nlink_lab::lab::Lab>
+pub async fn nlink_lab::lab::Lab::collect_bundle(&self, dir: &std::path::Path, opts: &nlink_lab::bundle::BundleOptions) -> nlink_lab::error::Result<nlink_lab::bundle::BundleReport>
+pub async fn nlink_lab::lab::Lab::deploy(topology: &nlink_lab::types::Topology) -> nlink_lab::error::Result<nlink_lab::lab::Lab>
+pub async fn nlink_lab::lab::Lab::deploy_with(topology: &nlink_lab::types::Topology, ctx: &crate::OpCtx) -> nlink_lab::error::Result<nlink_lab::lab::Lab>
+pub async fn nlink_lab::lab::Lab::destroy(self) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Lab::diagnose(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::NodeDiagnostic>>
+pub fn nlink_lab::lab::Lab::endpoint(&self, endpoint: &str) -> nlink_lab::error::Result<nlink_lab::lab::Iface>
+pub fn nlink_lab::lab::Lab::list() -> nlink_lab::error::Result<alloc::vec::Vec<crate::state::LabInfo>>
+pub fn nlink_lab::lab::Lab::name(&self) -> &str
+pub fn nlink_lab::lab::Lab::network(&self, name: &str) -> nlink_lab::error::Result<nlink_lab::lab::Network>
+pub fn nlink_lab::lab::Lab::node(&self, name: &str) -> nlink_lab::error::Result<nlink_lab::lab::Node>
+pub fn nlink_lab::lab::Lab::nodes(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::lab::Node>>
+pub fn nlink_lab::lab::Lab::processes(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::ProcessInfo>>
+pub fn nlink_lab::lab::Lab::seed(&self) -> nlink_lab::error::Result<core::option::Option<u64>>
+pub fn nlink_lab::lab::Lab::topology(&self) -> nlink_lab::error::Result<nlink_lab::types::Topology>
+impl core::fmt::Debug for nlink_lab::lab::Lab
+pub fn nlink_lab::lab::Lab::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct nlink_lab::LabConfig
 pub nlink_lab::LabConfig::author: core::option::Option<alloc::string::String>
 pub nlink_lab::LabConfig::description: core::option::Option<alloc::string::String>
@@ -1542,57 +1792,58 @@ pub struct nlink_lab::Link
 pub nlink_lab::Link::addresses: core::option::Option<[alloc::string::String; 2]>
 pub nlink_lab::Link::endpoints: [alloc::string::String; 2]
 pub nlink_lab::Link::mtu: core::option::Option<u32>
+pub struct nlink_lab::Netem
+impl nlink_lab::lab::Netem
+pub fn nlink_lab::lab::Netem::corrupt(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::delay(self, value: core::time::Duration) -> Self
+pub fn nlink_lab::lab::Netem::delay_correlation(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::duplicate(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::jitter(self, value: core::time::Duration) -> Self
+pub fn nlink_lab::lab::Netem::limit(self, value: u32) -> Self
+pub fn nlink_lab::lab::Netem::loss(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::loss_correlation(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::new() -> Self
+pub fn nlink_lab::lab::Netem::rate(self, value: nlink_lab::lab::Rate) -> Self
+pub fn nlink_lab::lab::Netem::reorder(self, value: nlink_lab::lab::Percent) -> Self
+pub fn nlink_lab::lab::Netem::seed(self, value: u64) -> Self
+pub fn nlink_lab::lab::Netem::to_impairment(&self) -> nlink_lab::types::Impairment
 pub struct nlink_lab::Network
-pub nlink_lab::Network::impairments: alloc::vec::Vec<nlink_lab::types::NetworkImpairment>
-pub nlink_lab::Network::kind: core::option::Option<alloc::string::String>
-pub nlink_lab::Network::members: alloc::vec::Vec<alloc::string::String>
-pub nlink_lab::Network::mtu: core::option::Option<u32>
-pub nlink_lab::Network::ports: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::PortConfig>
-pub nlink_lab::Network::subnet: core::option::Option<alloc::string::String>
-pub nlink_lab::Network::vlan_filtering: core::option::Option<bool>
-pub nlink_lab::Network::vlans: alloc::collections::btree::map::BTreeMap<u16, nlink_lab::types::VlanConfig>
+impl nlink_lab::lab::Network
+pub async fn nlink_lab::lab::Network::clear_pair(&self, src: &nlink_lab::lab::Node, dst: &nlink_lab::lab::Node) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Network::impair_pair(&self, src: &nlink_lab::lab::Node, dst: &nlink_lab::lab::Node, netem: &nlink_lab::lab::Netem) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::lab::Network::name(&self) -> &str
+impl core::fmt::Debug for nlink_lab::lab::Network
+pub fn nlink_lab::lab::Network::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct nlink_lab::Node
-pub nlink_lab::Node::cap_add: alloc::vec::Vec<alloc::string::String>
-pub nlink_lab::Node::cap_drop: alloc::vec::Vec<alloc::string::String>
-pub nlink_lab::Node::cmd: core::option::Option<alloc::vec::Vec<alloc::string::String>>
-pub nlink_lab::Node::configs: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
-pub nlink_lab::Node::container_exec: alloc::vec::Vec<alloc::string::String>
-pub nlink_lab::Node::cpu: core::option::Option<alloc::string::String>
-pub nlink_lab::Node::depends_on: alloc::vec::Vec<alloc::string::String>
-pub nlink_lab::Node::entrypoint: core::option::Option<alloc::string::String>
-pub nlink_lab::Node::env: core::option::Option<alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>>
-pub nlink_lab::Node::env_file: core::option::Option<alloc::string::String>
-pub nlink_lab::Node::exec: alloc::vec::Vec<nlink_lab::types::ExecConfig>
-pub nlink_lab::Node::firewall: core::option::Option<nlink_lab::types::FirewallConfig>
-pub nlink_lab::Node::foreign: core::option::Option<nlink_lab::types::Foreign>
-pub nlink_lab::Node::frr: core::option::Option<nlink_lab::types::FrrConfig>
-pub nlink_lab::Node::healthcheck: core::option::Option<alloc::string::String>
-pub nlink_lab::Node::healthcheck_interval: core::option::Option<alloc::string::String>
-pub nlink_lab::Node::healthcheck_retries: core::option::Option<u32>
-pub nlink_lab::Node::healthcheck_timeout: core::option::Option<alloc::string::String>
-pub nlink_lab::Node::hostname: core::option::Option<alloc::string::String>
-pub nlink_lab::Node::image: core::option::Option<alloc::string::String>
-pub nlink_lab::Node::interfaces: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::InterfaceConfig>
-pub nlink_lab::Node::ipvlans: alloc::vec::Vec<nlink_lab::types::IpvlanConfig>
-pub nlink_lab::Node::labels: alloc::vec::Vec<alloc::string::String>
-pub nlink_lab::Node::macvlans: alloc::vec::Vec<nlink_lab::types::MacvlanConfig>
-pub nlink_lab::Node::memory: core::option::Option<alloc::string::String>
-pub nlink_lab::Node::nat: core::option::Option<nlink_lab::types::NatConfig>
-pub nlink_lab::Node::overlay: core::option::Option<alloc::string::String>
-pub nlink_lab::Node::privileged: bool
-pub nlink_lab::Node::profiles: alloc::vec::Vec<alloc::string::String>
-pub nlink_lab::Node::pull: core::option::Option<alloc::string::String>
-pub nlink_lab::Node::routes: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::RouteConfig>
-pub nlink_lab::Node::startup_delay: core::option::Option<alloc::string::String>
-pub nlink_lab::Node::sysctls: alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
-pub nlink_lab::Node::volumes: core::option::Option<alloc::vec::Vec<alloc::string::String>>
-pub nlink_lab::Node::vrfs: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::VrfConfig>
-pub nlink_lab::Node::wifi: alloc::vec::Vec<nlink_lab::types::WifiConfig>
-pub nlink_lab::Node::wireguard: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::WireguardConfig>
-pub nlink_lab::Node::workdir: core::option::Option<alloc::string::String>
-impl nlink_lab::types::Node
-pub fn nlink_lab::types::Node::is_container(&self) -> bool
-pub fn nlink_lab::types::Node::is_foreign(&self) -> bool
+impl nlink_lab::lab::Node
+pub fn nlink_lab::lab::Node::addresses(&self) -> nlink_lab::error::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::vec::Vec<alloc::string::String>>>
+pub async fn nlink_lab::lab::Node::conntrack(&self, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab_shared::api::dto::ConntrackFlow>>
+pub async fn nlink_lab::lab::Node::diagnose(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::NodeDiagnostic>>
+pub fn nlink_lab::lab::Node::exec(&self, cmd: &str, args: &[&str]) -> nlink_lab::error::Result<nlink_lab::running::ExecOutput>
+pub fn nlink_lab::lab::Node::exec_attached(&self, cmd: &str, args: &[&str]) -> nlink_lab::error::Result<i32>
+pub fn nlink_lab::lab::Node::exec_with_opts(&self, cmd: &str, args: &[&str], opts: nlink_lab::running::ExecOpts<'_>) -> nlink_lab::error::Result<nlink_lab::running::ExecOutput>
+pub async fn nlink_lab::lab::Node::firewall_counters(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::FirewallCounter>>
+pub async fn nlink_lab::lab::Node::flush_conntrack(&self, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<usize>
+pub fn nlink_lab::lab::Node::iface(&self, name: &str) -> nlink_lab::error::Result<nlink_lab::lab::Iface>
+pub fn nlink_lab::lab::Node::ifaces(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::lab::Iface>>
+pub fn nlink_lab::lab::Node::kill(&self, pid: u32) -> nlink_lab::error::Result<bool>
+pub fn nlink_lab::lab::Node::lab(&self) -> &nlink_lab::lab::Lab
+pub fn nlink_lab::lab::Node::name(&self) -> &str
+pub fn nlink_lab::lab::Node::proc_stat(&self, pid: u32) -> nlink_lab::error::Result<crate::proc_stat::ProcStat>
+pub fn nlink_lab::lab::Node::proc_stat_all(&self) -> nlink_lab::error::Result<alloc::vec::Vec<crate::proc_stat::ProcStat>>
+pub fn nlink_lab::lab::Node::processes(&self) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::ProcessInfo>>
+pub async fn nlink_lab::lab::Node::routes_to(&self, dst: core::net::ip_addr::IpAddr, prefix_len: u8) -> nlink_lab::error::Result<alloc::vec::Vec<alloc::vec::Vec<nlink_lab::running::RouteHop>>>
+pub fn nlink_lab::lab::Node::signal(&self, pid: u32, signal: nlink_lab::running::Signal) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::spawn(&self, cmd: &[&str]) -> nlink_lab::error::Result<u32>
+pub async fn nlink_lab::lab::Node::spawn_with(&self, cmd: &[&str], env: &[(&str, &str)], workdir: core::option::Option<&std::path::Path>, log_dir: core::option::Option<&std::path::Path>) -> nlink_lab::error::Result<u32>
+pub fn nlink_lab::lab::Node::tcp_connect(&self, addr: core::net::socket_addr::SocketAddr, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::wait_for_exec(&self, cmd: &str, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::wait_for_file(&self, path: &str, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::wait_for_log_line(&self, pid: u32, pattern: &regex::regex::string::Regex, stream: nlink_lab::running::LogStream, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::wait_for_port(&self, pid: core::option::Option<u32>, port: u16, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::lab::Node::wait_for_tcp(&self, ip: &str, port: u16, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+impl core::fmt::Debug for nlink_lab::lab::Node
+pub fn nlink_lab::lab::Node::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct nlink_lab::NodeDiagnostic
 pub nlink_lab::NodeDiagnostic::interfaces: alloc::vec::Vec<nlink::netlink::diagnostics::InterfaceDiag>
 pub nlink_lab::NodeDiagnostic::issues: alloc::vec::Vec<nlink::netlink::diagnostics::Issue>

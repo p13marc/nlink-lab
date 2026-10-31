@@ -21,6 +21,9 @@ All notable changes to this project will be documented in this file.
   - **Renamed.** The builder `nlink_lab::Lab` is now
     `nlink_lab::TopologyBuilder` (`TopologyBuilder::new("name")…build()`),
     which frees `Lab` for the lab handle (#328).
+- **`nlink_lab::Node` and `nlink_lab::Network` are the lab handles now**
+  (#328). The topology's node and network types are
+  `nlink_lab::types::Node` and `nlink_lab::types::Network`.
 
 - **`impair --partition` is a black hole again** (#347). Since 0.14 its
   egress filter dropped packets (TC_ACT_SHOT), which the partitioned
@@ -53,6 +56,24 @@ All notable changes to this project will be documented in this file.
   block. `exec` steps are not undone.
 
 ### Added
+
+- **The lab as handles** (#328, the first part). `Lab` (an `Arc`),
+  `Node`, `Iface` and `Network` are cheap clones, `Send + Sync +
+  'static`, and every method takes `&self`, so one task can impair a link
+  while another waits on a process.
+  - **Names at lookup only.** `lab.node("host")?`, `node.iface("eth0")?`,
+    `lab.endpoint("a:eth0")?` and `lab.network("lan")?` are the only
+    calls that take one. A miss is `Error::Unknown`, which names the
+    close matches (`… (did you mean server?)`).
+  - **Typed impairments.** `Netem::new().delay(ms(20)).loss(pct(1.0)).rate(mbit(10))`.
+  - **Changes queue.** A change queues on the lab's own mutex, then on
+    its lock file (#332). It runs on a copy of the lab's snapshot and is
+    swapped in once saved, so a read never waits on a write. A destroyed
+    lab's handles fail.
+  - **The macro.** `#[lab_test]` gives `lab: Lab` the handle, and
+    `lab: RunningLab` still gets the engine.
+  - **Not yet.** The CLI, the daemon and the root tests move over in
+    the rest of #328, with `RunningLab`'s removal.
 
 - **Foreign nodes: link to a netns, a container or a tap the lab did not
   make** (#344, experimental). `node fw kind foreign { netns "other" }`,

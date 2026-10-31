@@ -97,6 +97,19 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
     let fn_block = &input_fn.block;
     let fn_attrs = &input_fn.attrs;
     let fn_vis = &input_fn.vis;
+    // `lab: Lab` gets the handle (#328); `lab: RunningLab` the engine
+    let wants_handle = input_fn.sig.inputs.first().is_some_and(|arg| match arg {
+        syn::FnArg::Typed(pat) => match &*pat.ty {
+            syn::Type::Path(p) => p.path.segments.last().is_some_and(|s| s.ident == "Lab"),
+            _ => false,
+        },
+        syn::FnArg::Receiver(_) => false,
+    });
+    let as_handle = if wants_handle {
+        quote! { let lab = ::nlink_lab::Lab::from_engine(lab); }
+    } else {
+        quote! {}
+    };
 
     if attr.is_empty() {
         return syn::Error::new_spanned(
@@ -327,6 +340,7 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
         let _bundle_guard = __bundle_worker.guard(lab.name(), lab.topology().lab.seed);
 
         #capture_setup
+        #as_handle
 
         #fn_block
 

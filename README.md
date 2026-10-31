@@ -45,11 +45,11 @@ Or use the `#[lab_test]` macro from a `cargo test` integration
 suite — no Docker daemon, no compose file, just `cargo test`:
 
 ```rust
-use nlink_lab::lab_test;
+use nlink_lab::prelude::*;
 
 #[lab_test("examples/simple.nll")]
-async fn test_connectivity(lab: RunningLab) {
-    let out = lab.exec("host", "ping", &["-c1", "10.0.0.1"]).unwrap();
+async fn test_connectivity(lab: Lab) {
+    let out = lab.node("host").unwrap().exec("ping", &["-c1", "10.0.0.1"]).unwrap();
     assert_eq!(out.exit_code, 0);
     // Auto-destroy on drop.
 }

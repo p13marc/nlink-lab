@@ -28,10 +28,10 @@ test ends, the lab is gone. When the test panics, the lab is gone
 
 ```rust
 use nlink_lab::lab_test;
-use nlink_lab::RunningLab;
+use nlink_lab::Lab;
 
 #[lab_test("examples/simple.nll")]
-async fn ping_works(lab: RunningLab) {
+async fn ping_works(lab: Lab) {
     let out = lab
         .exec("host", "ping", &["-c1", "10.0.0.1"])
         .unwrap();
@@ -72,31 +72,31 @@ To actually run them, use a privileged runner or `sudo cargo test`.
 ```rust
 // Path to an NLL file
 #[lab_test("examples/simple.nll")]
-async fn t1(lab: RunningLab) { ... }
+async fn t1(lab: Lab) { ... }
 
 // A function that builds the Topology programmatically
 #[lab_test(topology = my_topology)]
-async fn t2(lab: RunningLab) { ... }
+async fn t2(lab: Lab) { ... }
 
 // With NLL `param` overrides (mirrors CLI `--set`)
 #[lab_test("wan.nll", set { delay = "20ms", loss = "0.5%" })]
-async fn t3(lab: RunningLab) { ... }
+async fn t3(lab: Lab) { ... }
 
 // With a per-test timeout (test panics if it exceeds N seconds)
 #[lab_test("simple.nll", timeout = 30)]
-async fn t4(lab: RunningLab) { ... }
+async fn t4(lab: Lab) { ... }
 
 // Combining
 #[lab_test("wan.nll", set { delay = "200ms" }, timeout = 60)]
-async fn t5(lab: RunningLab) { ... }
+async fn t5(lab: Lab) { ... }
 
 // With capture-on-failure — every (node, iface) gets a live pcap
 // for the test duration. On panic, the pcaps are persisted to
 // `target/lab_test_captures/<test>-<pid>/`. On success, the pcaps
 // are wiped along with the temp dir.
 #[lab_test("multi-tenant-wan.nll", capture = true)]
-async fn t6(lab: RunningLab) {
-    let out = lab.exec("red-a", "ping", &["-c1", "10.20.0.10"]).unwrap();
+async fn t6(lab: Lab) {
+    let out = lab.node("red-a").unwrap().exec("ping", &["-c1", "10.20.0.10"]).unwrap();
     assert_eq!(out.exit_code, 0); // panics → pcaps preserved automatically
 }
 
@@ -192,15 +192,15 @@ the partition.
 
 ```rust
 use nlink_lab::lab_test;
-use nlink_lab::RunningLab;
+use nlink_lab::Lab;
 use std::time::Duration;
 use tokio::time::sleep;
 
 #[lab_test("tests/topologies/raft-3node.nll")]
-async fn leader_recovers_after_partition(lab: RunningLab) {
+async fn leader_recovers_after_partition(lab: Lab) {
     // Start the protocol on each node
     for node in ["n1", "n2", "n3"] {
-        lab.exec(node, "/usr/local/bin/my-raft-node",
+        lab.node(node).unwrap().exec("/usr/local/bin/my-raft-node",
                  &["--config", "/etc/raft.toml"])
            .unwrap();
     }
@@ -210,11 +210,11 @@ async fn leader_recovers_after_partition(lab: RunningLab) {
     let leader = find_leader(&lab).await;
 
     // Partition the leader from the rest.
-    lab.exec("n2", "ip", &["link", "set", "eth0", "down"]).unwrap();
+    lab.node("n2").unwrap().exec("ip", &["link", "set", "eth0", "down"]).unwrap();
     sleep(Duration::from_secs(5)).await;
 
     // Heal the partition.
-    lab.exec("n2", "ip", &["link", "set", "eth0", "up"]).unwrap();
+    lab.node("n2").unwrap().exec("ip", &["link", "set", "eth0", "up"]).unwrap();
     sleep(Duration::from_secs(3)).await;
 
     // Assert: a new leader was elected during the partition.

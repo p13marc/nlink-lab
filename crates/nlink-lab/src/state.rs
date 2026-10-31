@@ -853,11 +853,130 @@ pub fn lock(name: &str) -> Result<LabLock> {
     acquire(name, false)
 }
 
-/// Like [`lock`] but waits for the lock instead of failing. Used by
-/// short read-modify-write updates of the state file (`save_state`)
-/// that merely need to take turns with a concurrent deploy/apply/destroy.
+/// Like [`lock`] but waits for the lock instead of failing, up to
+/// [`lock_timeout`], then fails with [`Error::Busy`] naming the holder.
+/// Used by short read-modify-write updates of the state file
+/// (`save_state`) that merely need to take turns with a concurrent
+/// deploy/apply/destroy. It waited for ever, so a lock that leaked hung
+/// its caller (#332).
 pub fn lock_blocking(name: &str) -> Result<LabLock> {
-    acquire(name, true)
+    lock_wait_blocking(name, "save", lock_timeout())
+}
+
+/// The environment variable that sets how long a mutation waits for a
+/// lab's lock: a duration (`30s`, `2m`) or a number of seconds (#332).
+pub const LOCK_TIMEOUT_ENV: &str = "NLINK_LAB_LOCK_TIMEOUT";
+
+/// How long a mutation waits for a lab's lock before it fails with
+/// [`Error::Busy`]: [`LOCK_TIMEOUT_ENV`], else 30 s.
+pub fn lock_timeout() -> std::time::Duration {
+    std::env::var(LOCK_TIMEOUT_ENV)
+        .ok()
+        .and_then(|v| {
+            let v = v.trim();
+            v.parse::<u64>()
+                .ok()
+                .map(std::time::Duration::from_secs)
+                .or_else(|| crate::helpers::parse_duration(v).ok())
+        })
+        .unwrap_or(std::time::Duration::from_secs(30))
+}
+
+/// Who holds a lab's lock: what the holder writes into the lock file once
+/// it has it (#332), so a waiter that gives up can say who it waited for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LockHolder {
+    pub pid: u32,
+    pub uid: u32,
+    /// What it is doing: `deploy`, `apply`, `destroy`, `impair`, …
+    pub op: String,
+    /// RFC 3339.
+    pub since: String,
+}
+
+impl std::fmt::Display for LockHolder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let me = if self.pid == std::process::id() {
+            " (this process)"
+        } else {
+            ""
+        };
+        write!(
+            f,
+            "{} by pid {}{me} (uid {}), since {}",
+            self.op, self.pid, self.uid, self.since
+        )
+    }
+}
+
+/// The record in a lab's lock file, when one was written. It may name a
+/// holder that has since let go: only a failed attempt at the lock says
+/// that someone holds it.
+pub fn lock_holder(name: &str) -> Option<LockHolder> {
+    let text = std::fs::read_to_string(lock_path(name)).ok()?;
+    serde_json::from_str(text.lines().next()?).ok()
+}
+
+/// Wait for a lab's lock for `op`, up to `timeout`, without blocking the
+/// thread: an async task polls, so a holder on the same runtime (a
+/// current-thread `#[lab_test]`, a daemon call) can finish meanwhile.
+/// Fails with [`Error::Busy`], naming the holder, at the deadline (#332).
+pub async fn lock_wait(name: &str, op: &str, timeout: std::time::Duration) -> Result<LabLock> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match acquire_now(name) {
+            Ok(lock) => {
+                lock.record(op);
+                return Ok(lock);
+            }
+            Err(Error::Locked { .. }) if std::time::Instant::now() < deadline => {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            Err(Error::Locked { .. }) => return Err(busy(name, op, timeout)),
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// [`lock_wait`] for a synchronous caller: it sleeps the thread.
+pub fn lock_wait_blocking(name: &str, op: &str, timeout: std::time::Duration) -> Result<LabLock> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match acquire_now(name) {
+            Ok(lock) => {
+                lock.record(op);
+                return Ok(lock);
+            }
+            Err(Error::Locked { .. }) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            Err(Error::Locked { .. }) => return Err(busy(name, op, timeout)),
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// [`lock`] for an operation: the holder record names it.
+pub fn lock_for(name: &str, op: &str) -> Result<LabLock> {
+    let lock = acquire(name, false)?;
+    lock.record(op);
+    Ok(lock)
+}
+
+/// One non-blocking attempt, without [`lock`]'s grace: the waiting loops
+/// retry themselves.
+fn acquire_now(name: &str) -> Result<LabLock> {
+    acquire_with(name, false, std::time::Duration::ZERO)
+}
+
+fn busy(name: &str, op: &str, waited: std::time::Duration) -> Error {
+    let holder = lock_holder(name)
+        .map(|h| format!("held for {h}"))
+        .unwrap_or_else(|| "held by another operation".into());
+    Error::Busy(format!(
+        "lab '{name}' is busy: {holder}; `{op}` waited {}s for it ({LOCK_TIMEOUT_ENV} sets how long)",
+        waited.as_secs()
+    ))
 }
 
 /// How many times [`acquire`] re-opens before giving up. A retry only
@@ -893,6 +1012,11 @@ const LOCKED_GRACE: std::time::Duration = if cfg!(test) {
 /// closes that window: a stale inode is detected and the attempt is
 /// retried against whatever is at the path now.
 fn acquire(name: &str, blocking: bool) -> Result<LabLock> {
+    acquire_with(name, blocking, LOCKED_GRACE)
+}
+
+/// [`acquire`], retrying a non-blocking attempt for up to `grace`.
+fn acquire_with(name: &str, blocking: bool, grace: std::time::Duration) -> Result<LabLock> {
     validate_lab_name(name)?;
     let path = lock_path(name);
     let op = if blocking {
@@ -900,7 +1024,7 @@ fn acquire(name: &str, blocking: bool) -> Result<LabLock> {
     } else {
         libc::LOCK_EX | libc::LOCK_NB
     };
-    let deadline = std::time::Instant::now() + LOCKED_GRACE;
+    let deadline = std::time::Instant::now() + grace;
     let mut attempts = 0;
     while attempts < ACQUIRE_ATTEMPTS {
         let file = open_lock_file(name)?;
@@ -925,7 +1049,7 @@ fn acquire(name: &str, blocking: bool) -> Result<LabLock> {
         }
         attempts += 1;
         if same_file(&file, &path) {
-            return Ok(LabLock { _file: file, path });
+            return Ok(LabLock { file, path });
         }
         // The file we locked is no longer the one at this path — it was
         // removed (a `destroy`) or replaced while we were acquiring. Drop
@@ -967,12 +1091,31 @@ fn open_lock_file(name: &str) -> Result<std::fs::File> {
 /// Guard that holds a file lock on a lab's state directory.
 /// The lock is released when this guard is dropped.
 pub struct LabLock {
-    /// Held, never read: dropping it is what releases the `flock`.
-    _file: std::fs::File,
+    /// Dropping it is what releases the `flock`; it also carries the
+    /// holder record.
+    file: std::fs::File,
     path: PathBuf,
 }
 
 impl LabLock {
+    /// Write the holder record into the lock file (#332). Best effort: a
+    /// waiter without it just says less.
+    fn record(&self, op: &str) {
+        use std::os::unix::fs::FileExt as _;
+        let holder = LockHolder {
+            pid: std::process::id(),
+            // SAFETY: getuid(2) cannot fail.
+            uid: unsafe { libc::getuid() },
+            op: op.to_string(),
+            since: crate::events::now_iso8601(),
+        };
+        if let Ok(mut line) = serde_json::to_vec(&holder) {
+            line.push(b'\n');
+            let _ = self.file.set_len(0);
+            let _ = self.file.write_at(&line, 0);
+        }
+    }
+
     /// Delete the lock file, then release the lock.
     ///
     /// Only correct because the holder is the one deleting it and
@@ -1023,7 +1166,7 @@ pub fn hosts_lock() -> Result<LabLock> {
     // This sentinel is never removed (there is exactly one of it, not one
     // per lab), so it needs no revalidation.
     Ok(LabLock {
-        _file: file,
+        file,
         path: lock_path,
     })
 }

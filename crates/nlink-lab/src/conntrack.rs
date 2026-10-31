@@ -369,9 +369,13 @@ impl RunningLab {
         node: Option<&str>,
         query: &ConntrackQuery,
     ) -> Result<std::collections::BTreeMap<String, usize>> {
+        // a change to the lab: one at a time (#332)
+        let _lock =
+            crate::state::lock_wait(self.name(), "flush-conntrack", crate::state::lock_timeout())
+                .await?;
         let mut deleted = std::collections::BTreeMap::new();
         for node in self.conntrack_nodes(node)? {
-            let n = self.flush_conntrack(&node, query).await?;
+            let n = self.flush_conntrack_locked(&node, query).await?;
             deleted.insert(node, n);
         }
         Ok(deleted)
@@ -393,6 +397,13 @@ impl RunningLab {
     /// (#303). Their next packet starts a new flow, through the rules as
     /// they are now.
     pub async fn flush_conntrack(&self, node: &str, query: &ConntrackQuery) -> Result<usize> {
+        let _lock =
+            crate::state::lock_wait(self.name(), "flush-conntrack", crate::state::lock_timeout())
+                .await?;
+        self.flush_conntrack_locked(node, query).await
+    }
+
+    async fn flush_conntrack_locked(&self, node: &str, query: &ConntrackQuery) -> Result<usize> {
         let conn = self.netfilter_of(node)?;
         let mut gone = 0;
         for entry in select(&conn, query).await? {

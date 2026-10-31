@@ -156,7 +156,9 @@ pub async fn force_cleanup(name: &str, prefix: &str) -> Vec<Cleanup> {
         Err(e) => done.push(Cleanup::failed("open a netlink socket", e)),
     }
 
-    // Also clean up state directory, and the lock file with it (#103).
+    // Also clean up state directory, and the lock file with it (#103),
+    // and what it claimed in the host namespace (#332).
+    let _ = crate::host_registry::release(name);
     let _ = crate::state::remove(name);
     crate::state::remove_lock_if_unheld(name);
     done
@@ -535,7 +537,7 @@ pub async fn reap_orphans(known: &[crate::state::LabInfo]) -> Vec<Cleanup> {
         // A deploy persists its journal as it goes and its state only at
         // the end: a journal without state is just as much a deploy that
         // is still running. Its lock says which; hold it while unwinding.
-        let Ok(guard) = crate::state::lock(lab) else {
+        let Ok(guard) = crate::state::lock_for(lab, "reap") else {
             done.push(Cleanup::Skipped {
                 kind: Resource::Lab,
                 name: lab.clone(),
@@ -561,6 +563,20 @@ pub async fn reap_orphans(known: &[crate::state::LabInfo]) -> Vec<Cleanup> {
         0 => {}
         count => done.push(Cleanup::RemovedLocks { count }),
     }
+    // Host-namespace claims of labs that are gone (#332). A deploy claims
+    // under its lab's lock before it writes state: skip a held one.
+    for lab in crate::host_registry::stale().unwrap_or_default() {
+        if let Ok(guard) = crate::state::lock_for(&lab, "reap")
+            && !crate::state::exists(&lab)
+        {
+            let _ = crate::host_registry::release(&lab);
+            done.push(Cleanup::Deleted {
+                kind: Resource::Lab,
+                name: format!("{lab} (host claims)"),
+            });
+            guard.remove_file();
+        }
+    }
     let orphans = find_orphans(known).await;
     if orphans.is_empty() {
         return done;
@@ -579,7 +595,7 @@ pub async fn reap_orphans(known: &[crate::state::LabInfo]) -> Vec<Cleanup> {
         let guard = if owner.is_empty() {
             None
         } else {
-            match crate::state::lock(&owner) {
+            match crate::state::lock_for(&owner, "reap") {
                 Ok(guard) => Some(guard),
                 Err(_) => {
                     done.push(Cleanup::Skipped {

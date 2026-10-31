@@ -67,7 +67,7 @@ async fn deploy_ctx(
     rolled_back: &mut bool,
 ) -> Result<RunningLab> {
     topology.validate().bail()?;
-    let lock = state::lock(&topology.lab.name)?;
+    let lock = state::lock_for(&topology.lab.name, "deploy")?;
     if state::exists(&topology.lab.name) {
         return Err(Error::AlreadyExists {
             name: topology.lab.name.clone(),
@@ -107,6 +107,21 @@ async fn deploy_ctx(
         journal.record(Undo::FreeSubnets {
             lab: lab_name.clone(),
         });
+    }
+    // What it takes in the host's own namespace, checked against every
+    // other lab's before the first op (#332).
+    if let Some(claims) = crate::host_registry::Claims::of(topology) {
+        journal.record(Undo::ReleaseHostClaims {
+            lab: lab_name.clone(),
+        });
+        if let Err(e) = crate::host_registry::claim(&lab_name, &claims) {
+            journal.unwind().await;
+            if !state::exists(&lab_name) {
+                let _ = state::remove(&lab_name);
+                lock.remove_file();
+            }
+            return Err(e);
+        }
     }
 
     match deploy_inner(topology, &mut journal, ctx).await {
@@ -538,7 +553,7 @@ async fn apply_ctx(
 ) -> Result<ApplyReport> {
     let desired = &with_running_subnets(running, desired)?;
     desired.validate().bail()?;
-    let _lock = state::lock(running.name())?;
+    let lock = state::lock_for(running.name(), "apply")?;
     let (inputs, overlay, cur_plan, des_plan) = apply_plans(running, desired, opts)?;
     let diff = Plan::diff(&cur_plan, &des_plan);
     let mut report = ApplyReport {
@@ -616,7 +631,7 @@ async fn apply_ctx(
     // This handle's changes, merged into the file as it is: created_at
     // and wg_public_keys survive (#28), and so does a process spawned or
     // an impairment set since this lab was loaded.
-    running.save_merged(Some(desired))?;
+    running.save_merged(&lock, Some(desired))?;
 
     // ── validate { … } assertions, exactly as after deploy (#86) ──
     // Never fails the apply; results ride on `running` for `--strict`.
@@ -821,7 +836,7 @@ async fn reattach_ctx(
     // `impair` anywhere in the lab, not only on the restarted node (#221).
     let (desired, all_partitions) = live_view(running);
     desired.validate().bail()?;
-    let _lock = state::lock(running.name())?;
+    let lock = state::lock_for(running.name(), "reattach")?;
     let touches = |ep: &String| ep.split(':').next() == Some(node);
     let lost: std::collections::BTreeSet<String> = desired
         .links
@@ -906,7 +921,7 @@ async fn reattach_ctx(
     // This handle's changes, merged into the file as it is: created_at
     // and wg_public_keys survive (#28), and so does a process spawned or
     // an impairment set since this lab was loaded.
-    running.save_merged(Some(running.topology()))?;
+    running.save_merged(&lock, Some(running.topology()))?;
     crate::events::record(
         running.name(),
         crate::events::LifecycleKind::Applied {

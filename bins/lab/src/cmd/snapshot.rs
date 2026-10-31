@@ -130,7 +130,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         } => {
             let lab = existing(&lab)?;
             // Read-modify-nothing: the snapshot is a copy of the persisted state.
-            let _lock = nlink_lab::state::lock_blocking(&lab)?;
+            let _lock = nlink_lab::state::lock_wait_blocking(
+                &lab,
+                "snapshot",
+                nlink_lab::state::lock_timeout(),
+            )?;
             let (state, topology) = nlink_lab::state::load(&lab)?;
             let meta = nlink_lab::state::snapshot_save(
                 &lab,

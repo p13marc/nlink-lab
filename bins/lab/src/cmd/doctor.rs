@@ -87,6 +87,18 @@ fn fix() -> nlink_lab::Result<Vec<String>> {
         0 => {}
         n => done.push(format!("removed {n} stale lock file(s)")),
     }
+    // the host-namespace claims, as the running labs have them (#332)
+    let labs: Vec<(String, nlink_lab::Topology)> = state::list()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|info| state::load(&info.name).ok().map(|(_, t)| (info.name, t)))
+        .collect();
+    match nlink_lab::host_registry::rebuild(labs) {
+        Ok(n) => done.push(format!(
+            "rebuilt the host claims registry from the running labs ({n} with claims)"
+        )),
+        Err(e) => done.push(format!("could not rebuild the host claims registry: {e}")),
+    }
     Ok(done)
 }
 
@@ -284,6 +296,25 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 format!("{module} not loaded (needed for {why}; modprobe or build-in)")
             },
         });
+    }
+
+    // Host-namespace claims of labs that are gone (#332).
+    match nlink_lab::host_registry::stale() {
+        Ok(stale) if stale.is_empty() => {}
+        Ok(stale) => checks.push(Check {
+            name: "host claims",
+            status: Status::Warn,
+            detail: format!(
+                "claims of labs that are gone: {} (`sudo nlink-lab doctor --fix` rebuilds the \
+                 registry; `destroy --orphans` releases them)",
+                stale.join(", ")
+            ),
+        }),
+        Err(e) => checks.push(Check {
+            name: "host claims",
+            status: Status::Info,
+            detail: format!("cannot read the host claims registry: {e}"),
+        }),
     }
 
     // Netem seeds (#337): what a deploy found the last time it probed

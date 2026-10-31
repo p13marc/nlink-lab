@@ -480,7 +480,7 @@ pub async fn handle(req: Request, ctx: &OpCtx) -> Option<Result<Response>> {
                 return Err(Error::NotFound { name: lab.clone() });
             }
             // a copy of the persisted state, taken under the lab's lock
-            let _lock = state::lock_blocking(&lab)?;
+            let _lock = state::lock_wait_blocking(&lab, "snapshot", state::lock_timeout())?;
             let (st, topology) = state::load(&lab)?;
             let meta = state::snapshot_save(&lab, &name, description.as_deref(), &st, &topology)?;
             report("snapshot", &meta)
@@ -831,7 +831,6 @@ async fn spawn(
             env: &env_refs,
         },
     )?;
-    running.save_state()?;
     if let Some(spec) = wait {
         let conditions = crate::wait::WaitCondition::from_spec(spec, Some(pid))?;
         if !conditions.is_empty() {

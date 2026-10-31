@@ -286,3 +286,22 @@ pub fn tcp_connect(
         .unwrap();
     (out.exit_code, t.elapsed())
 }
+
+/// The CLI the root suite runs (`cargo build --bin nlink-lab` first): next
+/// to this test binary's `deps/` directory, wherever CARGO_TARGET_DIR put
+/// it, else the workspace's target/debug.
+pub fn cli_binary() -> std::path::PathBuf {
+    let beside_deps = std::env::current_exe()
+        .ok()
+        .and_then(|exe| Some(exe.parent()?.parent()?.join("nlink-lab")));
+    let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    beside_deps
+        .into_iter()
+        .chain(
+            manifest
+                .ancestors()
+                .map(|p| p.join("target").join("debug").join("nlink-lab")),
+        )
+        .find(|candidate| candidate.exists())
+        .expect("the nlink-lab binary: run `cargo build --bin nlink-lab` first")
+}

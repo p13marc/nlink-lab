@@ -147,6 +147,102 @@ fn merge_pids(fresh: &mut Vec<(String, u32)>, base: &[(String, u32)], mine: &[(S
     }
 }
 
+/// `fresh` (the state file) with this handle's changes since `base`
+/// applied: what [`RunningLab::save_merged`] writes and
+/// [`RunningLab::refresh`] takes in.
+fn merge_into(fresh: &mut state::LabState, base: &Baseline, mine: &Baseline) {
+    take_changed(&mut fresh.namespaces, &base.namespaces, &mine.namespaces);
+    take_changed(&mut fresh.containers, &base.containers, &mine.containers);
+    take_changed(&mut fresh.runtime, &base.runtime, &mine.runtime);
+    take_changed(
+        &mut fresh.dns_injected,
+        &base.dns_injected,
+        &mine.dns_injected,
+    );
+    take_changed(&mut fresh.wifi_loaded, &base.wifi_loaded, &mine.wifi_loaded);
+    take_changed(&mut fresh.mgmt_peers, &base.mgmt_peers, &mine.mgmt_peers);
+    merge_pids(&mut fresh.pids, &base.pids, &mine.pids);
+    merge_map(&mut fresh.starttimes, &base.starttimes, &mine.starttimes);
+    merge_map(&mut fresh.exec_pids, &base.exec_pids, &mine.exec_pids);
+    merge_map(
+        &mut fresh.saved_impairments,
+        &base.saved_impairments,
+        &mine.saved_impairments,
+    );
+    merge_map(
+        &mut fresh.live_impairments,
+        &base.live_impairments,
+        &mine.live_impairments,
+    );
+    merge_map(
+        &mut fresh.process_logs,
+        &base.process_logs,
+        &mine.process_logs,
+    );
+    merge_map(
+        &mut fresh.process_tags,
+        &base.process_tags,
+        &mine.process_tags,
+    );
+}
+
+impl Baseline {
+    /// The baseline of a handle that has just read `st` and `topology`.
+    fn of_state(st: &state::LabState, topology: &Topology) -> Self {
+        Self {
+            namespaces: st.namespaces.clone(),
+            containers: st.containers.clone(),
+            runtime: st.runtime.clone(),
+            dns_injected: st.dns_injected,
+            wifi_loaded: st.wifi_loaded,
+            pids: st.pids.clone(),
+            starttimes: st.starttimes.clone(),
+            exec_pids: st.exec_pids.clone(),
+            mgmt_peers: st.mgmt_peers.clone(),
+            saved_impairments: st.saved_impairments.clone(),
+            live_impairments: st.live_impairments.clone(),
+            process_logs: st.process_logs.clone(),
+            process_tags: st.process_tags.clone(),
+            topology: serde_json::to_string(topology).unwrap_or_default(),
+        }
+    }
+}
+
+/// A change to a running lab, from [`RunningLab::begin`] to
+/// [`RunningLab::commit`]: it holds the lab's lock (#332).
+pub(crate) struct Mutation {
+    lock: state::LabLock,
+}
+
+impl Mutation {
+    /// The lock, for a call that needs it as a token.
+    #[allow(dead_code)]
+    pub(crate) fn lock(&self) -> &state::LabLock {
+        &self.lock
+    }
+}
+
+/// A container whose init PID now names a process that started at
+/// another time is not running: the PID was reused, possibly by a host
+/// process, and every `/proc/<pid>/ns/net` reached through it would be
+/// that process's namespace. PID 0 names none, so whatever the node is
+/// asked fails instead.
+fn zero_stale_container_pids(containers: &mut BTreeMap<String, ContainerState>) {
+    for (node, c) in containers.iter_mut() {
+        if c.pid != 0
+            && let Some(t) = c.starttime
+            && host_starttime(c.pid) != Some(t)
+        {
+            tracing::warn!(
+                "container node '{node}': its init (pid {}) is gone; `nlink-lab restart` \
+                 reattaches a restarted container",
+                c.pid
+            );
+            c.pid = 0;
+        }
+    }
+}
+
 /// Output from executing a command in a lab node.
 #[derive(Debug, Clone)]
 pub struct ExecOutput {
@@ -1138,14 +1234,93 @@ impl RunningLab {
     pub fn save_state(&self) -> Result<()> {
         // Take turns with a concurrent deploy/apply/destroy: this is a
         // read-modify-write of state.json (issue #38).
-        let _lock = crate::state::lock_blocking(&self.topology.lab.name)?;
-        self.save_merged(None)
+        let lock = crate::state::lock_blocking(&self.topology.lab.name)?;
+        self.save_merged(&lock, None)
+    }
+
+    /// Start a change to this lab (#332): wait for its lock (up to
+    /// [`state::lock_timeout`], then [`Error::Busy`] naming the holder),
+    /// and take in what other processes saved since this handle last
+    /// read or wrote the state, keeping what this handle changed. One
+    /// mutation per lab runs at a time, whichever process makes it: two
+    /// CLIs, a CLI and the daemon, a scenario and `top`.
+    pub(crate) async fn begin(&mut self, op: &str) -> Result<Mutation> {
+        let lock =
+            crate::state::lock_wait(&self.topology.lab.name, op, crate::state::lock_timeout())
+                .await?;
+        self.locked(lock)
+    }
+
+    /// [`begin`](Self::begin) for a synchronous caller.
+    pub(crate) fn begin_blocking(&mut self, op: &str) -> Result<Mutation> {
+        let lock = crate::state::lock_wait_blocking(
+            &self.topology.lab.name,
+            op,
+            crate::state::lock_timeout(),
+        )?;
+        self.locked(lock)
+    }
+
+    fn locked(&mut self, lock: crate::state::LabLock) -> Result<Mutation> {
+        let name = self.topology.lab.name.clone();
+        if !state::exists(&name) {
+            // destroyed while this waited: its lock file went with it, and
+            // this attempt made a new one
+            lock.remove_file();
+            return Err(Error::NotFound { name });
+        }
+        self.refresh(&lock)?;
+        Ok(Mutation { lock })
+    }
+
+    /// Save the mutation [`begin`](Self::begin) started and let go of the
+    /// lab's lock.
+    pub(crate) fn commit(&self, m: Mutation) -> Result<()> {
+        self.save_merged(&m.lock, None)
+    }
+
+    /// Take in the state file as it is now, under the lab's lock: the
+    /// reverse of [`save_merged`](Self::save_merged)'s merge. What this
+    /// handle changed since its baseline stays (a spawned pid a test body
+    /// never saved, a topology an edit changed); everything else comes
+    /// from the file. The baseline becomes the file, so the next save
+    /// writes this handle's changes.
+    fn refresh(&mut self, _lock: &state::LabLock) -> Result<()> {
+        let (mut fresh, fresh_topology) = state::load(&self.topology.lab.name)?;
+        let disk = Baseline::of_state(&fresh, &fresh_topology);
+        let mine = self.snapshot();
+        let mut base = self.baseline.lock().unwrap_or_else(|p| p.into_inner());
+        merge_into(&mut fresh, &base, &mine);
+        if mine.topology == base.topology {
+            self.topology = fresh_topology;
+        }
+        zero_stale_container_pids(&mut fresh.containers);
+        self.namespace_names = fresh.namespaces;
+        self.containers = fresh.containers;
+        self.runtime_binary = fresh.runtime;
+        self.dns_injected = fresh.dns_injected;
+        self.wifi_loaded = fresh.wifi_loaded;
+        self.mgmt_peers = fresh.mgmt_peers;
+        self.pids = fresh.pids;
+        self.starttimes = fresh.starttimes;
+        self.exec_pids = fresh.exec_pids;
+        self.saved_impairments = fresh.saved_impairments;
+        self.live_impairments = fresh.live_impairments;
+        self.process_logs = fresh.process_logs;
+        self.process_tags = fresh.process_tags;
+        *base = disk;
+        Ok(())
     }
 
     /// The merge [`save_state`](Self::save_state) does, for a caller that
-    /// holds the lab's lock. `topology` is written as given; `None` writes
-    /// this handle's when it changed one, else keeps the file's.
-    pub(crate) fn save_merged(&self, topology: Option<&Topology>) -> Result<()> {
+    /// holds the lab's lock (the token). `topology` is written as given;
+    /// `None` writes this handle's when it changed one, else keeps the
+    /// file's.
+    pub(crate) fn save_merged(
+        &self,
+        _lock: &state::LabLock,
+        topology: Option<&Topology>,
+    ) -> Result<()> {
         let (mut fresh, fresh_topology) = state::load(&self.topology.lab.name)?;
         let mine = self.snapshot();
         // Written by a newer nlink-lab: rewriting it at this schema drops
@@ -1161,39 +1336,7 @@ impl RunningLab {
         }
         let mut base = self.baseline.lock().unwrap_or_else(|p| p.into_inner());
         fresh.schema_version = state::SCHEMA_VERSION;
-        take_changed(&mut fresh.namespaces, &base.namespaces, &mine.namespaces);
-        take_changed(&mut fresh.containers, &base.containers, &mine.containers);
-        take_changed(&mut fresh.runtime, &base.runtime, &mine.runtime);
-        take_changed(
-            &mut fresh.dns_injected,
-            &base.dns_injected,
-            &mine.dns_injected,
-        );
-        take_changed(&mut fresh.wifi_loaded, &base.wifi_loaded, &mine.wifi_loaded);
-        take_changed(&mut fresh.mgmt_peers, &base.mgmt_peers, &mine.mgmt_peers);
-        merge_pids(&mut fresh.pids, &base.pids, &mine.pids);
-        merge_map(&mut fresh.starttimes, &base.starttimes, &mine.starttimes);
-        merge_map(&mut fresh.exec_pids, &base.exec_pids, &mine.exec_pids);
-        merge_map(
-            &mut fresh.saved_impairments,
-            &base.saved_impairments,
-            &mine.saved_impairments,
-        );
-        merge_map(
-            &mut fresh.live_impairments,
-            &base.live_impairments,
-            &mine.live_impairments,
-        );
-        merge_map(
-            &mut fresh.process_logs,
-            &base.process_logs,
-            &mine.process_logs,
-        );
-        merge_map(
-            &mut fresh.process_tags,
-            &base.process_tags,
-            &mine.process_tags,
-        );
+        merge_into(&mut fresh, &base, &mine);
         let topology = match topology {
             Some(t) => t,
             None if mine.topology != base.topology => &self.topology,
@@ -1270,6 +1413,9 @@ impl RunningLab {
         if cmd.is_empty() {
             return Err(Error::invalid_topology("empty command"));
         }
+        // a new process of the lab, saved with it: one change at a time,
+        // whichever process makes it (#332)
+        let m = self.begin_blocking("spawn")?;
         // A container node: the process is `<runtime> exec <id> <cmd>` run on
         // the host, exactly as a deploy-time `run ... background` does (#112),
         // so its output lands in the lab's log dir like any other process.
@@ -1413,7 +1559,7 @@ impl RunningLab {
                 cmd: cmd.join(" "),
             },
         );
-
+        self.commit(m)?;
         Ok(pid)
     }
 
@@ -1840,6 +1986,7 @@ impl RunningLab {
     /// nlink-lab otherwise only sets an MTU when it creates a veth; this is
     /// the runtime path (`edit --set-mtu`) a path-MTU fault needs.
     pub async fn set_link_mtu(&mut self, endpoint: &str, mtu: u32) -> Result<()> {
+        let m = self.begin("mtu").await?;
         let peer = self.peer_endpoint(endpoint)?;
         for ep in [endpoint.to_string(), peer] {
             let r = EndpointRef::parse(&ep).ok_or_else(|| Error::InvalidEndpoint {
@@ -1863,7 +2010,7 @@ impl RunningLab {
                 link.mtu = Some(mtu);
             }
         }
-        self.save_state()
+        self.commit(m)
     }
 
     /// Impair what `endpoint` sends (`egress`) and what it receives
@@ -1881,12 +2028,15 @@ impl RunningLab {
             Some(_) => Some(self.peer_endpoint(endpoint)?),
             None => None,
         };
+        // one mutation for both ends (#332)
+        let m = self.begin("impair").await?;
         if let Some(egress) = egress {
-            self.set_impairment(endpoint, egress).await?;
+            self.set_impairment_locked(endpoint, egress).await?;
         }
         if let (Some(peer), Some(ingress)) = (&peer, ingress) {
-            self.set_impairment(peer, ingress).await?;
+            self.set_impairment_locked(peer, ingress).await?;
         }
+        self.commit(m)?;
         Ok(peer)
     }
 
@@ -1923,6 +2073,19 @@ impl RunningLab {
         endpoint: &str,
         impairment: &crate::types::Impairment,
     ) -> Result<()> {
+        let m = self.begin("impair").await?;
+        self.set_impairment_locked(endpoint, impairment).await?;
+        self.commit(m)
+    }
+
+    /// [`set_impairment`](Self::set_impairment) inside a mutation that
+    /// has the lab's lock: changes the kernel and this handle, saves
+    /// nothing.
+    async fn set_impairment_locked(
+        &mut self,
+        endpoint: &str,
+        impairment: &crate::types::Impairment,
+    ) -> Result<()> {
         let value = impairment.clone();
         self.change_tc(endpoint, |lab| {
             if lab.saved_impairments.contains_key(endpoint) {
@@ -1939,7 +2102,7 @@ impl RunningLab {
                 impairment: Box::new(impairment.clone()),
             },
         );
-        self.save_state()
+        Ok(())
     }
 
     /// Apply `change` to the runtime state (`live_impairments`,
@@ -1991,7 +2154,33 @@ impl RunningLab {
     /// what it has to what `state` says, as one `impair` or `heal` would
     /// (#326). Returns the endpoints that changed. If a node fails, the
     /// runtime state is put back as it was.
-    pub(crate) async fn restore_runtime_tc(&mut self, state: RuntimeTc) -> Result<Vec<String>> {
+    pub(crate) async fn restore_runtime_tc(
+        &mut self,
+        state: RuntimeTc,
+        only: Option<&std::collections::BTreeSet<String>>,
+    ) -> Result<Vec<String>> {
+        let m = self.begin("restore-impairments").await?;
+        // With `only`, the endpoints outside it keep what they have now: a
+        // scenario puts back what it touched, not what an operator changed
+        // elsewhere meanwhile (#332).
+        let target = |now: &BTreeMap<String, crate::types::Impairment>,
+                      was: &BTreeMap<String, crate::types::Impairment>| {
+            match only {
+                None => was.clone(),
+                Some(eps) => {
+                    let mut out = now.clone();
+                    for ep in eps {
+                        match was.get(ep) {
+                            Some(v) => out.insert(ep.clone(), v.clone()),
+                            None => out.remove(ep),
+                        };
+                    }
+                    out
+                }
+            }
+        };
+        let live_target = target(&self.live_impairments, &state.live);
+        let partitions_target = target(&self.saved_impairments, &state.partitions);
         let differs = |a: &BTreeMap<String, crate::types::Impairment>,
                        b: &BTreeMap<String, crate::types::Impairment>| {
             a.keys()
@@ -2000,14 +2189,14 @@ impl RunningLab {
                 .cloned()
                 .collect::<std::collections::BTreeSet<String>>()
         };
-        let mut changed = differs(&self.live_impairments, &state.live);
+        let mut changed = differs(&self.live_impairments, &live_target);
         // a partition is its presence; what it saved is its own business
         changed.extend(
             self.saved_impairments
                 .keys()
-                .chain(state.partitions.keys())
+                .chain(partitions_target.keys())
                 .filter(|k| {
-                    self.saved_impairments.contains_key(*k) != state.partitions.contains_key(*k)
+                    self.saved_impairments.contains_key(*k) != partitions_target.contains_key(*k)
                 })
                 .cloned(),
         );
@@ -2023,8 +2212,8 @@ impl RunningLab {
             self.saved_impairments.clone(),
         );
         let before = crate::deploy::live_view(self);
-        self.live_impairments = state.live;
-        self.saved_impairments = state.partitions;
+        self.live_impairments = live_target;
+        self.saved_impairments = partitions_target;
         let after = crate::deploy::live_view(self);
         for node in &nodes {
             let Some(handle) = self.ns_resolver_of(node) else {
@@ -2045,7 +2234,7 @@ impl RunningLab {
                 return Err(e);
             }
         }
-        self.save_state()?;
+        self.commit(m)?;
         Ok(changed.into_iter().collect())
     }
 
@@ -2065,6 +2254,7 @@ impl RunningLab {
     /// Deleting it first also removes a 100%-loss netem that an older
     /// nlink-lab installed for a partition. Idempotent.
     pub async fn clear_impairment(&mut self, endpoint: &str) -> Result<()> {
+        let m = self.begin("clear-impairment").await?;
         let ep = EndpointRef::parse(endpoint).ok_or_else(|| Error::InvalidEndpoint {
             endpoint: endpoint.to_string(),
         })?;
@@ -2086,7 +2276,7 @@ impl RunningLab {
             }
         })
         .await?;
-        self.save_state()?;
+        self.commit(m)?;
         crate::events::record(
             &self.topology.lab.name,
             crate::events::LifecycleKind::ImpairCleared {
@@ -2103,6 +2293,7 @@ impl RunningLab {
     /// (netem, `qdisc` block, rate limit, per-pair matrix) stay as they
     /// are (#168).
     pub async fn partition(&mut self, endpoint: &str) -> Result<()> {
+        let m = self.begin("partition").await?;
         if self.saved_impairments.contains_key(endpoint) {
             return Ok(());
         }
@@ -2118,7 +2309,7 @@ impl RunningLab {
             lab.saved_impairments.insert(endpoint.to_string(), current);
         })
         .await?;
-        self.save_state()?;
+        self.commit(m)?;
         crate::events::record(
             &self.topology.lab.name,
             crate::events::LifecycleKind::Partitioned {
@@ -2131,6 +2322,7 @@ impl RunningLab {
     /// Heal an endpoint: take its partition's filters away. What it
     /// carried under them is still there.
     pub async fn heal(&mut self, endpoint: &str) -> Result<()> {
+        let m = self.begin("heal").await?;
         if !self.saved_impairments.contains_key(endpoint) {
             return Err(Error::deploy_failed(format!(
                 "endpoint '{endpoint}' is not partitioned"
@@ -2140,7 +2332,7 @@ impl RunningLab {
             lab.saved_impairments.remove(endpoint);
         })
         .await?;
-        self.save_state()?;
+        self.commit(m)?;
         crate::events::record(
             &self.topology.lab.name,
             crate::events::LifecycleKind::Healed {
@@ -2376,13 +2568,14 @@ impl RunningLab {
         ];
         let step = |n: usize| ctx.step(n, PHASES.len(), || PHASES[n - 1].to_string());
         // Acquire exclusive lock
-        let lock = crate::state::lock(&self.topology.lab.name)?;
+        let lock = crate::state::lock_for(&self.topology.lab.name, "destroy")?;
 
         // Release any subnet-pool entries this lab claimed at deploy
         // time (round-5 §2.5). Best-effort — pool errors are not
         // fatal for destroy. The pool flock keeps this safe against
         // concurrent free_for_lab calls.
         let _ = crate::subnet_pool::free_for_lab(&self.topology.lab.name);
+        let _ = crate::host_registry::release(&self.topology.lab.name);
 
         // 1. Kill background processes — only those whose recorded start
         // time still matches (issue #30).
@@ -2549,23 +2742,7 @@ impl RunningLab {
     /// Load a running lab from saved state.
     pub fn load(name: &str) -> Result<Self> {
         let (mut lab_state, topology) = state::load(name)?;
-        // A container whose init PID now names a process that started at
-        // another time is not running: the PID was reused, possibly by a
-        // host process, and every `/proc/<pid>/ns/net` reached through it
-        // would be that process's namespace. PID 0 names none, so whatever
-        // the node is asked fails instead.
-        for (node, c) in lab_state.containers.iter_mut() {
-            if let Some(t) = c.starttime
-                && host_starttime(c.pid) != Some(t)
-            {
-                tracing::warn!(
-                    "container node '{node}': its init (pid {}) is gone; `nlink-lab restart` \
-                     reattaches a restarted container",
-                    c.pid
-                );
-                c.pid = 0;
-            }
-        }
+        zero_stale_container_pids(&mut lab_state.containers);
         let lab = Self {
             topology,
             namespace_names: lab_state.namespaces,
@@ -3868,6 +4045,72 @@ link app:eth0 -- db:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
             assert_eq!(addrs["mgmt0"], [planned[node].clone()], "{node}: {addrs:?}");
         }
         assert!(lab.node_addresses("nope").is_err());
+    }
+
+    /// A mutation re-reads the state under the lock (#332): what another
+    /// handle saved meanwhile comes in, and what this handle changed and
+    /// never saved (a pid a `#[lab_test]` body spawned) stays, and is
+    /// written by the commit.
+    #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // the state-dir test lock, one test at a time
+    async fn a_mutation_takes_in_the_file_and_keeps_its_own_changes() {
+        let _guard = crate::state::xdg_state_lock_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var(crate::state::STATE_DIR_ENV, dir.path()) };
+        let topology = crate::parser::parse("lab \"mut\"\nnode a\n").unwrap();
+        crate::state::save(&crate::state::LabState::new("mut", "now"), &topology).unwrap();
+
+        let mut mine = RunningLab::load("mut").unwrap();
+        let theirs = {
+            let mut t = RunningLab::load("mut").unwrap();
+            t.live_impairments
+                .insert("a:eth0".into(), crate::types::Impairment::default());
+            t.save_state().unwrap();
+            t
+        };
+        // never saved here
+        mine.pids.push(("a".into(), 4242));
+
+        let m = mine.begin("test").await.unwrap();
+        assert!(
+            mine.live_impairments.contains_key("a:eth0"),
+            "theirs came in"
+        );
+        assert_eq!(mine.pids, [("a".to_string(), 4242)], "mine stayed");
+        mine.commit(m).unwrap();
+
+        let (st, _) = crate::state::load("mut").unwrap();
+        assert_eq!(st.pids, [("a".to_string(), 4242)]);
+        assert!(st.live_impairments.contains_key("a:eth0"));
+        drop(theirs);
+    }
+
+    /// A mutation waits for the lab's lock, then fails with `Busy`
+    /// naming the holder (#332); a lab destroyed while it waited is gone.
+    #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // the state-dir test lock, one test at a time
+    async fn a_mutation_waits_then_names_who_holds_the_lab() {
+        let _guard = crate::state::xdg_state_lock_for_tests();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var(crate::state::STATE_DIR_ENV, dir.path()) };
+        unsafe { std::env::set_var(crate::state::LOCK_TIMEOUT_ENV, "300ms") };
+        let topology = crate::parser::parse("lab \"busy\"\nnode a\n").unwrap();
+        crate::state::save(&crate::state::LabState::new("busy", "now"), &topology).unwrap();
+        let mut lab = RunningLab::load("busy").unwrap();
+
+        let held = crate::state::lock_for("busy", "deploy").unwrap();
+        let err = lab.begin("impair").await.err().expect("busy");
+        assert!(matches!(err, Error::Busy(_)), "{err:?}");
+        let msg = err.to_string();
+        assert!(msg.contains("deploy by pid"), "{msg}");
+        assert!(msg.contains("this process"), "{msg}");
+        drop(held);
+        drop(lab.begin("impair").await.unwrap());
+
+        crate::state::remove("busy").unwrap();
+        let err = lab.begin("impair").await.err().expect("gone");
+        assert!(matches!(err, Error::NotFound { .. }), "{err:?}");
+        unsafe { std::env::remove_var(crate::state::LOCK_TIMEOUT_ENV) };
     }
 
     /// Two handles of one lab, each saving its own change: the merge keeps

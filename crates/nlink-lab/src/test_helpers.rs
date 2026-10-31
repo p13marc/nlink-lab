@@ -416,6 +416,9 @@ pub async fn cleanup_lab(topology: &Topology) -> CleanupReport {
             .warnings
             .push(format!("remove /etc/hosts entries: {e}"));
     }
+    if let Err(e) = crate::host_registry::release(&lab_name) {
+        report.warnings.push(format!("release host claims: {e}"));
+    }
     if let Err(e) = crate::subnet_pool::free_for_lab(&lab_name) {
         report
             .warnings

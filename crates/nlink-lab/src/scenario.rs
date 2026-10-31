@@ -159,6 +159,10 @@ async fn run_steps(
 /// did not bring back. `exec` steps are not undone.
 struct Undo {
     tc: RuntimeTc,
+    /// The endpoints whose impairment or partition it changed: only they
+    /// are put back, so an operator's `impair` elsewhere during the
+    /// scenario stays (#332).
+    touched: BTreeSet<String>,
     pairs: Vec<PairWas>,
     down: BTreeSet<String>,
 }
@@ -176,6 +180,7 @@ impl Undo {
     fn of(lab: &RunningLab) -> Self {
         Self {
             tc: lab.runtime_tc(),
+            touched: BTreeSet::new(),
             pairs: Vec::new(),
             down: BTreeSet::new(),
         }
@@ -189,6 +194,16 @@ impl Undo {
         match action {
             ScenarioAction::Down(ep) => {
                 self.down.insert(ep.clone());
+            }
+            ScenarioAction::Clear(ep) | ScenarioAction::Impair { endpoint: ep, .. } => {
+                self.touched.insert(ep.clone());
+            }
+            ScenarioAction::Partition { endpoint, both }
+            | ScenarioAction::Heal { endpoint, both } => {
+                self.touched.insert(endpoint.clone());
+                if *both && let Ok(peer) = lab.peer_endpoint(endpoint) {
+                    self.touched.insert(peer);
+                }
             }
             ScenarioAction::PairImpair {
                 network, src, dst, ..
@@ -269,7 +284,7 @@ impl Undo {
             });
         }
 
-        match lab.restore_runtime_tc(self.tc).await {
+        match lab.restore_runtime_tc(self.tc, Some(&self.touched)).await {
             Ok(changed) if changed.is_empty() => {}
             Ok(changed) => out.push(ActionResult::ok(format!(
                 "cleanup: impairments and partitions as they were ({})",
@@ -547,6 +562,13 @@ async fn set_link_state(lab: &RunningLab, endpoint: &str, up: bool) -> Result<()
     let ep = EndpointRef::parse(endpoint).ok_or_else(|| Error::InvalidEndpoint {
         endpoint: endpoint.to_string(),
     })?;
+    // a change to the lab, if not to its state: one at a time (#332)
+    let _lock = crate::state::lock_wait(
+        lab.name(),
+        if up { "link-up" } else { "link-down" },
+        crate::state::lock_timeout(),
+    )
+    .await?;
     // a container node too: `namespace_for` knew namespace nodes only
     let conn: Connection<Route> = lab
         .ns_resolver_of(&ep.node)

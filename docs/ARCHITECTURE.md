@@ -222,18 +222,41 @@ catch hand-edits that bypass `apply`.
 
 ### Concurrency
 
-`state::lock(&lab_name)` uses `libc::flock()` on a file under the
-state directory's `.locks/`. It is held for the duration of
-`deploy`, `destroy`, and `apply`. Different labs use different
-lock files and run in parallel without contention.
+**The rule: one mutation per lab at a time, from any caller (#332).**
+Two CLIs, a CLI and the daemon, a scenario and `top`: whoever changes a
+lab holds its lock, a `flock` on `<state>/labs/.locks/<lab>.lock`.
+Different labs use different lock files and change in parallel.
 
-**Global state caveat**: host-global state is not all behind a
-lock. `/etc/hosts` is: `dns::inject_hosts` and its removals take
-`state::hosts_lock()`, one flock for every lab. The mgmt subnet is
-not: two labs can be given overlapping `mgmt` subnets and nothing
-checks across labs (#332). Runtime mutations (`impair`, `spawn`, …)
-change the kernel without taking the lab lock (#332 too). The
-"Process & namespace model" section below has the full inventory.
+- **Lifecycle operations** (`deploy`, `apply`, `destroy`, the reattach
+  after a restart) take it fail-fast (`state::lock_for`), with a 2 s
+  grace for a holder that is only a forked child about to `exec`: a
+  child shares the lock until then (#339). Another operation that holds
+  it is reported as `Locked`.
+- **Runtime mutations** (`impair`, `partition`, `heal`, a link's MTU,
+  `spawn`, a conntrack flush, a scenario's link `down`/`up`) wait for it:
+  `RunningLab::begin` takes the lock, re-reads the state (keeping what
+  this handle changed and has not saved), and `commit` saves and lets
+  go. The wait polls, so a holder on the same runtime can finish, and
+  ends after `NLINK_LAB_LOCK_TIMEOUT` (30 s) with `Busy`, which names the
+  holder: the lock file carries a record of its pid, uid, operation and
+  start time. Each change plans the node's whole traffic control from
+  the state it read, so without the lock one could reinstall what
+  another had just changed.
+- **flock is per open file description:** a function that already holds
+  a lab's lock must not take it again (it would wait for itself until
+  the timeout). Inner functions take the held lock as a token instead
+  (`save_merged(&LabLock, …)`, the `_locked` variants).
+- The three-way merge in `save_merged` stays as a safety net for
+  callers that save without a mutation.
+
+**Host-global state** has locks of its own. `/etc/hosts` edits take
+`state::hosts_lock()`, one flock for every lab. What a lab claims in the
+host's own namespace (a host-reachable mgmt subnet, its bridge) is in the
+host registry, `<state>/host/allocations.toml`, under its own lock
+(`host_registry`): a deploy claims before its first op and fails with
+`mgmt-subnet-overlap`, naming the other lab, on a conflict. The order is
+always a lab's lock, then the registry's. The "Process & namespace model"
+section below has the full inventory.
 
 ## Process & namespace model
 
@@ -342,10 +365,15 @@ parallel deploys that both exercise one of these can race:
   namespaces, so they hear one another and no other lab's (#176). The
   module is loaded (`radios=0`) once and never unloaded.
 - **Default network namespace** — `mgmt host-reachable` adds a
-  bridge to the *host* network namespace; the bridge name is
-  hash-derived per lab, so no name collision, but the `mgmt`
-  subnet is whatever the topology says: two labs given overlapping
-  subnets are not detected (#332).
+  bridge, an address and a connected route to the *host* network
+  namespace. The bridge name is hash-derived per lab. The subnet is
+  claimed in the host registry (`<state>/host/allocations.toml`, #332):
+  a second lab whose host-reachable mgmt subnet overlaps another lab's
+  is refused before its first op (`mgmt-subnet-overlap`). Destroy, a
+  failed deploy's rollback and `destroy --orphans` release the claim;
+  `doctor` lists claims of labs that are gone and `doctor --fix`
+  rebuilds the registry. Overlap with a route of the host's own (not a
+  lab's) is not checked.
 - **The `nlink-lab` process pool** — `nlink-lab ls --scan`
   walks `/run/netns` and `ip link show` from the host's POV; it
   doesn't take a global lock, so two `--scan` invocations can

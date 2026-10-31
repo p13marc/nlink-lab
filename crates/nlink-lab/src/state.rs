@@ -846,7 +846,9 @@ pub fn exists(name: &str) -> bool {
 /// Acquire an exclusive lock on a lab's state directory.
 ///
 /// Returns a [`LabLock`] guard that holds the lock until dropped.
-/// Fails immediately if another process holds the lock.
+/// Fails with [`Error::Locked`] if another process holds the lock, after
+/// a short grace ([`LOCKED_GRACE`]) for a holder that is only a child
+/// about to exec.
 pub fn lock(name: &str) -> Result<LabLock> {
     acquire(name, false)
 }
@@ -862,6 +864,22 @@ pub fn lock_blocking(name: &str) -> Result<LabLock> {
 /// happens when the lock file was removed or replaced between our `open`
 /// and our `flock`, so more than one is already unusual.
 const ACQUIRE_ATTEMPTS: u32 = 8;
+
+/// How long a fail-fast [`lock`] keeps trying before it reports
+/// [`Error::Locked`]. A lock is also held, for a moment, by every child
+/// another thread forks while the holder has it: `flock` belongs to the
+/// open file description, and the child's `O_CLOEXEC` copy closes only at
+/// its `exec`, after it has entered its namespace. Dropping a lock and
+/// taking it again in that window failed with `Locked` although nobody
+/// held it — in the daemon, whose jobs fork on several threads, and in
+/// the parallel root suite (#339). A real holder (a deploy, an apply, a
+/// destroy) holds it for seconds, and is still reported. (The unit tests,
+/// which assert held locks often, wait less.)
+const LOCKED_GRACE: std::time::Duration = if cfg!(test) {
+    std::time::Duration::from_millis(250)
+} else {
+    std::time::Duration::from_secs(2)
+};
 
 /// `flock` a lab's lock file, then **prove it is still the file at that
 /// path**.
@@ -882,20 +900,30 @@ fn acquire(name: &str, blocking: bool) -> Result<LabLock> {
     } else {
         libc::LOCK_EX | libc::LOCK_NB
     };
-    for _ in 0..ACQUIRE_ATTEMPTS {
+    let deadline = std::time::Instant::now() + LOCKED_GRACE;
+    let mut attempts = 0;
+    while attempts < ACQUIRE_ATTEMPTS {
         let file = open_lock_file(name)?;
         let ret = unsafe { libc::flock(file.as_raw_fd(), op) };
         if ret != 0 {
+            let err = std::io::Error::last_os_error();
             if blocking {
                 return Err(Error::deploy_failed(format!(
-                    "failed to lock lab '{name}': {}",
-                    std::io::Error::last_os_error()
+                    "failed to lock lab '{name}': {err}"
                 )));
+            }
+            if err.raw_os_error() == Some(libc::EWOULDBLOCK) && std::time::Instant::now() < deadline
+            {
+                // perhaps only a forked child's copy, about to exec
+                drop(file);
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                continue;
             }
             return Err(Error::Locked {
                 name: name.to_string(),
             });
         }
+        attempts += 1;
         if same_file(&file, &path) {
             return Ok(LabLock { _file: file, path });
         }
@@ -1612,6 +1640,52 @@ link r1:eth0 -- h1:eth0
         drop(again);
     }
 
+    /// A child another thread forks while a lab's lock is held shares the
+    /// lock (flock belongs to the open file description) until it execs:
+    /// its `O_CLOEXEC` copy closes only then. Dropping the lock and taking
+    /// it again in that window failed with `Locked` — the parallel root
+    /// suite's flake (#339). The children here pause 5 ms before exec,
+    /// as a namespace exec does while it enters the namespace.
+    #[test]
+    fn a_forked_childs_copy_of_a_lock_does_not_fail_the_next_lock() {
+        use std::os::unix::process::CommandExt as _;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let _guard = xdg_state_lock();
+        let dir = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("NLINK_LAB_STATE_DIR", dir.path()) };
+
+        let stop = std::sync::Arc::new(AtomicBool::new(false));
+        let forker = {
+            let stop = stop.clone();
+            std::thread::spawn(move || {
+                while !stop.load(Ordering::Relaxed) {
+                    let mut cmd = std::process::Command::new("true");
+                    // SAFETY: usleep is async-signal-safe.
+                    unsafe {
+                        cmd.pre_exec(|| {
+                            libc::usleep(5_000);
+                            Ok(())
+                        });
+                    }
+                    let _ = cmd.status();
+                }
+            })
+        };
+        let mut failures = 0;
+        for _ in 0..200 {
+            match lock("relocked") {
+                Ok(held) => {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                    drop(held);
+                }
+                Err(_) => failures += 1,
+            }
+        }
+        stop.store(true, Ordering::Relaxed);
+        forker.join().unwrap();
+        assert_eq!(failures, 0, "a dropped lock must be takable again");
+    }
+
     #[test]
     fn stale_locks_finds_only_locks_without_a_lab() {
         let _guard = xdg_state_lock();
@@ -1671,12 +1745,13 @@ link r1:eth0 -- h1:eth0
 
         let held = lock("raced").expect("first lock");
         let (tx, rx) = std::sync::mpsc::channel();
+        let (release, released) = std::sync::mpsc::channel::<()>();
         let waiter = std::thread::spawn(move || {
             // Blocks on the inode that is about to be unlinked.
             let got = lock_blocking("raced").expect("acquires eventually");
             tx.send(()).unwrap();
-            // Hold it until the test says so.
-            std::thread::sleep(std::time::Duration::from_millis(300));
+            // Hold it until the test says so (past `lock`'s grace).
+            let _ = released.recv();
             drop(got);
         });
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -1693,6 +1768,7 @@ link r1:eth0 -- h1:eth0
             lock("raced").is_err(),
             "the waiter's lock must still exclude a new caller"
         );
+        release.send(()).unwrap();
         waiter.join().unwrap();
         assert!(lock("raced").is_ok(), "lockable again once released");
     }

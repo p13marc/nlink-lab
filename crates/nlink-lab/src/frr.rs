@@ -655,9 +655,18 @@ pub fn kill_daemons(topology: &Topology) -> usize {
             continue;
         };
         let args: Vec<&[u8]> = cmdline.split(|&b| b == 0).collect();
-        let ours = args
-            .windows(2)
-            .any(|w| w[0] == b"-N" && wanted.contains(&*String::from_utf8_lossy(w[1])));
+        // an FRR daemon (`/usr/lib/frr/zebra`, …) of one of these pathspaces
+        let daemon = args.first().is_some_and(|a0| {
+            let a0 = String::from_utf8_lossy(a0);
+            let base = a0.rsplit('/').next().unwrap_or("");
+            [Daemon::Zebra, Daemon::Ospfd, Daemon::Bgpd]
+                .iter()
+                .any(|d| d.name() == base)
+        });
+        let ours = daemon
+            && args
+                .windows(2)
+                .any(|w| w[0] == b"-N" && wanted.contains(&*String::from_utf8_lossy(w[1])));
         // SAFETY: kill(2) on a pid read from /proc; a stale one is ESRCH.
         if ours && unsafe { libc::kill(pid, libc::SIGKILL) } == 0 {
             killed += 1;

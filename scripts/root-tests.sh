@@ -31,13 +31,19 @@ serial=" root-host root-frr root-wifi "
 threads=${ROOT_TEST_THREADS:-4}
 
 # Build with the human output first, so a compile error is visible; the
-# JSON query after it only reads the (now fresh) artifacts.
-cargo test -p nlink-lab "${cargo_args[@]}" --test 'root-*' --no-run || exit 1
+# JSON query after it only reads the (now fresh) artifacts. Empty arrays
+# expand through ${a[@]+…}: bash before 4.4 calls them unbound under -u.
+cargo test -p nlink-lab ${cargo_args[@]+"${cargo_args[@]}"} --test 'root-*' --no-run || exit 1
 mapfile -t bins < <(
-    cargo test -p nlink-lab "${cargo_args[@]}" --test 'root-*' --no-run --message-format=json 2>/dev/null |
+    cargo test -p nlink-lab ${cargo_args[@]+"${cargo_args[@]}"} --test 'root-*' --no-run --message-format=json 2>/dev/null |
         grep -oP '"executable":"\K[^"]+' | grep '/root_' | sort
 )
-[ ${#bins[@]} -gt 0 ] || { echo "root test binaries not found" >&2; exit 1; }
+# every binary Cargo.toml declares, or a lost one would pass unnoticed
+expected=$(grep -c '^name = "root-' crates/nlink-lab/Cargo.toml)
+if [ ${#bins[@]} -ne "$expected" ]; then
+    echo "found ${#bins[@]} root test binaries, Cargo.toml declares $expected" >&2
+    exit 1
+fi
 
 failed=()
 total=$(date +%s)
@@ -49,7 +55,7 @@ for bin in "${bins[@]}"; do
     echo "=== $name (--test-threads=$n)"
     start=$(date +%s)
     if ! sudo -E env "PATH=$PATH:/usr/sbin:/sbin" NLINK_LAB_SKIP_ROOT_TESTS= \
-        "$bin" --test-threads="$n" "${test_args[@]}"; then
+        "$bin" --test-threads="$n" ${test_args[@]+"${test_args[@]}"}; then
         failed+=("$name")
     fi
     echo "=== $name: $(($(date +%s) - start)) s"

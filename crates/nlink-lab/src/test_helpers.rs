@@ -283,11 +283,15 @@ pub async fn cleanup_lab(topology: &Topology) -> CleanupReport {
         }
         Err(e) => report.warnings.push(format!("list namespaces: {e}")),
     }
-    // `/etc/netns` overlays of namespaces that are already gone.
+    // `/etc/netns` overlays of this lab's namespaces that are already
+    // gone (not another lab's: the same tag check).
     if let Ok(entries) = std::fs::read_dir("/etc/netns") {
         for e in entries.flatten() {
             let ns = e.file_name().to_string_lossy().into_owned();
-            if ns.starts_with(&ns_prefix) && !namespace::exists(&ns) {
+            if ns.starts_with(&ns_prefix)
+                && !namespace::exists(&ns)
+                && crate::netns_tag::lab_of(&ns).is_none_or(|owner| owner == lab_name)
+            {
                 crate::dns::remove_netns_etc(&ns);
             }
         }
@@ -742,6 +746,11 @@ mod tests {
     /// `lab "…"` interpolates a per-process name, an example deployed
     /// without `#[lab_test]` goes through `common::unique`, and each
     /// `format!("<tag>-{}", std::process::id())` tag is used once.
+    ///
+    /// A text check, with known limits: a test's body ends at the first
+    /// `}` in column 0 (rustfmt indents everything nested, and fmt is
+    /// gated in CI), and a literal lab name counts as rewritten only
+    /// through `.replace("<name>", &name)`.
     #[test]
     fn root_tests_deploy_labs_under_names_of_their_own() {
         let mut tags = std::collections::BTreeMap::<String, String>::new();

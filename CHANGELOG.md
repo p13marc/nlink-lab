@@ -57,6 +57,16 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **A lab operation no longer fails with `Locked` right after another
+  one finished** (#339). A child that another thread forks while a lab's
+  lock is held shares the lock until it execs (`flock` belongs to the open
+  file description; the child's `O_CLOEXEC` copy closes only at `exec`,
+  after it has entered its namespace). Taking the lock again in that
+  window failed although nobody held it: in the daemon, whose jobs for
+  different labs fork on several threads, and in a multi-threaded test.
+  The fail-fast lock (deploy, apply, destroy) now retries for up to 2 s
+  before it reports `Locked`; a real holder holds it far longer.
+
 - **`test_helpers::cleanup_lab` no longer sweeps another lab's
   namespaces** (#339). It deleted every namespace under the lab's
   prefix, so a lab named `simple` took `simple-test-…` down with it;

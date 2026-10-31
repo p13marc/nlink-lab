@@ -521,6 +521,16 @@ the test duration. On a panic or a timeout, the pcaps land at
 the workspace's `target/`, or `$CARGO_TARGET_DIR`); on success, they're
 discarded. CI flake → pcap auto-attached to the failure record.
 
+A failed test also keeps a **failure bundle** in `target/nlink-lab/<test>/`
+(#338): the seed and the command that replays it, the topology, `status`,
+the events, and each node's addresses, routes, rules, nftables ruleset,
+qdiscs, conntrack table and process logs (with `capture = true`, the
+pcaps too). `nlink-lab test` keeps one per failed case in
+`./nlink-lab-bundles/<lab>/` (`--bundle-dir`, `--no-bundle`) and names it
+in the JUnit (`<system-out>`) and TAP output; `scenario` and `benchmark`
+keep one with `--bundle DIR`; `nlink-lab bundle -L LAB` takes one at any
+time.
+
 See the [Rust integration test cookbook](cookbook/rust-integration-test.md).
 
 ---

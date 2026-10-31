@@ -33,10 +33,13 @@ pub struct TestResult {
     /// The seed the lab ran with (#337): `test --seed N` replays it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seed: Option<u64>,
+    /// The failure bundle of a failed test (#338).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bundle: Option<String>,
 }
 
 /// What a test runs besides deploy, `validate` and destroy.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct TestOptions {
     /// Every `scenario` block, in order: each action is a result.
     pub scenarios: bool,
@@ -47,6 +50,9 @@ pub struct TestOptions {
     pub keep_failed: bool,
     /// The lab's seed, in place of the topology's own (#337).
     pub seed: Option<u64>,
+    /// Where a failed test's bundle goes (#338): `<dir>/<lab>/`. `None`
+    /// keeps none.
+    pub bundle_dir: Option<std::path::PathBuf>,
 }
 
 impl TestResult {
@@ -61,6 +67,7 @@ impl TestResult {
             error: Some(error.to_string()),
             kept: None,
             seed: None,
+            bundle: None,
         }
     }
 }
@@ -215,6 +222,30 @@ async fn test_ctx(
     }
 
     let failed = assertions.iter().any(|a| !a.passed);
+    // The bundle, while the lab still exists (#338).
+    let bundle = match (&opts.bundle_dir, failed) {
+        (Some(root), true) => {
+            let dir = root.join(lab.name());
+            let failing: Vec<&str> = assertions
+                .iter()
+                .filter(|a| !a.passed)
+                .map(|a| a.description.as_str())
+                .collect();
+            let bopts = crate::bundle::BundleOptions {
+                reason: Some(format!("{file}: {}", failing.join("; "))),
+                replay: seed.map(|s| format!("nlink-lab test --seed {s} {file}")),
+                ..Default::default()
+            };
+            match crate::bundle::collect(&lab, &dir, &bopts).await {
+                Ok(r) => Some(r.dir.display().to_string()),
+                Err(e) => {
+                    ctx.log("warn", format!("no failure bundle: {e}"));
+                    None
+                }
+            }
+        }
+        _ => None,
+    };
     let (error, kept) = if failed && opts.keep_failed {
         (None, Some(lab.name().to_string()))
     } else {
@@ -240,6 +271,7 @@ async fn test_ctx(
         error,
         kept,
         seed,
+        bundle,
     })
 }
 
@@ -642,6 +674,14 @@ pub fn format_junit(results: &[TestResult]) -> String {
             }
         }
 
+        // where a failed test's bundle is (#338): after the testcases, as
+        // JUnit's schema orders them
+        if let Some(bundle) = &result.bundle {
+            xml.push_str(&format!(
+                "    <system-out>failure bundle: {}</system-out>\n",
+                escape_xml(bundle)
+            ));
+        }
         xml.push_str("  </testsuite>\n");
     }
 
@@ -662,6 +702,13 @@ pub fn format_tap(results: &[TestResult]) -> String {
     for result in results {
         if let Some(seed) = result.seed {
             out.push_str(&format!("# {}: seed {seed}\n", tap_text(&result.file)));
+        }
+        if let Some(bundle) = &result.bundle {
+            out.push_str(&format!(
+                "# {}: failure bundle {}\n",
+                tap_text(&result.file),
+                tap_text(bundle)
+            ));
         }
         if let Some(err) = &result.error {
             n += 1;
@@ -776,6 +823,7 @@ mod tests {
                 error: None,
                 kept: None,
                 seed: None,
+                bundle: None,
             },
         ];
         let tap = format_tap(&results);
@@ -825,6 +873,7 @@ mod tests {
             error: None,
             kept: None,
             seed: None,
+            bundle: None,
         }];
         let xml = format_junit(&results);
         assert!(xml.contains("<testsuite name=\"test.nll\" tests=\"1\" failures=\"0\""));
@@ -848,6 +897,7 @@ mod tests {
             error: None,
             kept: None,
             seed: None,
+            bundle: None,
         }];
         let xml = format_junit(&results);
         assert!(xml.contains("failures=\"1\""));
@@ -878,6 +928,7 @@ mod tests {
             error: None,
             kept: None,
             seed: None,
+            bundle: None,
         }];
         let tap = format_tap(&results);
         assert!(tap.starts_with("TAP version 13\n1..2\n"));
@@ -1032,6 +1083,7 @@ validate {
             error: None,
             kept: None,
             seed: None,
+            bundle: None,
         }];
         let tap = format_tap(&results);
         assert!(tap.contains("1..0"));

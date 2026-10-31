@@ -108,6 +108,32 @@ Cleanup warnings are printed as `lab_test '<name>': cleanup warning: ...`.
 The same helper is available as `nlink_lab::test_helpers::cleanup_lab`
 (async) for tests that deploy without the macro.
 
+### The failure bundle
+
+A test whose body panics or times out keeps a **failure bundle** before the
+lab is swept (#338), in `target/nlink-lab/<test>/` (or
+`$NLINK_LAB_BUNDLE_DIR/<lab>/`):
+
+```text
+summary.txt     what failed, the seed, the command that replays it
+topology.nll    the lab's topology, rendered
+status.json     nodes, addresses, impairments, partitions, processes with
+                exit codes, counters
+events.ndjson   the lab's lifecycle and runtime events
+nodes/<node>/   addr.json, route.json, route6.json, rule.json, nft.json,
+                qdisc.json, conntrack.json, every process's stdout/stderr
+pcaps/          with `capture = true`
+```
+
+The test's output says where it is. In CI, keep `target/nlink-lab/` as an
+artifact and a failed lab test can be debugged without re-running it; the
+seed in `summary.txt` replays its packet losses
+(`NLINK_LAB_SEED=N cargo test … -- --exact <test>`). Files are capped at
+5 MB and the bundle at 50 MB, the oldest pcaps left out first.
+`#[lab_test(…, bundle = false)]` keeps none. `nlink_lab::bundle::collect`
+is the same for a test that deploys without the macro, and `nlink-lab
+bundle -L LAB` collects one on demand.
+
 ### File-based form
 
 Point the macro at an NLL topology file:

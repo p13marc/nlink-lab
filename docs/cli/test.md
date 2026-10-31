@@ -38,6 +38,12 @@ Options:
       --seed <N>
           Deploy every lab with this seed, in place of its topology's `seed`: the seed a failed run reported replays its packet losses
 
+      --bundle-dir <DIR>
+          Where a failed test's bundle goes: `DIR/<lab>/` (logs, status, events, each node's addresses, routes, nftables, qdiscs and conntrack). Default `$NLINK_LAB_BUNDLE_DIR`, else `./nlink-lab-bundles`
+
+      --no-bundle
+          Keep no failure bundle
+
   -h, --help
           Print help
 ```

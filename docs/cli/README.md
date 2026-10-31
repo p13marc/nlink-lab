@@ -1,7 +1,7 @@
 # CLI reference
 
 Every `nlink-lab` subcommand has a reference page below, grouped as in
-`nlink-lab --help` (<!-- count:cli-commands -->40<!-- /count --> commands).
+`nlink-lab --help` (<!-- count:cli-commands -->41<!-- /count --> commands).
 
 For a high-level walkthrough, start with the
 [user guide](../USER_GUIDE.md) instead.
@@ -62,6 +62,7 @@ For a high-level walkthrough, start with the
 | [`test`](test.md) | Run topology tests: deploy, validate, destroy |
 | [`scenario`](scenario.md) | Run a `scenario` block from a deployed lab's topology |
 | [`benchmark`](benchmark.md) | Run a `benchmark` block from a deployed lab's topology |
+| [`bundle`](bundle.md) | Keep a lab's failure bundle: everything needed to debug it |
 
 ## Author
 

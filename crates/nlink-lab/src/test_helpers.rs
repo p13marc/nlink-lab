@@ -77,6 +77,101 @@ pub mod __macro_support {
             }
         }
     }
+
+    /// Where and whether a `#[lab_test]` keeps a failure bundle (#338),
+    /// shared by the thread that runs the test and the one that enforces
+    /// its `timeout`.
+    #[derive(Clone)]
+    pub struct BundleSpec {
+        enabled: bool,
+        root: std::path::PathBuf,
+        test: String,
+        package: &'static str,
+        pcaps: Option<std::path::PathBuf>,
+    }
+
+    impl BundleSpec {
+        pub fn new(
+            enabled: bool,
+            workspace_root: &str,
+            package: &'static str,
+            module: &str,
+            name: &str,
+            pcaps: Option<std::path::PathBuf>,
+        ) -> Self {
+            let root = std::env::var_os("CARGO_TARGET_DIR")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::path::Path::new(workspace_root).join("target"))
+                .join("nlink-lab");
+            Self {
+                enabled,
+                root,
+                test: super::test_path(module, name),
+                package,
+                pcaps,
+            }
+        }
+
+        /// A guard that collects the bundle if the test body panics.
+        pub fn guard(&self, lab: &str, seed: Option<u64>) -> BundleGuard {
+            BundleGuard {
+                spec: self.clone(),
+                lab: lab.to_string(),
+                seed,
+            }
+        }
+
+        /// Collect the bundle of `lab` now, and say where it is.
+        pub fn collect(&self, lab: &str, seed: Option<u64>, reason: &str) {
+            if !self.enabled {
+                return;
+            }
+            // `$NLINK_LAB_BUNDLE_DIR/<lab>`, else `target/nlink-lab/<test>`
+            let dir = match std::env::var_os(crate::bundle::BUNDLE_DIR_ENV) {
+                Some(d) => std::path::PathBuf::from(d).join(lab),
+                None => self.root.join(self.test.replace("::", "-")),
+            };
+            let replay = seed.map(|seed| {
+                format!(
+                    "{}={seed} cargo test -p {} -- --exact {}",
+                    crate::seed::SEED_ENV,
+                    self.package,
+                    self.test
+                )
+            });
+            let opts = crate::bundle::BundleOptions {
+                reason: Some(format!("lab_test '{}': {reason}", self.test)),
+                replay,
+                pcaps: self.pcaps.clone(),
+                ..Default::default()
+            };
+            match crate::bundle::collect_blocking(lab, &dir, &opts) {
+                Ok(r) => eprintln!(
+                    "lab_test '{}': failure bundle in {} ({} files)",
+                    self.test,
+                    r.dir.display(),
+                    r.files
+                ),
+                Err(e) => eprintln!("lab_test '{}': no failure bundle: {e}", self.test),
+            }
+        }
+    }
+
+    /// Collects a failing `#[lab_test]`'s bundle when dropped while
+    /// panicking, before the lab is swept.
+    pub struct BundleGuard {
+        spec: BundleSpec,
+        lab: String,
+        seed: Option<u64>,
+    }
+
+    impl Drop for BundleGuard {
+        fn drop(&mut self) {
+            if std::thread::panicking() {
+                self.spec.collect(&self.lab, self.seed, "the test panicked");
+            }
+        }
+    }
 }
 
 /// A test's libtest name, as `--exact` takes it: its module path without

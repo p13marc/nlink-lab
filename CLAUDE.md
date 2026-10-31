@@ -120,6 +120,7 @@ crates/nlink-lab/src/
   seed.rs           # Netem seeds: the lab seed, derive(), the kernel probe (#337)
   benchmark.rs      # Benchmark execution engine (ping/iperf3 with metric assertions)
   capture.rs        # Packet capture using netring (pcap output, BPF filters)
+  bundle.rs         # Failure bundles: logs, status, events, node state, pcaps (#338)
   wifi.rs           # Wi-Fi emulation (hostapd/wpa_supplicant config gen, hwsim radios over netlink)
   deploy/           # Deployer — plan + execute (see "Deployment Sequence")
   running.rs        # RunningLab — interact with deployed lab
@@ -358,7 +359,7 @@ Nested interpolation works: `${leaf${i}.eth0}` resolves inner `${i}` first.
 Pool exhaustion is detected and errors at parse time.
 State locking via flock prevents concurrent deploy/destroy on the same lab.
 
-CLI commands (<!-- count:cli-commands -->40<!-- /count -->, grouped in `--help`; lab-scoped ones take `-L LAB`, else `$NLINK_LAB`, `use`, or the only lab):
+CLI commands (<!-- count:cli-commands -->41<!-- /count -->, grouped in `--help`; lab-scoped ones take `-L LAB`, else `$NLINK_LAB`, `use`, or the only lab):
 `deploy` (`.nll` or `.nlz`, with `--set`, `--unique`, `--suffix`, `--json`), `use` (`--clear`),
 `destroy` (`LAB…`, `--all`, `--orphans`), `apply` (`[FILE]`, default the recorded source; `--reset-impairments`),
 `ls` (`--scan`, reports orphans + stale labs), `status [LAB]` (nodes, addresses, containers,
@@ -371,7 +372,7 @@ impairments, partitions, processes, counters),
 (`--scenarios`, `--benchmarks`, `--keep`, `--junit`, `--tap`, `--fail-fast`), `render`
 (`--diagram dot|mermaid|ascii`, `--set`),
 `impair EP SPEC…` (`--dir out|in|both`, `--clear`, `--partition`/`--heal`, `--pair SRC DST`, `--show`),
-`diagnose` (`--json`), `capture`, `diff`, `export` (`--nll`),
+`diagnose` (`--json`), `bundle` (`-o`, `--archive`: a failure bundle on demand), `capture`, `diff`, `export` (`--nll`),
 `wait [NODE]` (`--tcp`, `--exec`, `--file`, `--listening`, `--log`, `--fd-stable`),
 `ip` (`--iface`, `--cidr`), `conntrack [NODE]` (`--proto`, `--src`/`--dst`,
 `--sport`/`--dport`, `--mark`, `--zone`, `--status`, `--flush`),

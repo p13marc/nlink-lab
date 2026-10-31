@@ -45,6 +45,17 @@ pub struct Args {
     /// the seed a failed run reported replays its packet losses.
     #[arg(long, value_name = "N", value_parser = crate::args::seed)]
     pub seed: Option<u64>,
+
+    /// Where a failed test's bundle goes: `DIR/<lab>/` (logs, status,
+    /// events, each node's addresses, routes, nftables, qdiscs and
+    /// conntrack). Default `$NLINK_LAB_BUNDLE_DIR`, else
+    /// `./nlink-lab-bundles`.
+    #[arg(long, value_name = "DIR", conflicts_with = "no_bundle")]
+    pub bundle_dir: Option<PathBuf>,
+
+    /// Keep no failure bundle.
+    #[arg(long)]
+    pub no_bundle: bool,
 }
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
@@ -58,12 +69,20 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         benchmarks,
         keep,
         seed,
+        bundle_dir,
+        no_bundle,
     } = args;
+    let bundle_dir = (!no_bundle).then(|| {
+        bundle_dir
+            .or_else(|| std::env::var_os(nlink_lab::bundle::BUNDLE_DIR_ENV).map(PathBuf::from))
+            .unwrap_or_else(|| PathBuf::from("nlink-lab-bundles"))
+    });
     let opts = nlink_lab::test_runner::TestOptions {
         scenarios,
         benchmarks,
         keep_failed: keep,
         seed,
+        bundle_dir,
     };
     require_root()?;
     let cli_params = params;
@@ -84,7 +103,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         // the deploy's stages and waits, then the destroy's, live
         let progress = crate::progress::Progress::new(ctx);
         let op = progress.op("test", "");
-        let ran = nlink_lab::test_runner::run_test_opts(file, &cli_params, opts, &op).await;
+        let ran = nlink_lab::test_runner::run_test_opts(file, &cli_params, opts.clone(), &op).await;
         progress.finish();
         match ran {
             Ok(result) => {
@@ -124,6 +143,9 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                         );
                     }
                     any_failed = true;
+                }
+                if let Some(bundle) = &result.bundle {
+                    eprintln!("  failure bundle: {bundle}");
                 }
                 if let Some(err) = &result.error {
                     eprintln!("  {} {err}", red("ERROR"));

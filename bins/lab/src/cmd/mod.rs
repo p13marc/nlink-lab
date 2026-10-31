@@ -6,6 +6,7 @@
 pub mod apply;
 pub mod archive;
 pub mod benchmark;
+pub mod bundle;
 pub mod capture;
 pub mod common;
 pub mod conntrack;
@@ -79,6 +80,7 @@ pub async fn dispatch(ctx: &Ctx, cmd: Commands) -> nlink_lab::Result<()> {
         Commands::Ps(args) => ps::run(ctx, args),
         Commands::Kill(args) => kill::run(ctx, args),
         Commands::Diagnose(args) => diagnose::run(ctx, args).await,
+        Commands::Bundle(args) => bundle::run(ctx, args).await,
         Commands::Capture(args) => capture::run(ctx, args),
         Commands::Wait(args) => wait::run(ctx, args).await,
         Commands::Ip(args) => ip::run(ctx, args),

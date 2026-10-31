@@ -79,6 +79,13 @@ use syn::{ItemFn, LitInt, LitStr, braced, parse_macro_input};
 /// // fails, with the command that replays it (`NLINK_LAB_SEED=N`).
 /// #[lab_test("lossy.nll", seed = 42)]
 /// async fn test_lossy(lab: RunningLab) { ... }
+///
+/// // A failing test leaves a bundle of everything needed to debug it in
+/// // target/nlink-lab/<test>/ (or $NLINK_LAB_BUNDLE_DIR/<lab>/): logs,
+/// // status, events, the nodes' addresses, routes, rules, nftables, qdiscs
+/// // and conntrack, and the pcaps of `capture = true` (#338). Off with:
+/// #[lab_test("simple.nll", bundle = false)]
+/// async fn test_without_a_bundle(lab: RunningLab) { ... }
 /// ```
 ///
 /// `set { ... }` keys are NLL `param` names; values are string-typed
@@ -180,6 +187,28 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let lab_name_suffix = fn_name.to_string();
     let ws_root = workspace_root();
+    // The failure bundle (#338): on by default, `bundle = false` off. It
+    // takes the pcaps a `capture = true` test kept.
+    let bundle_on = args.bundle;
+    let bundle_pcaps = if args.capture_on_failure {
+        quote! {
+            ::std::option::Option::Some(::nlink_lab::test_helpers::capture_dir(#ws_root, #lab_name_suffix))
+        }
+    } else {
+        quote! { ::std::option::Option::None }
+    };
+    let bundle_main = quote! {
+        #[allow(unused_variables)]
+        let __bundle = ::nlink_lab::test_helpers::__macro_support::BundleSpec::new(
+            #bundle_on,
+            #ws_root,
+            ::std::env!("CARGO_PKG_NAME"),
+            ::std::module_path!(),
+            ::std::stringify!(#fn_name),
+            #bundle_pcaps,
+        );
+        let __bundle_worker = __bundle.clone();
+    };
     let seed_attr = match args.seed {
         Some(s) => quote! { ::std::option::Option::Some(#s) },
         None => quote! { ::std::option::Option::None },
@@ -292,6 +321,10 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
         // `mut` so test bodies can call `&mut self` methods like
         // `spawn_with_logs` without having to shadow the binding.
         let mut lab = __topo.deploy().await.expect("failed to deploy lab");
+        // Dropped after the capture guard (declared later), so a failing
+        // test's pcaps are kept first, and before the lab guard sweeps the
+        // lab: the bundle is collected while the lab still exists (#338).
+        let _bundle_guard = __bundle_worker.guard(lab.name(), lab.topology().lab.seed);
 
         #capture_setup
 
@@ -331,6 +364,11 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                 if ::std::time::Instant::now() >= __deadline {
                     #capture_on_timeout
                     if let ::std::result::Result::Ok(topo) = __armed_rx.try_recv() {
+                        __bundle.collect(
+                            &topo.lab.name,
+                            topo.lab.seed,
+                            &::std::format!("it exceeded its {}s timeout", #secs),
+                        );
                         ::nlink_lab::test_helpers::__macro_support::SeedNote::new(
                             topo.lab.seed,
                             ::std::env!("CARGO_PKG_NAME"),
@@ -384,6 +422,7 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
 
             #capture_main
+            #bundle_main
 
             #runner
         }
@@ -403,6 +442,7 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///              | "timeout" "=" LitInt          (seconds)
 ///              | "capture" "=" LitBool
 ///              | "seed" "=" LitInt             (#337)
+///              | "bundle" "=" LitBool          (#338; default true)
 /// KeyValue    := (Ident | LitStr) "=" LitStr
 /// ```
 struct LabTestArgs {
@@ -411,6 +451,7 @@ struct LabTestArgs {
     timeout_secs: Option<u64>,
     capture_on_failure: bool,
     seed: Option<u64>,
+    bundle: bool,
 }
 
 enum LabTestSource {
@@ -440,6 +481,7 @@ impl syn::parse::Parse for LabTestArgs {
         let mut timeout_secs: Option<u64> = None;
         let mut capture_on_failure = false;
         let mut seed: Option<u64> = None;
+        let mut bundle = true;
 
         while !input.is_empty() {
             let _: syn::Token![,] = input.parse()?;
@@ -482,6 +524,10 @@ impl syn::parse::Parse for LabTestArgs {
                     ));
                 }
                 seed = Some(n);
+            } else if kw == "bundle" {
+                let _: syn::Token![=] = input.parse()?;
+                let lit: syn::LitBool = input.parse()?;
+                bundle = lit.value;
             } else if kw == "capture" {
                 let _: syn::Token![=] = input.parse()?;
                 // Accept `capture = true` (the only form today).
@@ -490,7 +536,7 @@ impl syn::parse::Parse for LabTestArgs {
             } else {
                 return Err(syn::Error::new_spanned(
                     kw,
-                    "unknown lab_test arg — expected `set { … }`, `timeout = SECS`, `capture = true`, or `seed = N`",
+                    "unknown lab_test arg — expected `set { … }`, `timeout = SECS`, `capture = true`, `seed = N`, or `bundle = false`",
                 ));
             }
         }
@@ -501,6 +547,7 @@ impl syn::parse::Parse for LabTestArgs {
             timeout_secs,
             capture_on_failure,
             seed,
+            bundle,
         })
     }
 }
@@ -558,6 +605,12 @@ mod tests {
                 ("wan-delay".to_string(), "10ms".to_string()),
             ]
         );
+    }
+
+    #[test]
+    fn a_bundle_is_on_unless_turned_off() {
+        assert!(parse(r#""a.nll""#).unwrap().bundle);
+        assert!(!parse(r#""a.nll", bundle = false"#).unwrap().bundle);
     }
 
     #[test]

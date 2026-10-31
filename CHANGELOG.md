@@ -38,6 +38,22 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Failure bundles** (#338): everything needed to debug a failed lab
+  test, kept after the lab is gone. A `#[lab_test]` whose body panics or
+  times out writes `target/nlink-lab/<test>/` (or
+  `$NLINK_LAB_BUNDLE_DIR/<lab>/`) before the lab is swept: `summary.txt`
+  (what failed, the seed, the command that replays it), the rendered
+  `topology.nll`, `status.json`, `events.ndjson`, and per node its
+  addresses, routes, rules, nftables ruleset, qdiscs and conntrack (JSON
+  from the host's `ip`, `nft` and `tc`, run in the node's namespace, so a
+  container without them is covered) and its processes' logs, plus the
+  pcaps of `capture = true`. `bundle = false` keeps none. `nlink-lab test`
+  keeps one per failed case (`--bundle-dir`, default
+  `./nlink-lab-bundles`; `--no-bundle`) and names it in JUnit
+  `<system-out>` and TAP; `scenario` and `benchmark` take `--bundle DIR`;
+  the new `nlink-lab bundle [-L LAB] [-o DIR] [--archive]` takes one on
+  demand (`--archive` packs a `.tar.gz`). Files are capped at 5 MB and a
+  bundle at 50 MB, the oldest pcaps left out first.
 - **Host-reachable mgmt subnets are claimed across labs** (#332). A
   `mgmt … host-reachable` lab puts a bridge, an address and a route on
   the host itself; a second lab whose host-reachable mgmt subnet overlaps

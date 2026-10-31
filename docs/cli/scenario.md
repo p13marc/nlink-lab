@@ -21,6 +21,9 @@ Options:
   -L, --lab <LAB>
           The lab. Default: `$NLINK_LAB`, then the one `nlink-lab use` selected, then the only running lab
 
+      --bundle <DIR>
+          When it fails, keep the lab's failure bundle in `DIR/<lab>/` (see `nlink-lab bundle`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```

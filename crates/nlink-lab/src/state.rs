@@ -847,7 +847,7 @@ pub fn exists(name: &str) -> bool {
 ///
 /// Returns a [`LabLock`] guard that holds the lock until dropped.
 /// Fails with [`Error::Locked`] if another process holds the lock, after
-/// a short grace ([`LOCKED_GRACE`]) for a holder that is only a child
+/// a short grace (`LOCKED_GRACE`, 2 s) for a holder that is only a child
 /// about to exec.
 pub fn lock(name: &str) -> Result<LabLock> {
     acquire(name, false)

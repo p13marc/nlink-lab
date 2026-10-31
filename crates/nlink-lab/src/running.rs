@@ -2324,14 +2324,25 @@ impl RunningLab {
                     .filter_map(|ep| EndpointRef::parse(ep).map(|e| e.node))
                     .collect()
             }
-            ReplayTarget::Pair { network, src, .. } => {
+            ReplayTarget::Pair { network, src, dst } => {
+                // only the replayed rule goes back, in its place: another
+                // rule of the network is not the replay's
                 let file: Topology = serde_json::from_str(&base.topology)
                     .map_err(|e| Error::deploy_failed(format!("the state's topology: {e}")))?;
-                if let (Some(now), Some(was)) = (
-                    self.topology.networks.get_mut(network),
-                    file.networks.get(network),
-                ) {
-                    now.impairments = was.impairments.clone();
+                let is_it = |i: &crate::types::NetworkImpairment| i.src == *src && i.dst == *dst;
+                let was = file
+                    .networks
+                    .get(network)
+                    .and_then(|n| n.impairments.iter().find(|i| is_it(i)).cloned());
+                if let Some(now) = self.topology.networks.get_mut(network) {
+                    match (now.impairments.iter().position(is_it), was) {
+                        (Some(at), Some(was)) => now.impairments[at] = was,
+                        (Some(at), None) => {
+                            now.impairments.remove(at);
+                        }
+                        (None, Some(was)) => now.impairments.push(was),
+                        (None, None) => {}
+                    }
                 }
                 vec![src.clone()]
             }

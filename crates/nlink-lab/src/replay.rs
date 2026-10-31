@@ -79,6 +79,8 @@ pub async fn play<S: Sink>(
     stop: impl std::future::Future<Output = ()>,
 ) -> crate::Result<(Ended, u64)> {
     let step = step.max(Duration::from_millis(10));
+    // a trace of one row has nothing to loop over: it is applied once
+    let looped = looped && !trace.length().is_zero();
     let start = tokio::time::Instant::now();
     let mut last: Option<Values> = None;
     let mut changes = 0u64;
@@ -272,6 +274,22 @@ mod tests {
         assert_ne!(own, t0);
         assert_ne!(tick_seed(Some("42"), None, &ep, 1), Some(own));
         assert!(t0 <= crate::seed::MAX && own <= crate::seed::MAX);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_looped_trace_of_one_row_is_applied_once_and_ends() {
+        let trace = Trace::parse("t_ms,delay_ms\n0,10\n").unwrap();
+        let mut fake = Fake(Vec::new(), tokio::time::Instant::now());
+        let (ended, changes) = play(
+            &mut fake,
+            &trace,
+            Duration::from_millis(100),
+            true,
+            std::future::pending(),
+        )
+        .await
+        .unwrap();
+        assert_eq!((ended, changes), (Ended::Finished, 1));
     }
 
     #[tokio::test(start_paused = true)]

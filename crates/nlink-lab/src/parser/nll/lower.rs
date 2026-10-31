@@ -4499,7 +4499,15 @@ fn lower_scenario(s: &ast::ScenarioDef) -> Result<types::Scenario> {
                         }
                     };
                     let step_ms = match step {
-                        Some(s) => s.to_value()?.as_millis() as u64,
+                        Some(s) => {
+                            let ms = u64::try_from(s.to_value()?.as_millis()).unwrap_or(u64::MAX);
+                            if ms == 0 {
+                                return Err(crate::Error::NllParse(
+                                    "a replay's `step` is at least 1ms".into(),
+                                ));
+                            }
+                            ms
+                        }
                         None => types::DEFAULT_REPLAY_STEP_MS,
                     };
                     types::ScenarioAction::Replay {
@@ -5877,6 +5885,18 @@ node r1 : nonexistent"#,
         let fw = topo.nodes["server"].firewall.as_ref().unwrap();
         assert_eq!(fw.policy.as_deref(), Some("drop"));
         assert_eq!(fw.rules.len(), 4);
+    }
+
+    #[test]
+    fn a_replay_step_is_at_least_a_millisecond() {
+        let nll = |step: &str| {
+            format!(
+                "lab \"r\"\nnode a\nnode b\nlink a:eth0 -- b:eth0\nscenario \"s\" {{\n  at 0s {{ replay a:eth0 \"t.csv\" {{ step {step} }} }}\n}}\n"
+            )
+        };
+        let e = crate::parser::parse(&nll("0ms")).unwrap_err().to_string();
+        assert!(e.contains("at least 1ms"), "{e}");
+        crate::parser::parse(&nll("1ms")).unwrap();
     }
 
     #[test]

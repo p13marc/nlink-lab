@@ -106,12 +106,22 @@ module.exports = grammar({
           "node",
           $._name,
           optional(seq(":", $.profile_list)),
+          optional($.node_kind),
           optional($.node_image),
           optional($.node_body),
         ),
       ),
 
     profile_list: ($) => seq($._name, repeat(seq(",", $._name))),
+
+    // `kind foreign { netns|container|tap "NAME"  manage addresses|tc }` (#344)
+    node_kind: ($) => seq("kind", "foreign"),
+
+    foreign_property: ($) =>
+      choice(
+        seq(choice("netns", "container", "tap"), $.string),
+        seq("manage", choice("addresses", "tc")),
+      ),
 
     node_body: ($) => seq("{", repeat($._node_content), "}"),
 
@@ -139,6 +149,7 @@ module.exports = grammar({
         $.run_property,
         $.image_property,
         $.container_property,
+        $.foreign_property,
       ),
 
     forward_property: ($) => seq("forward", choice("ipv4", "ipv6")),

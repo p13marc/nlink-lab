@@ -152,6 +152,20 @@ pub async fn force_cleanup(name: &str, prefix: &str) -> Vec<Cleanup> {
                     name: bridge_name,
                 });
             }
+            // its foreign taps' bridges, as the registry has them (#344)
+            let taps: Vec<String> = crate::host_registry::all()
+                .ok()
+                .and_then(|mut all| all.remove(name))
+                .map(|c| c.bridges.into_iter().filter(|b| is_tap_bridge(b)).collect())
+                .unwrap_or_default();
+            for bridge in taps {
+                if let Ok(true) = conn.del_link_if_exists(bridge.as_str()).await {
+                    done.push(Cleanup::Deleted {
+                        kind: Resource::MgmtBridge,
+                        name: bridge,
+                    });
+                }
+            }
         }
         Err(e) => done.push(Cleanup::failed("open a netlink socket", e)),
     }
@@ -270,8 +284,31 @@ pub async fn find_orphans(known: &[crate::state::LabInfo]) -> Orphans {
             }),
     );
     let mut orphans = classify_orphans(&ifnames, &tagged, &known_plus, &lab_namespaces);
+    // A foreign tap's bridge (#344) is named after the lab and the node,
+    // so only the registry knows whose it is: one no live lab claims is
+    // debris. Without a readable registry, none is.
+    if let Ok(claims) = crate::host_registry::all() {
+        let live: std::collections::HashSet<String> = claims
+            .into_iter()
+            .filter(|(lab, _)| known_plus.iter().any(|k| &k.name == lab))
+            .flat_map(|(_, c)| c.bridges)
+            .collect();
+        orphans.bridges.extend(
+            ifnames
+                .iter()
+                .filter(|n| is_tap_bridge(n) && !live.contains(n.as_str()))
+                .cloned(),
+        );
+    }
     orphans.stale = classify_stale(&lab_namespaces, &netns);
     orphans
+}
+
+/// A foreign tap's bridge: `nt` + 8 hex (#344).
+fn is_tap_bridge(ifname: &str) -> bool {
+    ifname.len() == 10
+        && ifname.starts_with("nt")
+        && ifname[2..].chars().all(|c| c.is_ascii_hexdigit())
 }
 
 /// The labs among `candidates` that own host resources but are missing

@@ -525,6 +525,18 @@ impl LabConfig {
         // nm{hash_8chars}{idx} — fits 15 chars for idx up to 99999
         format!("nm{h}{idx}")
     }
+
+    /// The root-namespace bridge a foreign tap node's tap joins (#344):
+    /// `nt{hash8}`, of the lab and the node.
+    pub fn tap_bridge_name(&self, node: &str) -> String {
+        format!("nt{}", name_hash_str(&format!("{}/{node}", self.name)))
+    }
+
+    /// The root-namespace end of the `k`th link to a foreign tap node,
+    /// on its bridge: `nt{hash8}p{k}`.
+    pub fn tap_port_name(&self, node: &str, k: usize) -> String {
+        format!("{}p{k}", self.tap_bridge_name(node))
+    }
 }
 
 /// DJB2 hash of a string, returned as 8 hex chars.
@@ -762,12 +774,83 @@ pub struct Node {
     /// Wi-Fi interfaces (mac80211_hwsim).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub wifi: Vec<WifiConfig>,
+
+    /// `kind foreign { … }`: a namespace, container or tap nlink-lab did
+    /// not create (#344). It links to it and never manages it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub foreign: Option<Foreign>,
 }
 
 impl Node {
     /// Returns true if this node should be deployed as a container.
     pub fn is_container(&self) -> bool {
         self.image.is_some()
+    }
+
+    /// Whether this node is `kind foreign` (#344).
+    pub fn is_foreign(&self) -> bool {
+        self.foreign.is_some()
+    }
+}
+
+/// A node another tool made (#344): nlink-lab creates the lab side of its
+/// links, and never creates, stops or deletes the target itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Foreign {
+    pub target: ForeignTarget,
+    /// Configure the addresses and routes declared on its side of its
+    /// links (`manage addresses`). Off: its side is left as it is.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub manage_addresses: bool,
+    /// Put the impairments declared on its side of its links inside it
+    /// (`manage tc`). Off: they are refused, and a link's impairments
+    /// apply on the lab side only, as egress toward it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub manage_tc: bool,
+}
+
+/// What a foreign node is (#344).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(tag = "kind", content = "name", rename_all = "snake_case")]
+pub enum ForeignTarget {
+    /// A network namespace: a path, or a name under `/run/netns`.
+    Netns(String),
+    /// A container another tool runs, by name or id.
+    Container(String),
+    /// A tap in the host's namespace (a VM's NIC).
+    Tap(String),
+}
+
+impl ForeignTarget {
+    /// The NLL keyword: `netns`, `container`, `tap`.
+    pub fn keyword(&self) -> &'static str {
+        match self {
+            Self::Netns(_) => "netns",
+            Self::Container(_) => "container",
+            Self::Tap(_) => "tap",
+        }
+    }
+
+    /// What it names: the path or name, the container, the tap.
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Netns(s) | Self::Container(s) | Self::Tap(s) => s,
+        }
+    }
+
+    /// A netns target's path: a bare name is under `/run/netns`.
+    pub fn netns_path(&self) -> Option<std::path::PathBuf> {
+        match self {
+            Self::Netns(s) if s.contains('/') => Some(s.into()),
+            Self::Netns(s) => Some(std::path::Path::new("/run/netns").join(s)),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for ForeignTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {:?}", self.keyword(), self.name())
     }
 }
 

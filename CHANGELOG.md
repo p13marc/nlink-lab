@@ -38,6 +38,23 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Foreign nodes: link to a netns, a container or a tap the lab did not
+  make** (#344, experimental). `node fw kind foreign { netns "other" }`,
+  `{ container "clab-site-ceos1" }` or `{ tap "vnet3" }`. The lab makes
+  its end of each link: a veth moved into the netns or container, or, for
+  a tap, a veth onto a bridge in the host's namespace that the tap joins
+  (the tap is never moved). It never creates, stops or deletes the target.
+  `manage addresses` and `manage tc` let it set that side's addresses,
+  routes and impairments, and only add to them, never purge. Deploy
+  checks every target before its first op (`foreign-target-missing`, a
+  tap with a master, an interface name the target already uses). Destroy
+  deletes the lab's ends and the tap bridge only. `exec`/`shell` work;
+  `spawn`, `ps NODE` and `node restart` are refused. New validator rules
+  `foreign-unsupported-property`, `foreign-link-needs-lab-side`,
+  `foreign-tap-link-only`, `foreign-unmanaged-tc`,
+  `foreign-name-under-prefix` and warning `foreign-address-unmanaged`.
+  `status` shows the kind and target. `NsRef::Path` names a namespace by
+  path.
 - **Replay a recorded link** (#340). A scenario step `replay EP
   "trace.csv" { loop  step 100ms  dir both }` (or `replay NETWORK SRC --
   DST "trace.csv"`) plays a CSV of delay, jitter, loss and rate over time

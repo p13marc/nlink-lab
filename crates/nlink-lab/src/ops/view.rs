@@ -18,10 +18,14 @@ use crate::types::Impairment;
 #[derive(Debug, Clone, serde::Serialize, schemars::JsonSchema)]
 pub struct NodeView {
     pub node: String,
-    /// `namespace` or `container`.
+    /// `namespace`, `container` or `foreign`.
     pub kind: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub image: Option<String>,
+    /// A foreign node's target (#344): `netns "/run/netns/x"`,
+    /// `container "name"`, `tap "vnet3"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub foreign: Option<String>,
     /// The container's id and init pid, for a container node.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub container: Option<ContainerView>,
@@ -99,12 +103,15 @@ pub fn lab_status(running: &RunningLab, state: &LabState, counters: bool) -> Lab
         .iter()
         .map(|(name, node)| NodeView {
             node: name.clone(),
-            kind: if node.image.is_some() {
+            kind: if node.is_foreign() {
+                "foreign"
+            } else if node.image.is_some() {
                 "container"
             } else {
                 "namespace"
             },
             image: node.image.clone(),
+            foreign: node.foreign.as_ref().map(|f| f.target.to_string()),
             container: containers.get(name).map(|c| ContainerView {
                 id: c.id.clone(),
                 pid: c.pid,

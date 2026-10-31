@@ -31,6 +31,8 @@
 (sysctl_property "sysctl" @keyword)
 (loopback_property "lo" @keyword)
 (image_property "image" @keyword)
+(node_kind ["kind" "foreign"] @keyword)
+(foreign_property ["netns" "container" "tap" "manage" "addresses" "tc"] @keyword)
 (node_image ["image" "cmd"] @keyword)
 (run_property "run" @keyword)
 (run_property "background" @keyword)

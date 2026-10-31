@@ -558,6 +558,18 @@
             "members": [
               {
                 "type": "SYMBOL",
+                "name": "node_kind"
+              },
+              {
+                "type": "BLANK"
+              }
+            ]
+          },
+          {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
                 "name": "node_image"
               },
               {
@@ -602,6 +614,72 @@
               }
             ]
           }
+        }
+      ]
+    },
+    "node_kind": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "kind"
+        },
+        {
+          "type": "STRING",
+          "value": "foreign"
+        }
+      ]
+    },
+    "foreign_property": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "netns"
+                },
+                {
+                  "type": "STRING",
+                  "value": "container"
+                },
+                {
+                  "type": "STRING",
+                  "value": "tap"
+                }
+              ]
+            },
+            {
+              "type": "SYMBOL",
+              "name": "string"
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "manage"
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "addresses"
+                },
+                {
+                  "type": "STRING",
+                  "value": "tc"
+                }
+              ]
+            }
+          ]
         }
       ]
     },
@@ -720,6 +798,10 @@
         {
           "type": "SYMBOL",
           "name": "container_property"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "foreign_property"
         }
       ]
     },

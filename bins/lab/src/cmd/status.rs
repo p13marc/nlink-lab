@@ -47,7 +47,7 @@ impl Report for StatusReport {
         if let Some(seed) = s.seed {
             out.push_str(&format!("  seed     {seed}\n"));
         }
-        let mut t = Table::new(&["NODE", "KIND", "IMAGE", "ADDRESSES"]);
+        let mut t = Table::new(&["NODE", "KIND", "IMAGE/TARGET", "ADDRESSES"]);
         for n in &s.nodes {
             let addrs: Vec<String> = n
                 .addresses
@@ -57,7 +57,11 @@ impl Report for StatusReport {
             t.row([
                 n.node.clone(),
                 n.kind.to_string(),
-                n.image.clone().unwrap_or_else(|| "-".into()),
+                // a foreign node's target where an image would be (#344)
+                n.image
+                    .clone()
+                    .or_else(|| n.foreign.clone())
+                    .unwrap_or_else(|| "-".into()),
                 addrs.join(", "),
             ]);
         }

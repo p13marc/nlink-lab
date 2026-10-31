@@ -2564,6 +2564,17 @@ fn interpolate_node(n: &ast::NodeDef, vars: &BTreeMap<String, String>) -> ast::N
         overlay: io(&n.overlay, vars),
         depends_on: n.depends_on.iter().map(|s| i(s, vars)).collect(),
         props: n.props.iter().map(|p| interpolate_prop(p, vars)).collect(),
+        foreign: n.foreign.as_ref().map(|f| crate::types::Foreign {
+            target: {
+                use crate::types::ForeignTarget as T;
+                match &f.target {
+                    T::Netns(s) => T::Netns(i(s, vars)),
+                    T::Container(s) => T::Container(i(s, vars)),
+                    T::Tap(s) => T::Tap(i(s, vars)),
+                }
+            },
+            ..f.clone()
+        }),
     }
 }
 
@@ -3372,6 +3383,7 @@ fn lower_node(topo: &mut types::Topology, node: &ast::NodeDef, ctx: &mut LowerCt
         configs: node.configs.clone(),
         overlay: node.overlay.clone(),
         depends_on: node.depends_on.clone(),
+        foreign: node.foreign.clone(),
         ..Default::default()
     };
 

@@ -795,6 +795,24 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
         vec![]
     };
 
+    // `kind foreign`: a node another tool made (#344); its block names it
+    let is_foreign = if eat_kw(tokens, pos, "kind") {
+        expect_kw(tokens, pos, "foreign")?;
+        if !check(tokens, *pos, &Token::LBrace) {
+            return Err(err(
+                tokens,
+                *pos,
+                "a foreign node needs a block: `kind foreign { netns|container|tap \"NAME\" }`"
+                    .into(),
+            ));
+        }
+        true
+    } else {
+        false
+    };
+    let mut foreign_target: Option<crate::types::ForeignTarget> = None;
+    let (mut manage_addresses, mut manage_tc) = (false, false);
+
     // Parse inline image/cmd before the block
     let mut image = None;
     let mut cmd = None;
@@ -839,7 +857,45 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
             if eat(tokens, pos, &Token::RBrace) {
                 break;
             }
-            if eat_kw(tokens, pos, "image") {
+            let target_kw = if !is_foreign {
+                None
+            } else if check_kw(tokens, *pos, "netns") {
+                Some("netns")
+            } else if check_kw(tokens, *pos, "container") {
+                Some("container")
+            } else if check_kw(tokens, *pos, "tap") {
+                Some("tap")
+            } else {
+                None
+            };
+            if let Some(kw) = target_kw {
+                if foreign_target.is_some() {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        "a foreign node names one target: `netns`, `container` or `tap`".into(),
+                    ));
+                }
+                *pos += 1;
+                let name = expect_string(tokens, pos)?;
+                foreign_target = Some(match kw {
+                    "netns" => crate::types::ForeignTarget::Netns(name),
+                    "container" => crate::types::ForeignTarget::Container(name),
+                    _ => crate::types::ForeignTarget::Tap(name),
+                });
+            } else if is_foreign && eat_kw(tokens, pos, "manage") {
+                if eat_kw(tokens, pos, "addresses") {
+                    manage_addresses = true;
+                } else if eat_kw(tokens, pos, "tc") {
+                    manage_tc = true;
+                } else {
+                    return Err(err(
+                        tokens,
+                        *pos,
+                        "expected `manage addresses` or `manage tc`".into(),
+                    ));
+                }
+            } else if eat_kw(tokens, pos, "image") {
                 image = Some(expect_string(tokens, pos)?);
             } else if eat_kw(tokens, pos, "cmd") {
                 if check(tokens, *pos, &Token::LBracket) {
@@ -933,6 +989,21 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
     } else {
         Vec::new()
     };
+    let foreign = match (is_foreign, foreign_target) {
+        (false, _) => None,
+        (true, Some(target)) => Some(crate::types::Foreign {
+            target,
+            manage_addresses,
+            manage_tc,
+        }),
+        (true, None) => {
+            return Err(err(
+                tokens,
+                pos.saturating_sub(1),
+                format!("foreign node '{name}' names no `netns`, `container` or `tap`"),
+            ));
+        }
+    };
 
     Ok(ast::NodeDef {
         name,
@@ -962,6 +1033,7 @@ fn parse_node(tokens: &[Spanned], pos: &mut usize) -> Result<ast::NodeDef> {
         overlay,
         depends_on,
         props,
+        foreign,
     })
 }
 

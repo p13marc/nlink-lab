@@ -108,6 +108,19 @@ async fn deploy_ctx(
             lab: lab_name.clone(),
         });
     }
+    // Its foreign nodes' targets, before the first op: a missing one
+    // leaves nothing behind (#344).
+    if topology.nodes.values().any(|n| n.is_foreign())
+        && let Err(e) =
+            crate::foreign::preflight(topology, crate::foreign::runtime_of(topology)).await
+    {
+        journal.unwind().await;
+        if !state::exists(&lab_name) {
+            let _ = state::remove(&lab_name);
+            lock.remove_file();
+        }
+        return Err(e);
+    }
     // What it takes in the host's own namespace, checked against every
     // other lab's before the first op (#332).
     if let Some(claims) = crate::host_registry::Claims::of(topology) {
@@ -1220,7 +1233,13 @@ pub async fn compute_layered_diff_with(
             .get(node_name)
             .map(|n| n.vrfs.values().map(|v| v.table).collect())
             .unwrap_or_default();
-        let opts = network_plan_options(true, &tables, previous.get(node_name));
+        // a foreign node's stack only adds (#344)
+        let foreign = running
+            .topology()
+            .nodes
+            .get(node_name)
+            .is_some_and(|n| n.is_foreign());
+        let opts = network_plan_options(!foreign, &tables, previous.get(node_name));
         let plan = node_stack(cfg)?
             .plan_in(handle.spec(), opts)
             .await
@@ -1409,6 +1428,9 @@ pub(crate) fn run_assertions(
 }
 
 fn node_handle_for(running: &RunningLab, node_name: &str) -> Result<NsRef> {
+    if let Some(ns) = running.foreign_ns(node_name) {
+        return ns;
+    }
     if let Some(ns_name) = running.namespace_names().get(node_name) {
         return Ok(NsRef::Named {
             name: ns_name.clone(),

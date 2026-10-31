@@ -356,6 +356,13 @@
             }
           ]
         },
+        "foreign": {
+          "description": "A foreign node's target (#344): `netns \"/run/netns/x\"`,\n`container \"name\"`, `tap \"vnet3\"`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "image": {
           "type": [
             "string",
@@ -363,7 +370,7 @@
           ]
         },
         "kind": {
-          "description": "`namespace` or `container`.",
+          "description": "`namespace`, `container` or `foreign`.",
           "type": "string"
         },
         "node": {

@@ -76,6 +76,7 @@ pub mod error;
 pub mod events;
 pub(crate) mod firewall;
 pub mod fmt;
+pub mod foreign;
 pub mod frr;
 pub mod helpers;
 pub mod host;

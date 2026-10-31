@@ -151,3 +151,25 @@ scenario "lte" {
         (identifier)
         (identifier)
         (string)))))
+
+================
+Foreign nodes
+================
+node fw kind foreign { netns "/run/netns/x" manage addresses }
+node vm kind foreign { tap "vnet3" }
+---
+
+(source_file
+  (node_definition
+    (identifier)
+    (node_kind)
+    (node_body
+      (foreign_property
+        (string))
+      (foreign_property)))
+  (node_definition
+    (identifier)
+    (node_kind)
+    (node_body
+      (foreign_property
+        (string)))))

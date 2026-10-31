@@ -671,6 +671,10 @@
           "named": true
         },
         {
+          "type": "foreign_property",
+          "named": true
+        },
+        {
           "type": "forward_property",
           "named": true
         },
@@ -831,6 +835,21 @@
         },
         {
           "type": "list",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "foreign_property",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "string",
           "named": true
         }
       ]
@@ -1141,6 +1160,10 @@
         },
         {
           "type": "for_loop",
+          "named": true
+        },
+        {
+          "type": "foreign_property",
           "named": true
         },
         {
@@ -2563,6 +2586,10 @@
           "named": true
         },
         {
+          "type": "foreign_property",
+          "named": true
+        },
+        {
           "type": "forward_property",
           "named": true
         },
@@ -2658,6 +2685,10 @@
           "named": true
         },
         {
+          "type": "node_kind",
+          "named": true
+        },
+        {
           "type": "profile_list",
           "named": true
         }
@@ -2682,6 +2713,11 @@
         }
       ]
     }
+  },
+  {
+    "type": "node_kind",
+    "named": true,
+    "fields": {}
   },
   {
     "type": "param_assign",
@@ -2999,6 +3035,10 @@
         },
         {
           "type": "firewall_block",
+          "named": true
+        },
+        {
+          "type": "foreign_property",
           "named": true
         },
         {
@@ -4207,6 +4247,10 @@
     "named": false
   },
   {
+    "type": "addresses",
+    "named": false
+  },
+  {
     "type": "allowed-ips",
     "named": false
   },
@@ -4309,6 +4353,10 @@
   },
   {
     "type": "config",
+    "named": false
+  },
+  {
+    "type": "container",
     "named": false
   },
   {
@@ -4473,6 +4521,10 @@
   },
   {
     "type": "for_each",
+    "named": false
+  },
+  {
+    "type": "foreign",
     "named": false
   },
   {
@@ -4648,6 +4700,10 @@
     "named": false
   },
   {
+    "type": "kind",
+    "named": false
+  },
+  {
     "type": "l4proto",
     "named": false
   },
@@ -4721,6 +4777,10 @@
     "named": false
   },
   {
+    "type": "manage",
+    "named": false
+  },
+  {
     "type": "manual",
     "named": false
   },
@@ -4786,6 +4846,10 @@
   },
   {
     "type": "neighbor",
+    "named": false
+  },
+  {
+    "type": "netns",
     "named": false
   },
   {
@@ -5121,7 +5185,15 @@
     "named": false
   },
   {
+    "type": "tap",
+    "named": false
+  },
+  {
     "type": "target",
+    "named": false
+  },
+  {
+    "type": "tc",
     "named": false
   },
   {

@@ -322,8 +322,9 @@ pub struct ExecMode {
 #[derive(Debug)]
 pub struct PreparedExec {
     command: std::process::Command,
-    /// The network namespace a namespace node's command enters.
-    netns: Option<String>,
+    /// The network namespace a namespace node's (or a foreign netns
+    /// node's) command enters.
+    netns: Option<crate::deploy::NsRef>,
     /// A container's init pid and the command's tag.
     stop: Option<(u32, String)>,
     /// `exec in 'node'`, for errors.
@@ -340,7 +341,8 @@ impl PreparedExec {
     pub fn spawn(self) -> Result<ExecChild> {
         let label = self.label;
         let child = match &self.netns {
-            Some(ns) => crate::ns_exec::spawn(ns, self.command)
+            Some(ns) => ns
+                .spawn(self.command)
                 .map_err(|e| Error::nlink(format!("{label} failed"), e))?,
             None => {
                 let mut command = self.command;
@@ -746,7 +748,38 @@ impl RunningLab {
         })
     }
 
+    /// Whether the lab changes `node`'s traffic control: always for a node
+    /// of its own, for a foreign one with `manage tc` (#344).
+    fn tc_is_ours(&self, node: &str) -> Result<()> {
+        match self
+            .topology
+            .nodes
+            .get(node)
+            .and_then(|n| n.foreign.as_ref())
+        {
+            Some(f) if !f.manage_tc => Err(crate::foreign::refuse(
+                node,
+                "change traffic control (without `manage tc`)",
+            )),
+            _ => Ok(()),
+        }
+    }
+
+    /// A foreign node's namespace, found again (#344): `None` for a node
+    /// of the lab's own.
+    pub(crate) fn foreign_ns(&self, node: &str) -> Option<Result<crate::deploy::NsRef>> {
+        let foreign = self.topology.nodes.get(node)?.foreign.as_ref()?;
+        Some(crate::foreign::resolve(
+            node,
+            foreign,
+            self.runtime_binary.as_deref(),
+        ))
+    }
+
     pub fn ns_resolver_of(&self, node: &str) -> Option<crate::deploy::NsRef> {
+        if let Some(ns) = self.foreign_ns(node) {
+            return ns.inspect_err(|e| tracing::warn!("{e}")).ok();
+        }
         if let Some(name) = self.namespace_names.get(node) {
             return Some(crate::deploy::NsRef::Named { name: name.clone() });
         }
@@ -775,17 +808,33 @@ impl RunningLab {
         self.namespace_names.len() + self.containers.len()
     }
 
-    /// Get node names.
+    /// Get node names: the lab's namespaces and containers, then its
+    /// foreign nodes (#344).
     pub fn node_names(&self) -> impl Iterator<Item = &str> {
         self.namespace_names
             .keys()
             .chain(self.containers.keys())
+            .chain(
+                self.topology
+                    .nodes
+                    .iter()
+                    .filter(|(_, n)| n.is_foreign())
+                    .map(|(name, _)| name),
+            )
             .map(|s| s.as_str())
     }
 
     /// Look up the namespace name for a node.
     /// Get the namespace name for a bare namespace node.
     pub fn namespace_for(&self, node: &str) -> Result<&str> {
+        if self
+            .topology
+            .nodes
+            .get(node)
+            .is_some_and(|n| n.is_foreign())
+        {
+            return Err(crate::foreign::refuse(node, "do that"));
+        }
         self.namespace_names
             .get(node)
             .map(|s| s.as_str())
@@ -1112,11 +1161,31 @@ impl RunningLab {
         mode: ExecMode,
     ) -> Result<PreparedExec> {
         let what = if mode.stdin { "attached exec" } else { "exec" };
-        if let Some(container) = self.containers.get(node) {
-            let rt_binary = self
-                .runtime_binary
-                .as_deref()
-                .ok_or_else(|| Error::deploy_failed("no container runtime binary in state"))?;
+        // a foreign node's namespace, found again; a command run in a
+        // foreign container is still ours to stop (#344)
+        let foreign = self.foreign_ns(node).transpose()?;
+        let foreign_container = match &foreign {
+            Some(crate::deploy::NsRef::Container { id, pid }) => Some(ContainerState {
+                id: id.clone(),
+                name: id.clone(),
+                image: String::new(),
+                pid: *pid,
+                starttime: None,
+            }),
+            _ => None,
+        };
+        if let Some(container) = foreign_container.as_ref().or(self.containers.get(node)) {
+            let detected;
+            let rt_binary = match self.runtime_binary.as_deref() {
+                Some(bin) => bin,
+                None if foreign_container.is_some() => {
+                    detected = crate::container::Runtime::detect()?;
+                    detected.binary()
+                }
+                None => {
+                    return Err(Error::deploy_failed("no container runtime binary in state"));
+                }
+            };
             let mut command = std::process::Command::new(rt_binary);
             command.arg("exec");
             if mode.stdin {
@@ -1144,7 +1213,12 @@ impl RunningLab {
                 label: format!("{what} in container '{node}'"),
             })
         } else {
-            let ns_name = self.namespace_for(node)?;
+            let ns = match foreign {
+                Some(ns) => ns,
+                None => crate::deploy::NsRef::Named {
+                    name: self.namespace_for(node)?.to_string(),
+                },
+            };
             let mut command = std::process::Command::new(cmd);
             command.args(args);
             if let Some(wd) = opts.workdir {
@@ -1155,7 +1229,7 @@ impl RunningLab {
             }
             Ok(PreparedExec {
                 command,
-                netns: Some(ns_name.to_string()),
+                netns: Some(ns),
                 stop: None,
                 label: format!("{what} in '{node}'"),
             })
@@ -1424,6 +1498,14 @@ impl RunningLab {
     ) -> Result<u32> {
         if cmd.is_empty() {
             return Err(Error::invalid_topology("empty command"));
+        }
+        if self
+            .topology
+            .nodes
+            .get(node)
+            .is_some_and(|n| n.is_foreign())
+        {
+            return Err(crate::foreign::refuse(node, "spawn or track processes"));
         }
         // a new process of the lab, saved with it: one change at a time,
         // whichever process makes it (#332)
@@ -1998,6 +2080,14 @@ impl RunningLab {
     /// nlink-lab otherwise only sets an MTU when it creates a veth; this is
     /// the runtime path (`edit --set-mtu`) a path-MTU fault needs.
     pub async fn set_link_mtu(&mut self, endpoint: &str, mtu: u32) -> Result<()> {
+        // both ends change: a foreign one only when the lab manages it
+        // (checked before the lock: a refusal waits for nothing)
+        let peer = self.peer_endpoint(endpoint)?;
+        for ep in [endpoint, peer.as_str()] {
+            if let Some(r) = EndpointRef::parse(ep) {
+                self.tc_is_ours(&r.node)?;
+            }
+        }
         let m = self.begin("mtu").await?;
         let peer = self.peer_endpoint(endpoint)?;
         for ep in [endpoint.to_string(), peer] {
@@ -2373,6 +2463,7 @@ impl RunningLab {
         let ep = EndpointRef::parse(endpoint).ok_or_else(|| Error::InvalidEndpoint {
             endpoint: endpoint.to_string(),
         })?;
+        self.tc_is_ours(&ep.node)?;
         let handle = self
             .ns_resolver_of(&ep.node)
             .ok_or_else(|| Error::NodeNotFound {
@@ -2518,6 +2609,7 @@ impl RunningLab {
         let ep = EndpointRef::parse(endpoint).ok_or_else(|| Error::InvalidEndpoint {
             endpoint: endpoint.to_string(),
         })?;
+        self.tc_is_ours(&ep.node)?;
         self.route_conn_for(&ep.node)?
             .del_qdisc_if_exists(&ep.iface, nlink::TcHandle::ROOT)
             .await
@@ -2929,6 +3021,19 @@ impl RunningLab {
             let bridge_name = self.topology.lab.mgmt_bridge_name();
             if let Err(e) = root_conn.del_link_if_exists(bridge_name.as_str()).await {
                 tracing::warn!("failed to delete mgmt bridge '{bridge_name}': {e}");
+            }
+        }
+
+        // 3b. A foreign tap's ports and bridge (#344): the tap itself
+        // stays, released from the bridge.
+        let tap_links = crate::foreign::tap_host_links(&self.topology);
+        if !tap_links.is_empty()
+            && let Ok(root_conn) = Connection::<Route>::new()
+        {
+            for name in &tap_links {
+                if let Err(e) = root_conn.del_link_if_exists(name.as_str()).await {
+                    tracing::warn!("failed to delete '{name}': {e}");
+                }
             }
         }
 

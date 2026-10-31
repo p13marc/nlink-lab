@@ -38,6 +38,23 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Reproducible loss: a lab seed** (#337). `lab "x" { seed N }`,
+  `deploy --seed N`, `test --seed N`, `#[lab_test(seed = N)]` or
+  `NLINK_LAB_SEED=N` give a lab its seed, and every netem qdisc's seed is
+  derived from it and the qdisc's place in the lab (the endpoint, or a
+  per-pair rule's network, source and destination; not the lab's name,
+  so a suffixed test lab draws the same numbers). The same seed and the
+  same traffic lose and corrupt the same packets. Without one, a deploy
+  draws a seed and records it with the topology: `deploy` and `status`
+  print it, `test` reports it (JUnit `<property name="seed">`, a TAP
+  comment), and a failing `#[lab_test]` prints it with the command that
+  replays it. An impairment's own `seed N` (NLL, `impair … seed N`, the
+  API) overrides the derived seed; `impair --show` prints the seed the
+  kernel reports. A kernel that ignores netem seeds is probed once (cached
+  per kernel release under `<state>/host/kernel.toml`) and gets an
+  unseeded lab with a warning; `doctor` says which. Only loss and
+  corruption are seeded. The API is 1.2: a deploy's `seed` and an
+  impairment's `seed`, feature `seed`.
 - **Scenario steps change the lab at runtime** (#326): `impair EP
   <props>` (an `impair` line's properties), `partition EP [both]` and
   `heal EP [both]` (`both`: the other end of its point-to-point link

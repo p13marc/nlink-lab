@@ -1907,6 +1907,8 @@ enum ValueKind {
     Size,
     /// `loss`: a percent, or a netem loss model in tc's grammar (#153).
     Loss,
+    /// A netem seed (#337).
+    Seed,
 }
 
 fn check_value(kind: ValueKind, value: &str, location: String, issues: &mut Vec<ValidationIssue>) {
@@ -1937,6 +1939,9 @@ fn check_value(kind: ValueKind, value: &str, location: String, issues: &mut Vec<
             )),
             Ok(_) => None,
         },
+        ValueKind::Seed => crate::seed::parse(value)
+            .err()
+            .map(crate::Error::invalid_topology),
     };
     if let Some(e) = err {
         issues.push(ValidationIssue {
@@ -1968,6 +1973,7 @@ fn check_impairment(imp: &Impairment, prefix: &str, issues: &mut Vec<ValidationI
             ValueKind::Percent,
         ),
         ("limit", &imp.limit, ValueKind::Packets),
+        ("seed", &imp.seed, ValueKind::Seed),
     ];
     for (name, value, kind) in fields {
         if let Some(v) = value {

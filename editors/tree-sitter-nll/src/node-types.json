@@ -1654,7 +1654,47 @@
           "named": true
         },
         {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "float",
+          "named": true
+        },
+        {
           "type": "frr_block",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "function_cidr",
+          "named": true
+        },
+        {
+          "type": "glob",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
           "named": true
         },
         {
@@ -1663,6 +1703,18 @@
         },
         {
           "type": "list",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "size",
           "named": true
         },
         {
@@ -4883,6 +4935,10 @@
   },
   {
     "type": "scenario",
+    "named": false
+  },
+  {
+    "type": "seed",
     "named": false
   },
   {

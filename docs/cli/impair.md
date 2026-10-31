@@ -44,7 +44,7 @@ Arguments:
           The endpoint (`node:iface`). Not with --show or --pair (whose impairment starts right after it)
 
   [SPEC]...
-          The impairment: `delay 50ms jitter 5ms loss 1% rate 10mbit` (`delay=50ms,loss=1%` too). Properties: delay, jitter, loss (a rate, or a loss model `gemodel P [R [1-H [1-K]]]` / `state P13 …`), rate, corrupt, reorder, duplicate, delay-correlation, loss-correlation, limit. It replaces the whole impairment
+          The impairment: `delay 50ms jitter 5ms loss 1% rate 10mbit` (`delay=50ms,loss=1%` too). Properties: delay, jitter, loss (a rate, or a loss model `gemodel P [R [1-H [1-K]]]` / `state P13 …`), rate, corrupt, reorder, duplicate, delay-correlation, loss-correlation, limit, seed (in place of the one the lab's seed derives). It replaces the whole impairment
 
 Options:
   -L, --lab <LAB>

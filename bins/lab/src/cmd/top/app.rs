@@ -989,6 +989,7 @@ mod tests {
                 "delay" | "jitter" => "10ms",
                 "rate" => "100mbit",
                 "limit" => "1000",
+                "seed" => "42",
                 _ => "1%",
             };
             parse_impair_spec(&format!("{key} {value}")).unwrap_or_else(|e| panic!("{key}: {e}"));

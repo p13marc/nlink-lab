@@ -40,6 +40,11 @@ pub struct Args {
     /// with `nlink-lab destroy LAB`).
     #[arg(long)]
     pub keep: bool,
+
+    /// Deploy every lab with this seed, in place of its topology's `seed`:
+    /// the seed a failed run reported replays its packet losses.
+    #[arg(long, value_name = "N", value_parser = crate::args::seed)]
+    pub seed: Option<u64>,
 }
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
@@ -52,11 +57,13 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         scenarios,
         benchmarks,
         keep,
+        seed,
     } = args;
     let opts = nlink_lab::test_runner::TestOptions {
         scenarios,
         benchmarks,
         keep_failed: keep,
+        seed,
     };
     require_root()?;
     let cli_params = params;
@@ -109,6 +116,12 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                                     .unwrap_or_default()
                             );
                         }
+                    }
+                    if let Some(seed) = result.seed {
+                        eprintln!(
+                            "  seed {seed}: `nlink-lab test --seed {seed} {}` replays its losses",
+                            file.display()
+                        );
                     }
                     any_failed = true;
                 }

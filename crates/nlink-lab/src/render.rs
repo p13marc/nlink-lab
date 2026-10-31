@@ -375,6 +375,9 @@ fn render_lab(out: &mut String, lab: &LabConfig) -> Result<()> {
         DnsMode::Off => {}
         DnsMode::Hosts => body.push_str("  dns hosts\n"),
     }
+    if let Some(seed) = lab.seed {
+        writeln!(body, "  seed {seed}").unwrap();
+    }
     match lab.routing {
         RoutingMode::Manual => {}
         RoutingMode::Auto => body.push_str("  routing auto\n"),
@@ -1603,6 +1606,9 @@ pub(crate) fn impairment_props(imp: &Impairment) -> Result<String> {
     if let Some(l) = &imp.limit {
         parts.push(format!("limit {}", lit_value(l)?));
     }
+    if let Some(s) = &imp.seed {
+        parts.push(format!("seed {}", lit_value(s)?));
+    }
     Ok(parts.join(" "))
 }
 
@@ -2202,6 +2208,28 @@ node a
         );
         assert_eq!(topo2.lab.runtime, Some(ContainerRuntime::Podman));
         assert_eq!(topo2.lab.routing, RoutingMode::Auto);
+    }
+
+    #[test]
+    fn a_lab_seed_and_an_impairments_seed_round_trip() {
+        let (_, rendered, reparsed) = roundtrip(
+            r#"lab "mylab" {
+  seed 9223372036854775807
+}
+
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  loss 1% seed 3 }
+"#,
+        );
+        assert!(rendered.contains("seed 9223372036854775807"), "{rendered}");
+        assert!(rendered.contains("seed 3"), "{rendered}");
+        assert_eq!(reparsed.lab.seed, Some(i64::MAX as u64));
+        assert_eq!(
+            reparsed.impairments["a:eth0"].seed.as_deref(),
+            Some("3"),
+            "{rendered}"
+        );
     }
 
     #[test]

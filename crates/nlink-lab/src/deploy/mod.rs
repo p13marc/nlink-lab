@@ -94,6 +94,9 @@ async fn deploy_ctx(
     // against the lab name so destroy/rollback can free them.
     let mut owned = topology.clone();
     let lab_name = owned.lab.name.clone();
+    // The lab's seed, drawn now when the topology names none, so it is
+    // recorded with the topology (#337).
+    crate::seed::settle_for_deploy(&mut owned)?;
     let allocated = crate::subnet_pool::substitute_auto_subnets(&mut owned, |prefix| {
         crate::subnet_pool::allocate(&lab_name, prefix)
     })?;
@@ -276,9 +279,12 @@ pub struct ApplyReport {
     pub conntrack_deleted: usize,
 }
 
-/// `desired` with its `subnet auto/N` networks given the running lab's
-/// subnets ([`crate::subnet_pool::resolve_auto_subnets`]); borrowed when
-/// it has none.
+/// `desired` as it would run in `running`: its `subnet auto/N` networks
+/// given the running lab's subnets
+/// ([`crate::subnet_pool::resolve_auto_subnets`]), and the running lab's
+/// seed when it names none ([`crate::seed::settle_for_apply`]: an apply
+/// from the NLL file must not reinstall every netem with a fresh seed, or
+/// none). Borrowed when nothing changes.
 fn with_running_subnets<'a>(
     running: &RunningLab,
     desired: &'a Topology,
@@ -288,12 +294,16 @@ fn with_running_subnets<'a>(
             .as_deref()
             .is_some_and(|s| crate::subnet_pool::parse_auto_placeholder(s).is_some())
     });
-    if !has_auto {
+    let mut seeded = desired.clone();
+    crate::seed::settle_for_apply(&mut seeded, running.topology());
+    let reseeded = seeded.lab.seed != desired.lab.seed;
+    if !has_auto && !reseeded {
         return Ok(std::borrow::Cow::Borrowed(desired));
     }
-    let mut owned = desired.clone();
-    crate::subnet_pool::resolve_auto_subnets(running.topology(), &mut owned)?;
-    Ok(std::borrow::Cow::Owned(owned))
+    if has_auto {
+        crate::subnet_pool::resolve_auto_subnets(running.topology(), &mut seeded)?;
+    }
+    Ok(std::borrow::Cow::Owned(seeded))
 }
 
 /// Reconcile a running lab to `desired`: `execute(plan(desired) −

@@ -44,6 +44,63 @@ use netring::RingProfile;
 #[doc(hidden)]
 pub mod __macro_support {
     pub use tokio;
+
+    /// The seed a `#[lab_test]` ran with (#337), printed with the
+    /// command that replays it when the test fails: on drop while
+    /// panicking, or by [`SeedNote::print`] at a timeout.
+    pub struct SeedNote {
+        seed: Option<u64>,
+        package: &'static str,
+        test: String,
+    }
+
+    impl SeedNote {
+        pub fn new(seed: Option<u64>, package: &'static str, module: &str, name: &str) -> Self {
+            Self {
+                seed,
+                package,
+                test: super::test_path(module, name),
+            }
+        }
+
+        pub fn print(&self) {
+            if let Some(line) = super::seed_line(self.seed, self.package, &self.test) {
+                eprintln!("{line}");
+            }
+        }
+    }
+
+    impl Drop for SeedNote {
+        fn drop(&mut self) {
+            if std::thread::panicking() {
+                self.print();
+            }
+        }
+    }
+}
+
+/// A test's libtest name, as `--exact` takes it: its module path without
+/// the crate's name, then the function.
+fn test_path(module: &str, name: &str) -> String {
+    match module.split_once("::") {
+        Some((_, rest)) => format!("{rest}::{name}"),
+        None => name.to_string(),
+    }
+}
+
+/// What a failed `#[lab_test]` prints about its seed: `None` without one,
+/// or when the kernel does not honour netem seeds (the drops would not
+/// repeat).
+fn seed_line(seed: Option<u64>, package: &str, test: &str) -> Option<String> {
+    let seed = seed?;
+    if !crate::seed::kernel_honours() {
+        return None;
+    }
+    Some(format!(
+        "lab_test '{test}': seed = {seed}; replay its packet losses with\n  \
+         {}={seed} cargo test -p {package} -- --exact {test}",
+        crate::seed::SEED_ENV
+    ))
 }
 
 /// Environment variable that turns a missing-root **failure** into a
@@ -662,6 +719,16 @@ mod tests {
                 "{off:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_failed_lab_test_names_its_replay() {
+        assert_eq!(test_path("root_tc", "lossy"), "lossy");
+        assert_eq!(
+            test_path("my_crate::net::tests", "lossy"),
+            "net::tests::lossy"
+        );
+        assert_eq!(seed_line(None, "p", "t"), None);
     }
 
     #[test]

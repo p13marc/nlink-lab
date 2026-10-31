@@ -85,6 +85,11 @@ Optional lab properties:
 - `mgmt` — management network subnet (auto-creates OOB bridge); add `host-reachable` to create the bridge in the root namespace for direct host connectivity
 - `dns hosts` — auto-generate `/etc/hosts` entries so nodes can resolve
   each other by name (e.g., `ping server` instead of `ping 10.0.2.2`)
+- `seed N` — the lab seed (#337): every netem's random seed derives from
+  it and the qdisc's place in the lab, so a redeploy loses and corrupts
+  the same packets of the same traffic. Without one a deploy draws a seed
+  and records it (`status` shows it). An impairment's own `seed N`
+  overrides the derived one.
 
 ### 2. Imports
 
@@ -1510,6 +1515,7 @@ lab_prop       = "description" STRING | "prefix" STRING | "runtime" STRING
                | "mgmt" CIDR ("host-reachable")?   # IPv4 or IPv6
                | "dns" ("hosts" | "off")
                | "routing" ("auto" | "manual" | "frr" frr_block?)
+               | "seed" INT           # 0..=2^63-1: every netem seed derives from it (#337)
 
 statement      = profile | node | link | network
                | impair | rate | defaults | pool | pattern
@@ -1763,6 +1769,10 @@ impair_props   = ("delay" DURATION)? ("jitter" DURATION)?
                  ("corrupt" PERCENT)? ("reorder" PERCENT)?
                  ("duplicate" PERCENT)? ("delay-correlation" PERCENT)?
                  ("loss-correlation" PERCENT)? ("limit" INT)?
+                 ("seed" INT)?
+                 (* seed: this netem's own seed, in place of the one the
+                    lab's seed derives (#337). Seeds take effect only in a
+                    seeded lab, on a kernel that honours them *)
                  (* loss-correlation LOWERS the loss rate, it does not
                     make loss bursty: netem averages each draw with the
                     previous one, so "loss 0.5% loss-correlation 25%"

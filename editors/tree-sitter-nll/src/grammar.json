@@ -474,6 +474,19 @@
               ]
             }
           ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "seed"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_value"
+            }
+          ]
         }
       ]
     },
@@ -4087,6 +4100,19 @@
                 {
                   "type": "STRING",
                   "value": "limit"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_value"
+                }
+              ]
+            },
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "seed"
                 },
                 {
                   "type": "SYMBOL",

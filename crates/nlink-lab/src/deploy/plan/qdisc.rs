@@ -35,10 +35,18 @@ pub(crate) fn parse_loss(loss: &str) -> Result<Loss> {
     }
 }
 
-pub(crate) fn build_netem(impairment: &crate::types::Impairment) -> Result<NetemConfig> {
+/// The netem for `impairment`, seeded with `seed` (see [`crate::seed`];
+/// `None` leaves the kernel's own random seed).
+pub(crate) fn build_netem(
+    impairment: &crate::types::Impairment,
+    seed: Option<u64>,
+) -> Result<NetemConfig> {
     use nlink::util::{Percent, Rate};
 
     let mut netem = NetemConfig::new();
+    if let Some(seed) = seed {
+        netem = netem.seed(seed);
+    }
 
     if let Some(delay) = &impairment.delay {
         netem = netem.delay(parse_duration(delay)?);

@@ -99,6 +99,7 @@ pub mod scenario;
 pub(crate) mod schema_check;
 #[cfg(test)]
 mod schema_check_tests;
+pub mod seed;
 pub mod state;
 pub mod subnet_pool;
 pub mod templates;

@@ -9,7 +9,7 @@
 mod common;
 use common::*;
 use nlink_lab::lab_test;
-use nlink_lab::test_helpers::privileged;
+use nlink_lab::test_helpers::{feature, privileged};
 use nlink_lab::{Lab, RunningLab};
 
 #[lab_test("examples/simple.nll")]
@@ -1028,4 +1028,102 @@ link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 delay 1ms }}
 
     assert_eq!(nlink_lab::state::snapshot_list(&lab_name).unwrap().len(), 2);
     lab.destroy().await.expect("destroy failed");
+}
+
+/// The same lab seed loses the same datagrams (#337): 1000 numbered UDP
+/// datagrams through a per-pair `loss 10%`, deployed twice with seed 7,
+/// miss the same sequence numbers; seed 8 misses others. The loss sits on
+/// a per-pair rule because its flower filter matches only IPv4 to the
+/// destination: ARP and IPv6 neighbour traffic never reach that netem,
+/// so they cannot shift its random sequence.
+#[tokio::test]
+async fn a_lab_seed_loses_the_same_datagrams() {
+    use std::collections::BTreeSet;
+    use std::time::Duration;
+
+    if !privileged("a_lab_seed_loses_the_same_datagrams") {
+        return;
+    }
+    if !feature(
+        "a_lab_seed_loses_the_same_datagrams",
+        "netem-seed",
+        nlink_lab::seed::kernel_honours(),
+    ) {
+        return;
+    }
+    async fn lost(seed: u64, tag: &str) -> BTreeSet<u32> {
+        let lab_name = format!("{tag}-{}", std::process::id());
+        let topo = nlink_lab::parser::parse(&format!(
+            r#"lab "{lab_name}" {{ seed {seed} }}
+node a
+node b
+network lan {{
+  members [a:eth0, b:eth0]
+  subnet 10.61.0.0/24
+  impair a -- b {{ loss 10% }}
+}}
+"#
+        ))
+        .unwrap();
+        let lab = topo.deploy().await.expect("deploy failed");
+        let _guard = LabCleanup {
+            name: lab.name().to_string(),
+        };
+        assert_eq!(lab.topology().lab.seed, Some(seed));
+        let addr = |node: &str| {
+            let addrs = lab.node_addresses(node).unwrap();
+            let a = addrs["eth0"]
+                .iter()
+                .find(|a| a.contains('.'))
+                .unwrap()
+                .clone();
+            a.split('/').next().unwrap().to_string()
+        };
+        let (a, b) = (addr("a"), addr("b"));
+        let in_ns = |node: &str| {
+            nlink::netlink::namespace::enter(lab.namespace_for(node).unwrap()).unwrap()
+        };
+        let rx = {
+            let _in = in_ns("b");
+            std::net::UdpSocket::bind(format!("{b}:9000")).unwrap()
+        };
+        rx.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+        // read while the datagrams arrive: the receive buffer holds a
+        // few hundred, not a thousand
+        let reader = std::thread::spawn(move || {
+            let mut got = BTreeSet::new();
+            let mut buf = [0u8; 16];
+            while let Ok(n) = rx.recv(&mut buf) {
+                if n == 4 {
+                    got.insert(u32::from_be_bytes(buf[..4].try_into().unwrap()));
+                }
+            }
+            got
+        });
+        let tx = {
+            let _in = in_ns("a");
+            std::net::UdpSocket::bind(format!("{a}:0")).unwrap()
+        };
+        for seq in 0u32..1000 {
+            tx.send_to(&seq.to_be_bytes(), format!("{b}:9000")).unwrap();
+            // paced: netem's queue (1000) and the socket buffers never fill
+            if seq % 50 == 49 {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+        let got = reader.join().unwrap();
+        std::mem::forget(_guard);
+        lab.destroy().await.expect("destroy failed");
+        (0..1000).filter(|s| !got.contains(s)).collect()
+    }
+    let first = lost(7, "seeda").await;
+    let again = lost(7, "seedb").await;
+    let other = lost(8, "seedc").await;
+    assert!(
+        (30..250).contains(&first.len()),
+        "10% loss of 1000 lost {}",
+        first.len()
+    );
+    assert_eq!(first, again, "seed 7 must lose the same datagrams twice");
+    assert_ne!(first, other, "seed 8 must lose other datagrams");
 }

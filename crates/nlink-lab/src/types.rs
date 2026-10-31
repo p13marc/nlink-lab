@@ -395,6 +395,15 @@ pub struct LabConfig {
     /// forwarding namespace node without its own `frr { … }` runs this.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frr: Option<FrrConfig>,
+
+    /// The lab's seed (`seed 42`, `deploy --seed`, `#[lab_test(seed =
+    /// N)]`): every netem qdisc's seed is derived from it and its place in
+    /// the lab, so a redeploy loses and corrupts the same packets of the
+    /// same traffic (#337). A deploy without one draws one and records it
+    /// here; a kernel that ignores netem seeds gets none. At most
+    /// [`crate::seed::MAX`], since the state stores it as TOML's i64.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed: Option<u64>,
 }
 
 /// FRR routing daemons for one node (issue #65).
@@ -1121,6 +1130,12 @@ pub struct Impairment {
     /// netem queue limit in packets (default 1000).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<String>,
+
+    /// The seed of this netem's random numbers (`seed 42`), in place of
+    /// the one derived from the lab's seed (#337). It makes the loss and
+    /// corruption decisions repeat; see [`LabConfig::seed`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed: Option<String>,
 }
 
 /// The loss rate, in percent, that netem's correlated generator produces
@@ -1233,6 +1248,9 @@ impl Impairment {
                 .parse::<u32>()
                 .map(|_| ())
                 .map_err(|_| format!("{key:?}: expected a packet count, got {value:?}")),
+            "seed" => crate::seed::parse(value)
+                .map(|_| ())
+                .map_err(|e| format!("{key:?}: {e}")),
             // a Markov model: its parameters are percentages
             "loss" if value.starts_with("gemodel ") || value.starts_with("state ") => {
                 value.split_whitespace().skip(1).try_for_each(percent)
@@ -1276,7 +1294,7 @@ impl Impairment {
 
     /// Every property name [`Impairment::set_property`] accepts, in the
     /// order they are listed to the user.
-    pub const PROPERTIES: [&'static str; 10] = [
+    pub const PROPERTIES: [&'static str; 11] = [
         "delay",
         "jitter",
         "loss",
@@ -1287,6 +1305,7 @@ impl Impairment {
         "delay-correlation",
         "loss-correlation",
         "limit",
+        "seed",
     ];
 
     /// Set one property by its NLL/CLI name.
@@ -1308,6 +1327,7 @@ impl Impairment {
             "delay-correlation" => self.delay_correlation = value,
             "loss-correlation" => self.loss_correlation = value,
             "limit" => self.limit = value,
+            "seed" => self.seed = value,
             other => {
                 return Err(format!(
                     "unknown property {other:?} ({})",
@@ -1333,6 +1353,7 @@ impl Impairment {
             ("delay-correlation", &self.delay_correlation),
             ("loss-correlation", &self.loss_correlation),
             ("limit", &self.limit),
+            ("seed", &self.seed),
         ] {
             if let Some(v) = value {
                 parts.push(format!("{key} {v}"));
@@ -2201,6 +2222,7 @@ impl From<&Impairment> for nlink_lab_shared::api::ImpairmentSpec {
             delay_correlation: i.delay_correlation.clone(),
             loss_correlation: i.loss_correlation.clone(),
             limit: i.limit.clone(),
+            seed: i.seed.clone(),
         }
     }
 }
@@ -2218,6 +2240,7 @@ impl From<&nlink_lab_shared::api::ImpairmentSpec> for Impairment {
             delay_correlation: s.delay_correlation.clone(),
             loss_correlation: s.loss_correlation.clone(),
             limit: s.limit.clone(),
+            seed: s.seed.clone(),
         }
     }
 }

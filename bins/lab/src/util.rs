@@ -39,6 +39,9 @@ pub fn impair_show_line(entry: Option<&nlink_lab::impair_parse::ShownImpairment>
     if let Some(r) = f.rate_bps {
         words.push(format!("rate {}", rate_text(r)));
     }
+    if let Some(s) = f.seed {
+        words.push(format!("seed {s}"));
+    }
     if entry.partition {
         words.push("(partitioned)".to_string());
     }

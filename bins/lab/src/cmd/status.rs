@@ -44,6 +44,9 @@ impl Report for StatusReport {
         if let Some(path) = s.source.as_ref().and_then(|s| s.path.as_deref()) {
             out.push_str(&format!("  source   {path}\n"));
         }
+        if let Some(seed) = s.seed {
+            out.push_str(&format!("  seed     {seed}\n"));
+        }
         let mut t = Table::new(&["NODE", "KIND", "IMAGE", "ADDRESSES"]);
         for n in &s.nodes {
             let addrs: Vec<String> = n

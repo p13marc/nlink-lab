@@ -5,7 +5,7 @@
 use nlink_lab_shared::api::{Direction, EndpointImpairment, ImpairmentSpec, Request};
 
 /// The impairment knobs, as `nlink-lab impair` names them.
-pub const KNOBS: [&str; 10] = [
+pub const KNOBS: [&str; 11] = [
     "delay",
     "jitter",
     "loss",
@@ -16,6 +16,7 @@ pub const KNOBS: [&str; 10] = [
     "delay-correlation",
     "loss-correlation",
     "limit",
+    "seed",
 ];
 
 fn knob(s: &ImpairmentSpec, i: usize) -> &Option<String> {
@@ -29,7 +30,8 @@ fn knob(s: &ImpairmentSpec, i: usize) -> &Option<String> {
         6 => &s.duplicate,
         7 => &s.delay_correlation,
         8 => &s.loss_correlation,
-        _ => &s.limit,
+        9 => &s.limit,
+        _ => &s.seed,
     }
 }
 
@@ -44,7 +46,8 @@ fn knob_mut(s: &mut ImpairmentSpec, i: usize) -> &mut Option<String> {
         6 => &mut s.duplicate,
         7 => &mut s.delay_correlation,
         8 => &mut s.loss_correlation,
-        _ => &mut s.limit,
+        9 => &mut s.limit,
+        _ => &mut s.seed,
     }
 }
 
@@ -128,7 +131,7 @@ impl Preset {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImpairEditor {
     pub endpoint: String,
-    pub fields: [String; 10],
+    pub fields: [String; KNOBS.len()],
     pub direction: Direction,
 }
 
@@ -137,7 +140,7 @@ impl ImpairEditor {
     /// else the declared one.
     pub fn of(endpoint: &str, current: Option<&EndpointImpairment>) -> Self {
         let spec = current.and_then(|e| e.live.as_ref().or(e.declared.as_ref()));
-        let mut fields: [String; 10] = Default::default();
+        let mut fields: [String; KNOBS.len()] = Default::default();
         if let Some(s) = spec {
             for (i, f) in fields.iter_mut().enumerate() {
                 *f = knob(s, i).clone().unwrap_or_default();

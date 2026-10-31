@@ -25,8 +25,8 @@ pub fn read_only<'a>() -> Element<'a, Message> {
     muted("Read-only: the daemon makes you a viewer here (the nlink-lab group operates).").into()
 }
 
-const PLACEHOLDERS: [&str; 10] = [
-    "50ms", "5ms", "1%", "10mbit", "0.1%", "25%", "1%", "25%", "25%", "1000",
+const PLACEHOLDERS: [&str; KNOBS.len()] = [
+    "50ms", "5ms", "1%", "10mbit", "0.1%", "25%", "1%", "25%", "25%", "1000", "42",
 ];
 
 /// The impairment editor of the selected endpoint.

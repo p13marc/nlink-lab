@@ -581,6 +581,14 @@ fn expect_packets(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Val<ast::P
     })
 }
 
+/// A netem seed or a deferred value (#337).
+fn expect_seed(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Val<ast::Seed>> {
+    expect_val(tokens, pos, |t| match t {
+        Token::Int(s) => Some(s.as_str()),
+        _ => None,
+    })
+}
+
 /// A CPU share (`0.5`, `2`) or a deferred value.
 fn expect_cpu(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Val<ast::Cpu>> {
     expect_val(tokens, pos, |t| match t {
@@ -642,6 +650,7 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
     let mut dns = None;
     let mut routing = None;
     let mut frr = None;
+    let mut seed = None;
 
     // Parse optional inline runtime before block
     if eat_kw(tokens, pos, "runtime") {
@@ -673,6 +682,8 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
                 }
             } else if eat_kw(tokens, pos, "dns") {
                 dns = Some(expect_ident(tokens, pos)?);
+            } else if eat_kw(tokens, pos, "seed") {
+                seed = Some(expect_seed(tokens, pos)?);
             } else if eat_kw(tokens, pos, "routing") {
                 routing = Some(expect_ident(tokens, pos)?);
                 if routing.as_deref() == Some("frr") && check(tokens, *pos, &Token::LBrace) {
@@ -712,6 +723,7 @@ fn parse_lab_decl(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LabDecl> {
         dns,
         routing,
         frr,
+        seed,
     })
 }
 
@@ -3352,6 +3364,7 @@ fn parse_link(tokens: &[Spanned], pos: &mut usize) -> Result<ast::LinkDef> {
                             | "delay-correlation"
                             | "loss-correlation"
                             | "limit"
+                            | "seed"
                     ) =>
                 {
                     let parsed = parse_impair_props(tokens, pos)?;
@@ -3444,6 +3457,9 @@ fn parse_impair_props(tokens: &[Spanned], pos: &mut usize) -> Result<ast::Impair
         } else if check_kw(tokens, *pos, "limit") {
             *pos += 1;
             props.limit = Some(expect_packets(tokens, pos)?);
+        } else if check_kw(tokens, *pos, "seed") {
+            *pos += 1;
+            props.seed = Some(expect_seed(tokens, pos)?);
         } else {
             break;
         }

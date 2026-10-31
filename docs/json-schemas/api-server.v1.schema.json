@@ -409,6 +409,13 @@
             "string",
             "null"
           ]
+        },
+        "seed": {
+          "description": "The netem seed, in place of the one the lab's seed derives (#337).",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },

@@ -158,3 +158,25 @@ lab "t"
   (block_comment)
   (lab_declaration
     (string)))
+
+================
+Lab seed and an impairment's own seed
+================
+lab "lossy" {
+  seed 42
+}
+impair a:eth0 loss 5% seed 7
+---
+
+(source_file
+  (lab_declaration
+    (string)
+    (lab_property
+      (integer)))
+  (impairment_statement
+    (endpoint
+      (identifier)
+      (identifier))
+    (impairment_properties
+      (percent)
+      (integer))))

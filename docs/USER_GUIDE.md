@@ -640,6 +640,41 @@ link ground:sat0 -- satellite:sat0 {
 
 See `examples/asymmetric.nll`.
 
+#### Reproducible loss: the lab seed
+
+Netem draws its loss and corruption decisions from a random number
+generator. A lab seed makes them repeat (#337):
+
+```nll
+lab "lossy" { seed 42 }
+
+node a
+node b
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  loss 5% }
+```
+
+- Every netem qdisc gets a seed derived from the lab seed and its place in
+  the lab (`a:eth0`, or the network, source and destination of a per-pair
+  rule). Deploy the lab again with the same seed and the same traffic
+  loses the same packets. An impairment's own `seed N` overrides the
+  derived one.
+- Without a `seed`, a deploy draws one and records it: `status` and
+  `deploy` print it, `test` reports it (a JUnit `<property name="seed">`,
+  a TAP comment), and a failing `#[lab_test]` prints it with the command
+  that replays it. `deploy --seed N`, `test --seed N`,
+  `#[lab_test(seed = N)]` and `NLINK_LAB_SEED=N` set it.
+- A runtime `impair` keeps the endpoint's derived seed, and `impair
+  --show` prints the seed the kernel reports.
+- **Limits.** Only loss and corruption are seeded: delay jitter,
+  duplication and reordering use the kernel's own generator. The same
+  drops need the same packets in the same order, so a test whose traffic
+  differs between runs (retransmissions, timers) still diverges. Every
+  change of a netem restarts its sequence from the seed.
+- **The kernel must honour it** (`TCA_NETEM_PRNG_SEED`). A deploy probes
+  the kernel once (the result is cached per kernel release) and, on a
+  kernel that ignores seeds, deploys the lab unseeded with a warning.
+  `doctor` reports which.
+
 ### 5. For Loops and Variables
 
 ```nll-ignore

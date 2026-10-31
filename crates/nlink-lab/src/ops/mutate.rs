@@ -230,6 +230,7 @@ pub fn impairment_of(spec: &api::ImpairmentSpec) -> Result<Impairment> {
         ("delay-correlation", &spec.delay_correlation),
         ("loss-correlation", &spec.loss_correlation),
         ("limit", &spec.limit),
+        ("seed", &spec.seed),
     ];
     for (key, value) in pairs {
         if let Some(value) = value {
@@ -356,6 +357,10 @@ fn adjusted(mut topo: Topology, options: &api::DeployOptions) -> Result<Topology
     }
     if options.skip_assertions {
         topo.assertions.clear();
+    }
+    if let Some(seed) = options.seed {
+        crate::seed::parse(&seed.to_string()).map_err(Error::invalid_argument)?;
+        topo.lab.seed = Some(seed);
     }
     for w in validate(&topo)? {
         tracing::warn!("{}: {w}", topo.lab.name);

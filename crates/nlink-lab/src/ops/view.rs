@@ -69,6 +69,12 @@ pub struct LabStatus {
     pub created_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<LabSource>,
+    /// The seed every netem seed derives from (#337): pass it back with
+    /// `deploy --seed` to lose the same packets again. Absent for a lab
+    /// deployed without one (before 0.16, or on a kernel without netem
+    /// seeds).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed: Option<u64>,
     pub nodes: Vec<NodeView>,
     pub links: Vec<LinkView>,
     pub networks: Vec<String>,
@@ -139,6 +145,7 @@ pub fn lab_status(running: &RunningLab, state: &LabState, counters: bool) -> Lab
         lab: running.name().to_string(),
         created_at: state.created_at.clone(),
         source: state.source.clone(),
+        seed: topo.lab.seed,
         nodes,
         links,
         networks: topo.networks.keys().cloned().collect(),

@@ -35,6 +35,11 @@ pub fn u32_dec_or_hex(s: &str) -> Result<u32, String> {
 }
 
 /// `KEY=VALUE` (`--env`, `--set`). The key is not empty; the value may be.
+/// A netem seed: an integer in `0..=i64::MAX` (#337).
+pub fn seed(s: &str) -> Result<u64, String> {
+    nlink_lab::seed::parse(s)
+}
+
 pub fn key_value(s: &str) -> Result<(String, String), String> {
     match s.split_once('=') {
         Some((k, v)) if !k.trim().is_empty() => Ok((k.trim().to_string(), v.to_string())),

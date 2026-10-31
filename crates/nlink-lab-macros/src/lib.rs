@@ -73,6 +73,12 @@ use syn::{ItemFn, LitInt, LitStr, braced, parse_macro_input};
 /// // target/lab_test_captures/<test>-<pid>/. On success, discarded.
 /// #[lab_test("simple.nll", capture = true)]
 /// async fn test_with_pcaps(lab: RunningLab) { ... }
+///
+/// // With a fixed seed: every netem draws the same losses on every run
+/// // (#337). Without one, a seed is drawn and printed when the test
+/// // fails, with the command that replays it (`NLINK_LAB_SEED=N`).
+/// #[lab_test("lossy.nll", seed = 42)]
+/// async fn test_lossy(lab: RunningLab) { ... }
 /// ```
 ///
 /// `set { ... }` keys are NLL `param` names; values are string-typed
@@ -174,6 +180,10 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let lab_name_suffix = fn_name.to_string();
     let ws_root = workspace_root();
+    let seed_attr = match args.seed {
+        Some(s) => quote! { ::std::option::Option::Some(#s) },
+        None => quote! { ::std::option::Option::None },
+    };
 
     // Optional capture-on-failure wiring: a slot both threads can reach,
     // so a timeout keeps the pcaps too.
@@ -216,6 +226,26 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
             #lab_name_suffix,
             ::std::process::id(),
         ));
+
+        // The seed (#337): NLINK_LAB_SEED (a replay), else `seed = N`,
+        // else the topology's, else one drawn now, so a failure can say
+        // which. A kernel without netem seeds gets none at deploy.
+        if let ::std::option::Option::Some(seed) =
+            ::nlink_lab::seed::from_env().expect("lab_test: NLINK_LAB_SEED")
+        {
+            __topo.lab.seed = ::std::option::Option::Some(seed);
+        } else if let ::std::option::Option::Some(seed) = #seed_attr {
+            __topo.lab.seed = ::std::option::Option::Some(seed);
+        }
+        if __topo.lab.seed.is_none() {
+            __topo.lab.seed = ::std::option::Option::Some(::nlink_lab::seed::draw());
+        }
+        let _seed_note = ::nlink_lab::test_helpers::__macro_support::SeedNote::new(
+            __topo.lab.seed,
+            ::std::env!("CARGO_PKG_NAME"),
+            ::std::module_path!(),
+            ::std::stringify!(#fn_name),
+        );
 
         let __result = __topo.validate();
         if __result.has_errors() {
@@ -301,6 +331,13 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
                 if ::std::time::Instant::now() >= __deadline {
                     #capture_on_timeout
                     if let ::std::result::Result::Ok(topo) = __armed_rx.try_recv() {
+                        ::nlink_lab::test_helpers::__macro_support::SeedNote::new(
+                            topo.lab.seed,
+                            ::std::env!("CARGO_PKG_NAME"),
+                            ::std::module_path!(),
+                            ::std::stringify!(#fn_name),
+                        )
+                        .print();
                         let report = ::nlink_lab::test_helpers::cleanup_lab_blocking(&topo);
                         for w in &report.warnings {
                             ::std::eprintln!(
@@ -364,6 +401,8 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Source      := LitStr  |  "topology" "=" Ident
 /// Modifier    := "set" "{" KeyValue ( "," KeyValue )* "}"
 ///              | "timeout" "=" LitInt          (seconds)
+///              | "capture" "=" LitBool
+///              | "seed" "=" LitInt             (#337)
 /// KeyValue    := (Ident | LitStr) "=" LitStr
 /// ```
 struct LabTestArgs {
@@ -371,6 +410,7 @@ struct LabTestArgs {
     set: Vec<(String, String)>,
     timeout_secs: Option<u64>,
     capture_on_failure: bool,
+    seed: Option<u64>,
 }
 
 enum LabTestSource {
@@ -399,6 +439,7 @@ impl syn::parse::Parse for LabTestArgs {
         let mut set: Vec<(String, String)> = Vec::new();
         let mut timeout_secs: Option<u64> = None;
         let mut capture_on_failure = false;
+        let mut seed: Option<u64> = None;
 
         while !input.is_empty() {
             let _: syn::Token![,] = input.parse()?;
@@ -430,6 +471,17 @@ impl syn::parse::Parse for LabTestArgs {
                 let _: syn::Token![=] = input.parse()?;
                 let lit: LitInt = input.parse()?;
                 timeout_secs = Some(lit.base10_parse()?);
+            } else if kw == "seed" {
+                let _: syn::Token![=] = input.parse()?;
+                let lit: LitInt = input.parse()?;
+                let n: u64 = lit.base10_parse()?;
+                if n > i64::MAX as u64 {
+                    return Err(syn::Error::new_spanned(
+                        lit,
+                        "a seed is at most 9223372036854775807",
+                    ));
+                }
+                seed = Some(n);
             } else if kw == "capture" {
                 let _: syn::Token![=] = input.parse()?;
                 // Accept `capture = true` (the only form today).
@@ -438,7 +490,7 @@ impl syn::parse::Parse for LabTestArgs {
             } else {
                 return Err(syn::Error::new_spanned(
                     kw,
-                    "unknown lab_test arg — expected `set { … }`, `timeout = SECS`, or `capture = true`",
+                    "unknown lab_test arg — expected `set { … }`, `timeout = SECS`, `capture = true`, or `seed = N`",
                 ));
             }
         }
@@ -448,6 +500,7 @@ impl syn::parse::Parse for LabTestArgs {
             set,
             timeout_secs,
             capture_on_failure,
+            seed,
         })
     }
 }
@@ -480,9 +533,10 @@ mod tests {
     #[test]
     fn all_modifiers() {
         let args = parse(
-            r#""wan.nll", set { delay = "20ms", loss = "0.5%" }, timeout = 30, capture = true,"#,
+            r#""wan.nll", set { delay = "20ms", loss = "0.5%" }, timeout = 30, capture = true, seed = 42,"#,
         )
         .unwrap();
+        assert_eq!(args.seed, Some(42));
         assert_eq!(
             args.set,
             vec![
@@ -504,6 +558,18 @@ mod tests {
                 ("wan-delay".to_string(), "10ms".to_string()),
             ]
         );
+    }
+
+    #[test]
+    fn a_seed_fits_the_state() {
+        assert_eq!(parse(r#""a.nll""#).unwrap().seed, None);
+        assert_eq!(
+            parse(r#""a.nll", seed = 9223372036854775807"#)
+                .unwrap()
+                .seed,
+            Some(i64::MAX as u64)
+        );
+        assert!(parse(r#""a.nll", seed = 9223372036854775808"#).is_err());
     }
 
     #[test]

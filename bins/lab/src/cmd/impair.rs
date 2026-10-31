@@ -44,8 +44,8 @@ pub struct Args {
     /// (`delay=50ms,loss=1%` too). Properties: delay, jitter, loss (a
     /// rate, or a loss model `gemodel P [R [1-H [1-K]]]` /
     /// `state P13 …`), rate, corrupt, reorder, duplicate,
-    /// delay-correlation, loss-correlation, limit. It replaces the whole
-    /// impairment.
+    /// delay-correlation, loss-correlation, limit, seed (in place of the
+    /// one the lab's seed derives). It replaces the whole impairment.
     #[arg(value_name = "SPEC")]
     pub spec: Vec<String>,
 

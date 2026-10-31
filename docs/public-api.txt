@@ -1,0 +1,1803 @@
+pub mod nlink_lab
+pub use nlink_lab::CancelToken
+pub use nlink_lab::OpCtx
+pub use nlink_lab::ProgressSink
+pub use nlink_lab::api
+pub use nlink_lab::lab_test
+pub mod nlink_lab::builder
+pub struct nlink_lab::builder::FirewallBuilder
+impl nlink_lab::builder::FirewallBuilder
+pub fn nlink_lab::builder::FirewallBuilder::forward(self, f: impl core::ops::function::FnOnce(nlink_lab::builder::FirewallChainBuilder) -> nlink_lab::builder::FirewallChainBuilder) -> Self
+pub fn nlink_lab::builder::FirewallBuilder::output(self, f: impl core::ops::function::FnOnce(nlink_lab::builder::FirewallChainBuilder) -> nlink_lab::builder::FirewallChainBuilder) -> Self
+pub fn nlink_lab::builder::FirewallBuilder::policy(self, policy: &str) -> Self
+pub fn nlink_lab::builder::FirewallBuilder::push_rule(self, rule: nlink_lab::types::FirewallRule) -> Self
+pub fn nlink_lab::builder::FirewallBuilder::reject_with(self, match_expr: &str, with: nlink_lab::types::RejectWith) -> Self
+pub fn nlink_lab::builder::FirewallBuilder::rule(self, match_expr: &str, action: &str) -> Self
+pub fn nlink_lab::builder::FirewallBuilder::set(self, name: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::FirewallSetBuilder) -> nlink_lab::builder::FirewallSetBuilder) -> Self
+pub struct nlink_lab::builder::FirewallChainBuilder
+impl nlink_lab::builder::FirewallChainBuilder
+pub fn nlink_lab::builder::FirewallChainBuilder::policy(self, policy: &str) -> Self
+pub fn nlink_lab::builder::FirewallChainBuilder::push_rule(self, rule: nlink_lab::types::FirewallRule) -> Self
+pub fn nlink_lab::builder::FirewallChainBuilder::reject_with(self, match_expr: &str, with: nlink_lab::types::RejectWith) -> Self
+pub fn nlink_lab::builder::FirewallChainBuilder::rule(self, match_expr: &str, action: &str) -> Self
+pub struct nlink_lab::builder::FirewallSetBuilder
+impl nlink_lab::builder::FirewallSetBuilder
+pub fn nlink_lab::builder::FirewallSetBuilder::dynamic(self) -> Self
+pub fn nlink_lab::builder::FirewallSetBuilder::element(self, element: &str) -> Self
+pub fn nlink_lab::builder::FirewallSetBuilder::key(self, key: &[nlink_lab::types::SetKey]) -> Self
+pub fn nlink_lab::builder::FirewallSetBuilder::size(self, size: u32) -> Self
+pub fn nlink_lab::builder::FirewallSetBuilder::timeout(self, timeout: &str) -> Self
+pub struct nlink_lab::builder::ImpairmentBuilder
+impl nlink_lab::builder::ImpairmentBuilder
+pub fn nlink_lab::builder::ImpairmentBuilder::corrupt(self, corrupt: &str) -> Self
+pub fn nlink_lab::builder::ImpairmentBuilder::delay(self, delay: &str) -> Self
+pub fn nlink_lab::builder::ImpairmentBuilder::jitter(self, jitter: &str) -> Self
+pub fn nlink_lab::builder::ImpairmentBuilder::loss(self, loss: &str) -> Self
+pub fn nlink_lab::builder::ImpairmentBuilder::rate(self, rate: &str) -> Self
+pub fn nlink_lab::builder::ImpairmentBuilder::reorder(self, reorder: &str) -> Self
+pub struct nlink_lab::builder::InterfaceBuilder
+impl nlink_lab::builder::InterfaceBuilder
+pub fn nlink_lab::builder::InterfaceBuilder::address(self, cidr: &str) -> Self
+pub fn nlink_lab::builder::InterfaceBuilder::kind(self, kind: nlink_lab::types::InterfaceKind) -> Self
+pub fn nlink_lab::builder::InterfaceBuilder::local(self, addr: &str) -> Self
+pub fn nlink_lab::builder::InterfaceBuilder::mtu(self, mtu: u32) -> Self
+pub fn nlink_lab::builder::InterfaceBuilder::port(self, port: u16) -> Self
+pub fn nlink_lab::builder::InterfaceBuilder::remote(self, addr: &str) -> Self
+pub fn nlink_lab::builder::InterfaceBuilder::vni(self, vni: u32) -> Self
+pub struct nlink_lab::builder::LinkBuilder
+impl nlink_lab::builder::LinkBuilder
+pub fn nlink_lab::builder::LinkBuilder::addresses(self, addr1: &str, addr2: &str) -> Self
+pub fn nlink_lab::builder::LinkBuilder::mtu(self, mtu: u32) -> Self
+pub struct nlink_lab::builder::NetworkBuilder
+impl nlink_lab::builder::NetworkBuilder
+pub fn nlink_lab::builder::NetworkBuilder::kind(self, kind: &str) -> Self
+pub fn nlink_lab::builder::NetworkBuilder::member(self, endpoint: &str) -> Self
+pub fn nlink_lab::builder::NetworkBuilder::mtu(self, mtu: u32) -> Self
+pub fn nlink_lab::builder::NetworkBuilder::port(self, node: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::PortBuilder) -> nlink_lab::builder::PortBuilder) -> Self
+pub fn nlink_lab::builder::NetworkBuilder::subnet(self, subnet: &str) -> Self
+pub fn nlink_lab::builder::NetworkBuilder::vlan(self, vid: u16, name: core::option::Option<&str>) -> Self
+pub fn nlink_lab::builder::NetworkBuilder::vlan_filtering(self, enabled: bool) -> Self
+pub struct nlink_lab::builder::NodeBuilder
+impl nlink_lab::builder::NodeBuilder
+pub fn nlink_lab::builder::NodeBuilder::cmd(self, cmd: &[&str]) -> Self
+pub fn nlink_lab::builder::NodeBuilder::env(self, key: &str, value: &str) -> Self
+pub fn nlink_lab::builder::NodeBuilder::exec(self, cmd: &[&str]) -> Self
+pub fn nlink_lab::builder::NodeBuilder::exec_background(self, cmd: &[&str]) -> Self
+pub fn nlink_lab::builder::NodeBuilder::firewall(self, f: impl core::ops::function::FnOnce(nlink_lab::builder::FirewallBuilder) -> nlink_lab::builder::FirewallBuilder) -> Self
+pub fn nlink_lab::builder::NodeBuilder::image(self, image: &str) -> Self
+pub fn nlink_lab::builder::NodeBuilder::interface(self, name: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::InterfaceBuilder) -> nlink_lab::builder::InterfaceBuilder) -> Self
+pub fn nlink_lab::builder::NodeBuilder::profile(self, name: &str) -> Self
+pub fn nlink_lab::builder::NodeBuilder::route(self, dest: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::RouteBuilder) -> nlink_lab::builder::RouteBuilder) -> Self
+pub fn nlink_lab::builder::NodeBuilder::sysctl(self, key: &str, value: &str) -> Self
+pub fn nlink_lab::builder::NodeBuilder::volume(self, mount: &str) -> Self
+pub fn nlink_lab::builder::NodeBuilder::vrf(self, name: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::VrfBuilder) -> nlink_lab::builder::VrfBuilder) -> Self
+pub fn nlink_lab::builder::NodeBuilder::wireguard(self, name: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::WireguardBuilder) -> nlink_lab::builder::WireguardBuilder) -> Self
+pub struct nlink_lab::builder::PortBuilder
+impl nlink_lab::builder::PortBuilder
+pub fn nlink_lab::builder::PortBuilder::address(self, cidr: &str) -> Self
+pub fn nlink_lab::builder::PortBuilder::interface(self, name: &str) -> Self
+pub fn nlink_lab::builder::PortBuilder::pvid(self, pvid: u16) -> Self
+pub fn nlink_lab::builder::PortBuilder::tagged(self, tagged: bool) -> Self
+pub fn nlink_lab::builder::PortBuilder::untagged(self, untagged: bool) -> Self
+pub fn nlink_lab::builder::PortBuilder::vlans(self, vids: &[u16]) -> Self
+pub struct nlink_lab::builder::ProfileBuilder
+impl nlink_lab::builder::ProfileBuilder
+pub fn nlink_lab::builder::ProfileBuilder::firewall(self, f: impl core::ops::function::FnOnce(nlink_lab::builder::FirewallBuilder) -> nlink_lab::builder::FirewallBuilder) -> Self
+pub fn nlink_lab::builder::ProfileBuilder::sysctl(self, key: &str, value: &str) -> Self
+pub struct nlink_lab::builder::RateLimitBuilder
+impl nlink_lab::builder::RateLimitBuilder
+pub fn nlink_lab::builder::RateLimitBuilder::burst(self, burst: &str) -> Self
+pub fn nlink_lab::builder::RateLimitBuilder::egress(self, rate: &str) -> Self
+pub fn nlink_lab::builder::RateLimitBuilder::ingress(self, rate: &str) -> Self
+pub struct nlink_lab::builder::RouteBuilder
+impl nlink_lab::builder::RouteBuilder
+pub fn nlink_lab::builder::RouteBuilder::dev(self, dev: &str) -> Self
+pub fn nlink_lab::builder::RouteBuilder::metric(self, metric: u32) -> Self
+pub fn nlink_lab::builder::RouteBuilder::via(self, gateway: &str) -> Self
+pub struct nlink_lab::builder::TopologyBuilder
+impl nlink_lab::builder::TopologyBuilder
+pub fn nlink_lab::builder::TopologyBuilder::build(self) -> nlink_lab::types::Topology
+pub fn nlink_lab::builder::TopologyBuilder::build_validated(self) -> nlink_lab::error::Result<nlink_lab::types::Topology>
+pub fn nlink_lab::builder::TopologyBuilder::description(self, desc: &str) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::dns(self, mode: nlink_lab::types::DnsMode) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::impair(self, endpoint: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::ImpairmentBuilder) -> nlink_lab::builder::ImpairmentBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::link(self, ep1: &str, ep2: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::LinkBuilder) -> nlink_lab::builder::LinkBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::network(self, name: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::NetworkBuilder) -> nlink_lab::builder::NetworkBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::new(name: &str) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::node(self, name: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::NodeBuilder) -> nlink_lab::builder::NodeBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::prefix(self, prefix: &str) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::profile(self, name: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::ProfileBuilder) -> nlink_lab::builder::ProfileBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::qdisc(self, endpoint: &str, kind: nlink_lab::types::QdiscKind) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::rate_limit(self, endpoint: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::RateLimitBuilder) -> nlink_lab::builder::RateLimitBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::runtime(self, runtime: nlink_lab::types::ContainerRuntime) -> Self
+pub struct nlink_lab::builder::VrfBuilder
+impl nlink_lab::builder::VrfBuilder
+pub fn nlink_lab::builder::VrfBuilder::interface(self, iface: &str) -> Self
+pub fn nlink_lab::builder::VrfBuilder::route(self, dest: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::RouteBuilder) -> nlink_lab::builder::RouteBuilder) -> Self
+pub fn nlink_lab::builder::VrfBuilder::table(self, table: u32) -> Self
+pub struct nlink_lab::builder::WireguardBuilder
+impl nlink_lab::builder::WireguardBuilder
+pub fn nlink_lab::builder::WireguardBuilder::address(self, cidr: &str) -> Self
+pub fn nlink_lab::builder::WireguardBuilder::listen_port(self, port: u16) -> Self
+pub fn nlink_lab::builder::WireguardBuilder::peer(self, node: &str) -> Self
+pub fn nlink_lab::builder::WireguardBuilder::private_key(self, key: &str) -> Self
+pub mod nlink_lab::bundle
+pub struct nlink_lab::bundle::BundleOptions
+pub nlink_lab::bundle::BundleOptions::max_file: u64
+pub nlink_lab::bundle::BundleOptions::max_total: u64
+pub nlink_lab::bundle::BundleOptions::pcaps: core::option::Option<std::path::PathBuf>
+pub nlink_lab::bundle::BundleOptions::reason: core::option::Option<alloc::string::String>
+pub nlink_lab::bundle::BundleOptions::replay: core::option::Option<alloc::string::String>
+impl core::default::Default for nlink_lab::bundle::BundleOptions
+pub fn nlink_lab::bundle::BundleOptions::default() -> Self
+pub struct nlink_lab::bundle::BundleReport
+pub nlink_lab::bundle::BundleReport::bytes: u64
+pub nlink_lab::bundle::BundleReport::capped: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::bundle::BundleReport::dir: std::path::PathBuf
+pub nlink_lab::bundle::BundleReport::errors: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::bundle::BundleReport::files: usize
+pub const nlink_lab::bundle::BUNDLE_DIR_ENV: &str
+pub fn nlink_lab::bundle::archive(dir: &std::path::Path) -> nlink_lab::error::Result<std::path::PathBuf>
+pub async fn nlink_lab::bundle::collect(lab: &nlink_lab::running::RunningLab, dir: &std::path::Path, opts: &nlink_lab::bundle::BundleOptions) -> nlink_lab::error::Result<nlink_lab::bundle::BundleReport>
+pub fn nlink_lab::bundle::collect_blocking(lab: &str, dir: &std::path::Path, opts: &nlink_lab::bundle::BundleOptions) -> nlink_lab::error::Result<nlink_lab::bundle::BundleReport>
+pub fn nlink_lab::bundle::dir_for(lab: &str, default_root: &std::path::Path) -> std::path::PathBuf
+pub mod nlink_lab::error
+pub enum nlink_lab::error::Error
+pub nlink_lab::error::Error::AlreadyExists
+pub nlink_lab::error::Error::AlreadyExists::name: alloc::string::String
+pub nlink_lab::error::Error::Api(alloc::boxed::Box<nlink_lab_shared::api::error::ApiError>)
+pub nlink_lab::error::Error::Busy(alloc::string::String)
+pub nlink_lab::error::Error::Cancelled(alloc::string::String)
+pub nlink_lab::error::Error::Capture(alloc::string::String)
+pub nlink_lab::error::Error::DeployFailed(alloc::string::String)
+pub nlink_lab::error::Error::InvalidArgument(alloc::string::String)
+pub nlink_lab::error::Error::InvalidEndpoint
+pub nlink_lab::error::Error::InvalidEndpoint::endpoint: alloc::string::String
+pub nlink_lab::error::Error::InvalidTopology(alloc::string::String)
+pub nlink_lab::error::Error::Io(core::io::error::Error)
+pub nlink_lab::error::Error::Json(serde_json::error::Error)
+pub nlink_lab::error::Error::Locked
+pub nlink_lab::error::Error::Locked::name: alloc::string::String
+pub nlink_lab::error::Error::MovedState
+pub nlink_lab::error::Error::MovedState::name: alloc::string::String
+pub nlink_lab::error::Error::MovedState::path: std::path::PathBuf
+pub nlink_lab::error::Error::Namespace
+pub nlink_lab::error::Error::Namespace::ns: alloc::string::String
+pub nlink_lab::error::Error::Namespace::op: &'static str
+pub nlink_lab::error::Error::Namespace::source: nlink::netlink::error::Error
+pub nlink_lab::error::Error::Nlink(nlink::netlink::error::Error)
+pub nlink_lab::error::Error::NlinkOp
+pub nlink_lab::error::Error::NlinkOp::context: alloc::string::String
+pub nlink_lab::error::Error::NlinkOp::source: nlink::netlink::error::Error
+pub nlink_lab::error::Error::NllDiagnostic(alloc::boxed::Box<nlink_lab::error::NllDiagnostic>)
+pub nlink_lab::error::Error::NllParse(alloc::string::String)
+pub nlink_lab::error::Error::NllParseAt
+pub nlink_lab::error::Error::NllParseAt::message: alloc::string::String
+pub nlink_lab::error::Error::NllParseAt::span: core::ops::range::Range<usize>
+pub nlink_lab::error::Error::NodeNotFound
+pub nlink_lab::error::Error::NodeNotFound::name: alloc::string::String
+pub nlink_lab::error::Error::NotFound
+pub nlink_lab::error::Error::NotFound::name: alloc::string::String
+pub nlink_lab::error::Error::PermissionDenied
+pub nlink_lab::error::Error::PermissionDenied::hint: alloc::string::String
+pub nlink_lab::error::Error::PermissionDenied::path: std::path::PathBuf
+pub nlink_lab::error::Error::Privileges(alloc::string::String)
+pub nlink_lab::error::Error::Runtime(alloc::string::String)
+pub nlink_lab::error::Error::State
+pub nlink_lab::error::Error::State::detail: alloc::string::String
+pub nlink_lab::error::Error::State::op: &'static str
+pub nlink_lab::error::Error::State::path: std::path::PathBuf
+pub nlink_lab::error::Error::TimedOut(alloc::string::String)
+pub nlink_lab::error::Error::Timeout(core::time::Duration)
+pub nlink_lab::error::Error::Unsupported(alloc::string::String)
+pub nlink_lab::error::Error::Validation(alloc::string::String)
+pub nlink_lab::error::Error::ValidationErrors(alloc::vec::Vec<nlink_lab::validator::ValidationIssue>)
+impl nlink_lab::error::Error
+pub fn nlink_lab::error::Error::at(span: core::ops::range::Range<usize>, message: impl core::convert::Into<alloc::string::String>) -> Self
+pub fn nlink_lab::error::Error::deploy_failed(message: impl core::convert::Into<alloc::string::String>) -> Self
+pub fn nlink_lab::error::Error::errno(&self) -> core::option::Option<i32>
+pub fn nlink_lab::error::Error::ext_ack(&self) -> core::option::Option<&str>
+pub fn nlink_lab::error::Error::ext_ack_offset(&self) -> core::option::Option<u32>
+pub fn nlink_lab::error::Error::invalid_argument(message: impl core::convert::Into<alloc::string::String>) -> Self
+pub fn nlink_lab::error::Error::invalid_topology(message: impl core::convert::Into<alloc::string::String>) -> Self
+pub fn nlink_lab::error::Error::is_not_found(&self) -> bool
+pub fn nlink_lab::error::Error::nlink(context: impl core::convert::Into<alloc::string::String>, source: nlink::netlink::error::Error) -> Self
+pub fn nlink_lab::error::Error::nlink_error(&self) -> core::option::Option<&nlink::netlink::error::Error>
+pub fn nlink_lab::error::Error::to_api(&self) -> nlink_lab_shared::api::error::ApiError
+impl core::convert::From<core::net::parser::AddrParseError> for nlink_lab::error::Error
+pub fn nlink_lab::error::Error::from(e: core::net::parser::AddrParseError) -> Self
+impl core::convert::From<core::num::error::ParseIntError> for nlink_lab::error::Error
+pub fn nlink_lab::error::Error::from(e: core::num::error::ParseIntError) -> Self
+impl core::convert::From<nlink_lab::error::NllDiagnostic> for nlink_lab::error::Error
+pub fn nlink_lab::error::Error::from(diag: nlink_lab::error::NllDiagnostic) -> Self
+pub struct nlink_lab::error::NllDiagnostic
+pub nlink_lab::error::NllDiagnostic::help: core::option::Option<alloc::string::String>
+pub nlink_lab::error::NllDiagnostic::label: alloc::string::String
+pub nlink_lab::error::NllDiagnostic::message: alloc::string::String
+pub nlink_lab::error::NllDiagnostic::span: miette::protocol::SourceSpan
+pub nlink_lab::error::NllDiagnostic::src: miette::named_source::NamedSource<alloc::string::String>
+impl core::convert::From<nlink_lab::error::NllDiagnostic> for nlink_lab::error::Error
+pub fn nlink_lab::error::Error::from(diag: nlink_lab::error::NllDiagnostic) -> Self
+impl miette::protocol::Diagnostic for nlink_lab::error::NllDiagnostic
+pub fn nlink_lab::error::NllDiagnostic::help(&self) -> core::option::Option<alloc::boxed::Box<(dyn core::fmt::Display + '_)>>
+pub fn nlink_lab::error::NllDiagnostic::labels(&self) -> core::option::Option<alloc::boxed::Box<(dyn core::iter::traits::iterator::Iterator<Item = miette::protocol::LabeledSpan> + '_)>>
+pub fn nlink_lab::error::NllDiagnostic::source_code(&self) -> core::option::Option<&dyn miette::protocol::SourceCode>
+pub type nlink_lab::error::Result<T> = core::result::Result<T, nlink_lab::error::Error>
+pub mod nlink_lab::parser
+pub mod nlink_lab::parser::nll
+pub mod nlink_lab::parser::nll::lexer
+pub enum nlink_lab::parser::nll::lexer::LexError
+pub nlink_lab::parser::nll::lexer::LexError::UnexpectedCharacter
+pub nlink_lab::parser::nll::lexer::LexError::UnterminatedBlockComment
+pub enum nlink_lab::parser::nll::lexer::Token
+pub nlink_lab::parser::nll::lexer::Token::And
+pub nlink_lab::parser::nll::lexer::Token::ArrowLeft
+pub nlink_lab::parser::nll::lexer::Token::ArrowRight
+pub nlink_lab::parser::nll::lexer::Token::As
+pub nlink_lab::parser::nll::lexer::Token::Asterisk
+pub nlink_lab::parser::nll::lexer::Token::At
+pub nlink_lab::parser::nll::lexer::Token::Benchmark
+pub nlink_lab::parser::nll::lexer::Token::Cidr(alloc::string::String)
+pub nlink_lab::parser::nll::lexer::Token::Colon
+pub nlink_lab::parser::nll::lexer::Token::Comma
+pub nlink_lab::parser::nll::lexer::Token::Dash
+pub nlink_lab::parser::nll::lexer::Token::DashDash
+pub nlink_lab::parser::nll::lexer::Token::Defaults
+pub nlink_lab::parser::nll::lexer::Token::Dot
+pub nlink_lab::parser::nll::lexer::Token::DotDot
+pub nlink_lab::parser::nll::lexer::Token::Duration(alloc::string::String)
+pub nlink_lab::parser::nll::lexer::Token::Eq
+pub nlink_lab::parser::nll::lexer::Token::EqEq
+pub nlink_lab::parser::nll::lexer::Token::For
+pub nlink_lab::parser::nll::lexer::Token::Gt
+pub nlink_lab::parser::nll::lexer::Token::GtEq
+pub nlink_lab::parser::nll::lexer::Token::Hex(alloc::string::String)
+pub nlink_lab::parser::nll::lexer::Token::Ident(alloc::string::String)
+pub nlink_lab::parser::nll::lexer::Token::Impair
+pub nlink_lab::parser::nll::lexer::Token::Import
+pub nlink_lab::parser::nll::lexer::Token::In
+pub nlink_lab::parser::nll::lexer::Token::Int(alloc::string::String)
+pub nlink_lab::parser::nll::lexer::Token::Interp(alloc::string::String)
+pub nlink_lab::parser::nll::lexer::Token::Ipv4Addr(alloc::string::String)
+pub nlink_lab::parser::nll::lexer::Token::Ipv6Addr(alloc::string::String)
+pub nlink_lab::parser::nll::lexer::Token::Ipv6Cidr(alloc::string::String)
+pub nlink_lab::parser::nll::lexer::Token::LBrace
+pub nlink_lab::parser::nll::lexer::Token::LBracket
+pub nlink_lab::parser::nll::lexer::Token::LParen
+pub nlink_lab::parser::nll::lexer::Token::Lab
+pub nlink_lab::parser::nll::lexer::Token::Let
+pub nlink_lab::parser::nll::lexer::Token::Link
+pub nlink_lab::parser::nll::lexer::Token::Lt
+pub nlink_lab::parser::nll::lexer::Token::LtEq
+pub nlink_lab::parser::nll::lexer::Token::Mesh
+pub nlink_lab::parser::nll::lexer::Token::Network
+pub nlink_lab::parser::nll::lexer::Token::Newline
+pub nlink_lab::parser::nll::lexer::Token::Node
+pub nlink_lab::parser::nll::lexer::Token::NotEq
+pub nlink_lab::parser::nll::lexer::Token::Or
+pub nlink_lab::parser::nll::lexer::Token::Param
+pub nlink_lab::parser::nll::lexer::Token::Percent(alloc::string::String)
+pub nlink_lab::parser::nll::lexer::Token::Plus
+pub nlink_lab::parser::nll::lexer::Token::Pool
+pub nlink_lab::parser::nll::lexer::Token::Profile
+pub nlink_lab::parser::nll::lexer::Token::RBrace
+pub nlink_lab::parser::nll::lexer::Token::RBracket
+pub nlink_lab::parser::nll::lexer::Token::RParen
+pub nlink_lab::parser::nll::lexer::Token::Rate
+pub nlink_lab::parser::nll::lexer::Token::RateLit(alloc::string::String)
+pub nlink_lab::parser::nll::lexer::Token::Ring
+pub nlink_lab::parser::nll::lexer::Token::Scenario
+pub nlink_lab::parser::nll::lexer::Token::SizeLit(alloc::string::String)
+pub nlink_lab::parser::nll::lexer::Token::Slash
+pub nlink_lab::parser::nll::lexer::Token::Star
+pub nlink_lab::parser::nll::lexer::Token::String(alloc::string::String)
+pub nlink_lab::parser::nll::lexer::Token::Validate
+impl core::fmt::Display for nlink_lab::parser::nll::lexer::Token
+pub fn nlink_lab::parser::nll::lexer::Token::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'s> logos::Logos<'s> for nlink_lab::parser::nll::lexer::Token
+pub type nlink_lab::parser::nll::lexer::Token::Error = nlink_lab::parser::nll::lexer::LexError
+pub type nlink_lab::parser::nll::lexer::Token::Extras = ()
+pub type nlink_lab::parser::nll::lexer::Token::Source = str
+pub fn nlink_lab::parser::nll::lexer::Token::lex(lex: &mut logos::lexer::Lexer<'s, Self>) -> core::option::Option<core::result::Result<Self, <Self as logos::Logos<'s>>::Error>>
+pub struct nlink_lab::parser::nll::lexer::Spanned
+pub nlink_lab::parser::nll::lexer::Spanned::span: core::ops::range::Range<usize>
+pub nlink_lab::parser::nll::lexer::Spanned::token: nlink_lab::parser::nll::lexer::Token
+pub fn nlink_lab::parser::nll::lexer::lex(input: &str) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::parser::nll::lexer::Spanned>>
+pub fn nlink_lab::parser::nll::lexer::lex_lenient(input: &str) -> alloc::vec::Vec<nlink_lab::parser::nll::lexer::Spanned>
+pub fn nlink_lab::parser::nll::declared_param_defs(input: &str) -> nlink_lab::error::Result<alloc::vec::Vec<(alloc::string::String, core::option::Option<alloc::string::String>)>>
+pub fn nlink_lab::parser::nll::declared_params(input: &str) -> nlink_lab::error::Result<alloc::vec::Vec<alloc::string::String>>
+pub fn nlink_lab::parser::nll::import_closure(entry: &std::path::Path) -> nlink_lab::error::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>>
+pub fn nlink_lab::parser::nll::import_closure_of(text: &str, entry: &std::path::Path) -> nlink_lab::error::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>>
+pub fn nlink_lab::parser::nll::parse(input: &str) -> nlink_lab::error::Result<nlink_lab::types::Topology>
+pub fn nlink_lab::parser::nll::parse_file_with_imports(input: &str, file_path: &std::path::Path) -> nlink_lab::error::Result<nlink_lab::types::Topology>
+pub fn nlink_lab::parser::nll::parse_file_with_params(input: &str, file_path: &std::path::Path, params: &[(alloc::string::String, alloc::string::String)]) -> nlink_lab::error::Result<nlink_lab::types::Topology>
+pub fn nlink_lab::parser::nll::parse_named_with_params(input: &str, name: &str, params: &[(alloc::string::String, alloc::string::String)]) -> nlink_lab::error::Result<nlink_lab::types::Topology>
+pub fn nlink_lab::parser::nll::parse_with_params(input: &str, params: &[(alloc::string::String, alloc::string::String)]) -> nlink_lab::error::Result<nlink_lab::types::Topology>
+pub fn nlink_lab::parser::nll::parse_with_source(input: &str, filename: &str) -> nlink_lab::error::Result<nlink_lab::types::Topology>
+pub fn nlink_lab::parser::nll::source_dir(file: &std::path::Path) -> alloc::string::String
+pub fn nlink_lab::parser::declared_param_defs<P: core::convert::AsRef<std::path::Path>>(path: P) -> nlink_lab::error::Result<alloc::vec::Vec<(alloc::string::String, core::option::Option<alloc::string::String>)>>
+pub fn nlink_lab::parser::declared_params<P: core::convert::AsRef<std::path::Path>>(path: P) -> nlink_lab::error::Result<alloc::vec::Vec<alloc::string::String>>
+pub fn nlink_lab::parser::parse(input: &str) -> nlink_lab::error::Result<nlink_lab::types::Topology>
+pub fn nlink_lab::parser::parse_file<P: core::convert::AsRef<std::path::Path>>(path: P) -> nlink_lab::error::Result<nlink_lab::types::Topology>
+pub fn nlink_lab::parser::parse_file_with_params<P: core::convert::AsRef<std::path::Path>>(path: P, params: &[(alloc::string::String, alloc::string::String)]) -> nlink_lab::error::Result<nlink_lab::types::Topology>
+pub fn nlink_lab::parser::parse_with_params(input: &str, params: &[(alloc::string::String, alloc::string::String)]) -> nlink_lab::error::Result<nlink_lab::types::Topology>
+pub mod nlink_lab::prelude
+pub use nlink_lab::prelude::lab_test
+pub enum nlink_lab::prelude::Error
+pub nlink_lab::prelude::Error::AlreadyExists
+pub nlink_lab::prelude::Error::AlreadyExists::name: alloc::string::String
+pub nlink_lab::prelude::Error::Api(alloc::boxed::Box<nlink_lab_shared::api::error::ApiError>)
+pub nlink_lab::prelude::Error::Busy(alloc::string::String)
+pub nlink_lab::prelude::Error::Cancelled(alloc::string::String)
+pub nlink_lab::prelude::Error::Capture(alloc::string::String)
+pub nlink_lab::prelude::Error::DeployFailed(alloc::string::String)
+pub nlink_lab::prelude::Error::InvalidArgument(alloc::string::String)
+pub nlink_lab::prelude::Error::InvalidEndpoint
+pub nlink_lab::prelude::Error::InvalidEndpoint::endpoint: alloc::string::String
+pub nlink_lab::prelude::Error::InvalidTopology(alloc::string::String)
+pub nlink_lab::prelude::Error::Io(core::io::error::Error)
+pub nlink_lab::prelude::Error::Json(serde_json::error::Error)
+pub nlink_lab::prelude::Error::Locked
+pub nlink_lab::prelude::Error::Locked::name: alloc::string::String
+pub nlink_lab::prelude::Error::MovedState
+pub nlink_lab::prelude::Error::MovedState::name: alloc::string::String
+pub nlink_lab::prelude::Error::MovedState::path: std::path::PathBuf
+pub nlink_lab::prelude::Error::Namespace
+pub nlink_lab::prelude::Error::Namespace::ns: alloc::string::String
+pub nlink_lab::prelude::Error::Namespace::op: &'static str
+pub nlink_lab::prelude::Error::Namespace::source: nlink::netlink::error::Error
+pub nlink_lab::prelude::Error::Nlink(nlink::netlink::error::Error)
+pub nlink_lab::prelude::Error::NlinkOp
+pub nlink_lab::prelude::Error::NlinkOp::context: alloc::string::String
+pub nlink_lab::prelude::Error::NlinkOp::source: nlink::netlink::error::Error
+pub nlink_lab::prelude::Error::NllDiagnostic(alloc::boxed::Box<nlink_lab::error::NllDiagnostic>)
+pub nlink_lab::prelude::Error::NllParse(alloc::string::String)
+pub nlink_lab::prelude::Error::NllParseAt
+pub nlink_lab::prelude::Error::NllParseAt::message: alloc::string::String
+pub nlink_lab::prelude::Error::NllParseAt::span: core::ops::range::Range<usize>
+pub nlink_lab::prelude::Error::NodeNotFound
+pub nlink_lab::prelude::Error::NodeNotFound::name: alloc::string::String
+pub nlink_lab::prelude::Error::NotFound
+pub nlink_lab::prelude::Error::NotFound::name: alloc::string::String
+pub nlink_lab::prelude::Error::PermissionDenied
+pub nlink_lab::prelude::Error::PermissionDenied::hint: alloc::string::String
+pub nlink_lab::prelude::Error::PermissionDenied::path: std::path::PathBuf
+pub nlink_lab::prelude::Error::Privileges(alloc::string::String)
+pub nlink_lab::prelude::Error::Runtime(alloc::string::String)
+pub nlink_lab::prelude::Error::State
+pub nlink_lab::prelude::Error::State::detail: alloc::string::String
+pub nlink_lab::prelude::Error::State::op: &'static str
+pub nlink_lab::prelude::Error::State::path: std::path::PathBuf
+pub nlink_lab::prelude::Error::TimedOut(alloc::string::String)
+pub nlink_lab::prelude::Error::Timeout(core::time::Duration)
+pub nlink_lab::prelude::Error::Unsupported(alloc::string::String)
+pub nlink_lab::prelude::Error::Validation(alloc::string::String)
+pub nlink_lab::prelude::Error::ValidationErrors(alloc::vec::Vec<nlink_lab::validator::ValidationIssue>)
+impl nlink_lab::error::Error
+pub fn nlink_lab::error::Error::at(span: core::ops::range::Range<usize>, message: impl core::convert::Into<alloc::string::String>) -> Self
+pub fn nlink_lab::error::Error::deploy_failed(message: impl core::convert::Into<alloc::string::String>) -> Self
+pub fn nlink_lab::error::Error::errno(&self) -> core::option::Option<i32>
+pub fn nlink_lab::error::Error::ext_ack(&self) -> core::option::Option<&str>
+pub fn nlink_lab::error::Error::ext_ack_offset(&self) -> core::option::Option<u32>
+pub fn nlink_lab::error::Error::invalid_argument(message: impl core::convert::Into<alloc::string::String>) -> Self
+pub fn nlink_lab::error::Error::invalid_topology(message: impl core::convert::Into<alloc::string::String>) -> Self
+pub fn nlink_lab::error::Error::is_not_found(&self) -> bool
+pub fn nlink_lab::error::Error::nlink(context: impl core::convert::Into<alloc::string::String>, source: nlink::netlink::error::Error) -> Self
+pub fn nlink_lab::error::Error::nlink_error(&self) -> core::option::Option<&nlink::netlink::error::Error>
+pub fn nlink_lab::error::Error::to_api(&self) -> nlink_lab_shared::api::error::ApiError
+impl core::convert::From<core::net::parser::AddrParseError> for nlink_lab::error::Error
+pub fn nlink_lab::error::Error::from(e: core::net::parser::AddrParseError) -> Self
+impl core::convert::From<core::num::error::ParseIntError> for nlink_lab::error::Error
+pub fn nlink_lab::error::Error::from(e: core::num::error::ParseIntError) -> Self
+impl core::convert::From<nlink_lab::error::NllDiagnostic> for nlink_lab::error::Error
+pub fn nlink_lab::error::Error::from(diag: nlink_lab::error::NllDiagnostic) -> Self
+pub struct nlink_lab::prelude::ExecOutput
+pub nlink_lab::prelude::ExecOutput::exit_code: i32
+pub nlink_lab::prelude::ExecOutput::stderr: alloc::string::String
+pub nlink_lab::prelude::ExecOutput::stdout: alloc::string::String
+pub struct nlink_lab::prelude::Impairment
+pub nlink_lab::prelude::Impairment::corrupt: core::option::Option<alloc::string::String>
+pub nlink_lab::prelude::Impairment::delay: core::option::Option<alloc::string::String>
+pub nlink_lab::prelude::Impairment::delay_correlation: core::option::Option<alloc::string::String>
+pub nlink_lab::prelude::Impairment::duplicate: core::option::Option<alloc::string::String>
+pub nlink_lab::prelude::Impairment::jitter: core::option::Option<alloc::string::String>
+pub nlink_lab::prelude::Impairment::limit: core::option::Option<alloc::string::String>
+pub nlink_lab::prelude::Impairment::loss: core::option::Option<alloc::string::String>
+pub nlink_lab::prelude::Impairment::loss_correlation: core::option::Option<alloc::string::String>
+pub nlink_lab::prelude::Impairment::rate: core::option::Option<alloc::string::String>
+pub nlink_lab::prelude::Impairment::reorder: core::option::Option<alloc::string::String>
+pub nlink_lab::prelude::Impairment::seed: core::option::Option<alloc::string::String>
+impl nlink_lab::types::Impairment
+pub const nlink_lab::types::Impairment::PROPERTIES: [&'static str; 11]
+pub fn nlink_lab::types::Impairment::loss_correlation_warning(&self) -> core::option::Option<alloc::string::String>
+pub fn nlink_lab::types::Impairment::parse_spec(input: &str) -> core::result::Result<nlink_lab::types::Impairment, alloc::string::String>
+pub fn nlink_lab::types::Impairment::set_property(&mut self, key: &str, value: &str) -> core::result::Result<(), alloc::string::String>
+pub fn nlink_lab::types::Impairment::summary(&self) -> alloc::string::String
+pub fn nlink_lab::types::Impairment::validate_property(key: &str, value: &str) -> core::result::Result<(), alloc::string::String>
+impl core::convert::From<&nlink_lab::types::Impairment> for nlink_lab_shared::api::dto::ImpairmentSpec
+pub fn nlink_lab_shared::api::dto::ImpairmentSpec::from(i: &nlink_lab::types::Impairment) -> Self
+impl core::convert::From<&nlink_lab_shared::api::dto::ImpairmentSpec> for nlink_lab::types::Impairment
+pub fn nlink_lab::types::Impairment::from(s: &nlink_lab_shared::api::dto::ImpairmentSpec) -> Self
+pub struct nlink_lab::prelude::RunningLab
+impl nlink_lab::running::RunningLab
+pub fn nlink_lab::running::RunningLab::assertion_results(&self) -> &[crate::test_runner::AssertionResult]
+pub fn nlink_lab::running::RunningLab::assertions_failed(&self) -> bool
+pub fn nlink_lab::running::RunningLab::capture_targets(&self) -> alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
+pub async fn nlink_lab::running::RunningLab::clear_impairment(&mut self, endpoint: &str) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::container_for(&self, node: &str) -> core::option::Option<&ContainerState>
+pub fn nlink_lab::running::RunningLab::containers(&self) -> &alloc::collections::btree::map::BTreeMap<alloc::string::String, ContainerState>
+pub async fn nlink_lab::running::RunningLab::destroy(self) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::destroy_with(self, ctx: &crate::ops::OpCtx) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::diagnose(&self, node: core::option::Option<&str>) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::NodeDiagnostic>>
+pub async fn nlink_lab::running::RunningLab::diagnose_since(&self, node: core::option::Option<&str>, previous: &[nlink_lab::running::NodeDiagnostic]) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::NodeDiagnostic>>
+pub fn nlink_lab::running::RunningLab::dns_injected(&self) -> bool
+pub fn nlink_lab::running::RunningLab::exec(&self, node: &str, cmd: &str, args: &[&str]) -> nlink_lab::error::Result<nlink_lab::running::ExecOutput>
+pub fn nlink_lab::running::RunningLab::exec_attached(&self, node: &str, cmd: &str, args: &[&str]) -> nlink_lab::error::Result<i32>
+pub fn nlink_lab::running::RunningLab::exec_attached_in(&self, node: &str, cmd: &str, args: &[&str], workdir: core::option::Option<&std::path::Path>) -> nlink_lab::error::Result<i32>
+pub fn nlink_lab::running::RunningLab::exec_attached_with_opts(&self, node: &str, cmd: &str, args: &[&str], opts: nlink_lab::running::ExecOpts<'_>) -> nlink_lab::error::Result<i32>
+pub fn nlink_lab::running::RunningLab::exec_in(&self, node: &str, cmd: &str, args: &[&str], workdir: core::option::Option<&std::path::Path>) -> nlink_lab::error::Result<nlink_lab::running::ExecOutput>
+pub fn nlink_lab::running::RunningLab::exec_pids(&self) -> &alloc::collections::btree::map::BTreeMap<alloc::string::String, u32>
+pub fn nlink_lab::running::RunningLab::exec_with_opts(&self, node: &str, cmd: &str, args: &[&str], opts: nlink_lab::running::ExecOpts<'_>) -> nlink_lab::error::Result<nlink_lab::running::ExecOutput>
+pub async fn nlink_lab::running::RunningLab::firewall_counters(&self, node: &str) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::FirewallCounter>>
+pub fn nlink_lab::running::RunningLab::firewall_counters_blocking(&self, node: &str) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::FirewallCounter>>
+pub async fn nlink_lab::running::RunningLab::heal(&mut self, endpoint: &str) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::host_pids(&self, node: &str, pids: &[u32]) -> nlink_lab::error::Result<alloc::vec::Vec<u32>>
+pub async fn nlink_lab::running::RunningLab::impair(&mut self, endpoint: &str, impairment: &nlink_lab::types::Impairment, dir: nlink_lab_shared::api::dto::Direction) -> nlink_lab::error::Result<core::option::Option<alloc::string::String>>
+pub fn nlink_lab::running::RunningLab::impair_show_blocking(&self, endpoint: &str) -> nlink_lab::error::Result<core::option::Option<crate::impair_parse::ImpairShow>>
+pub fn nlink_lab::running::RunningLab::is_partitioned(&self, endpoint: &str) -> bool
+pub fn nlink_lab::running::RunningLab::kill_process(&self, pid: u32) -> nlink_lab::error::Result<bool>
+pub fn nlink_lab::running::RunningLab::list() -> nlink_lab::error::Result<alloc::vec::Vec<LabInfo>>
+pub fn nlink_lab::running::RunningLab::live_impairments(&self) -> &alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Impairment>
+pub fn nlink_lab::running::RunningLab::load(name: &str) -> nlink_lab::error::Result<Self>
+pub fn nlink_lab::running::RunningLab::log_paths(&self, pid: u32) -> core::option::Option<(&str, &str)>
+pub fn nlink_lab::running::RunningLab::main_routes_to_blocking(&self, node: &str, dst: core::net::ip_addr::IpAddr, prefix_len: u8) -> nlink_lab::error::Result<alloc::vec::Vec<alloc::vec::Vec<nlink_lab::running::RouteHop>>>
+pub fn nlink_lab::running::RunningLab::name(&self) -> &str
+pub fn nlink_lab::running::RunningLab::namespace_count(&self) -> usize
+pub fn nlink_lab::running::RunningLab::namespace_for(&self, node: &str) -> nlink_lab::error::Result<&str>
+pub fn nlink_lab::running::RunningLab::namespace_name_of(&self, node: &str) -> core::option::Option<&str>
+pub fn nlink_lab::running::RunningLab::node_addresses(&self, node: &str) -> nlink_lab::error::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::vec::Vec<alloc::string::String>>>
+pub fn nlink_lab::running::RunningLab::node_names(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
+pub fn nlink_lab::running::RunningLab::node_pids(&self, node: &str) -> nlink_lab::error::Result<alloc::vec::Vec<u32>>
+pub fn nlink_lab::running::RunningLab::ns_resolver_of(&self, node: &str) -> core::option::Option<crate::deploy::NsRef>
+pub async fn nlink_lab::running::RunningLab::partition(&mut self, endpoint: &str) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::partitions(&self) -> &alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Impairment>
+pub fn nlink_lab::running::RunningLab::peer_endpoint(&self, endpoint: &str) -> nlink_lab::error::Result<alloc::string::String>
+pub fn nlink_lab::running::RunningLab::pids(&self) -> &[(alloc::string::String, u32)]
+pub fn nlink_lab::running::RunningLab::prepare_exec(&self, node: &str, cmd: &str, args: &[&str], opts: &nlink_lab::running::ExecOpts<'_>, mode: nlink_lab::running::ExecMode) -> nlink_lab::error::Result<nlink_lab::running::PreparedExec>
+pub fn nlink_lab::running::RunningLab::proc_stat(&self, node: &str, pid: u32) -> nlink_lab::error::Result<crate::proc_stat::ProcStat>
+pub fn nlink_lab::running::RunningLab::proc_stat_all(&self, node: &str) -> nlink_lab::error::Result<alloc::vec::Vec<crate::proc_stat::ProcStat>>
+pub fn nlink_lab::running::RunningLab::proc_stat_many(&self, node: &str, pids: &[u32]) -> nlink_lab::error::Result<alloc::vec::Vec<crate::proc_stat::ProcStat>>
+pub fn nlink_lab::running::RunningLab::proc_stat_pidfiles(&self, node: &str, pattern: &str) -> nlink_lab::error::Result<alloc::vec::Vec<crate::proc_stat::ProcStat>>
+pub fn nlink_lab::running::RunningLab::process_status(&self) -> alloc::vec::Vec<nlink_lab::running::ProcessInfo>
+pub fn nlink_lab::running::RunningLab::process_status_alive_only(&self) -> alloc::vec::Vec<nlink_lab::running::ProcessInfo>
+pub fn nlink_lab::running::RunningLab::runtime(&self) -> crate::container::Runtime
+pub fn nlink_lab::running::RunningLab::runtime_binary(&self) -> core::option::Option<&str>
+pub fn nlink_lab::running::RunningLab::save_state(&self) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::set_container_pid(&mut self, node: &str, pid: u32) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::set_directed_impairment(&mut self, endpoint: &str, egress: core::option::Option<&nlink_lab::types::Impairment>, ingress: core::option::Option<&nlink_lab::types::Impairment>) -> nlink_lab::error::Result<core::option::Option<alloc::string::String>>
+pub async fn nlink_lab::running::RunningLab::set_impairment(&mut self, endpoint: &str, impairment: &nlink_lab::types::Impairment) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::set_link_mtu(&mut self, endpoint: &str, mtu: u32) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::set_pair_impairment(&mut self, network: &str, src: &str, dst: &str, impairment: core::option::Option<&nlink_lab::types::Impairment>, rate_cap: core::option::Option<&str>) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::signal_process(&self, pid: u32, signal: nlink_lab::running::Signal) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::spawn(&mut self, node: &str, cmd: &[&str]) -> nlink_lab::error::Result<u32>
+pub fn nlink_lab::running::RunningLab::spawn_with_logs(&mut self, node: &str, cmd: &[&str], log_dir: core::option::Option<&std::path::Path>) -> nlink_lab::error::Result<u32>
+pub fn nlink_lab::running::RunningLab::spawn_with_logs_in(&mut self, node: &str, cmd: &[&str], log_dir: core::option::Option<&std::path::Path>, workdir: core::option::Option<&std::path::Path>) -> nlink_lab::error::Result<u32>
+pub fn nlink_lab::running::RunningLab::spawn_with_logs_with_opts(&mut self, node: &str, cmd: &[&str], opts: nlink_lab::running::SpawnOpts<'_>) -> nlink_lab::error::Result<u32>
+pub fn nlink_lab::running::RunningLab::tcp_connect(&self, node: &str, addr: core::net::socket_addr::SocketAddr, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::topology(&self) -> &nlink_lab::types::Topology
+pub async fn nlink_lab::running::RunningLab::wait_for_exec(&self, node: &str, cmd: &str, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::wait_for_fd_stable(&self, _node: &str, pid: u32, stable_for: core::time::Duration, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::wait_for_file(&self, node: &str, path: &str, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::wait_for_log_line(&self, pid: u32, pattern: &regex::regex::string::Regex, stream: nlink_lab::running::LogStream, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::wait_for_port(&self, node: &str, pid: core::option::Option<u32>, port: u16, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::wait_for_tcp(&self, node: &str, ip: &str, port: u16, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::wifi_loaded(&self) -> bool
+impl nlink_lab::running::RunningLab
+pub async fn nlink_lab::running::RunningLab::conntrack(&self, node: &str, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab_shared::api::dto::ConntrackFlow>>
+pub async fn nlink_lab::running::RunningLab::conntrack_of(&self, node: core::option::Option<&str>, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab_shared::api::dto::ConntrackFlow>>
+pub async fn nlink_lab::running::RunningLab::flush_conntrack(&self, node: &str, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<usize>
+pub async fn nlink_lab::running::RunningLab::flush_conntrack_of(&self, node: core::option::Option<&str>, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, usize>>
+impl nlink_lab::running::RunningLab
+pub async fn nlink_lab::running::RunningLab::wait_all(&self, node: &str, conditions: &[WaitCondition], timeout: core::time::Duration, interval: core::time::Duration, ctx: &OpCtx) -> nlink_lab::error::Result<()>
+impl core::clone::Clone for nlink_lab::running::RunningLab
+pub fn nlink_lab::running::RunningLab::clone(&self) -> Self
+pub struct nlink_lab::prelude::Topology
+pub nlink_lab::prelude::Topology::assertion_interval: core::option::Option<alloc::string::String>
+pub nlink_lab::prelude::Topology::assertion_retries: core::option::Option<u32>
+pub nlink_lab::prelude::Topology::assertions: alloc::vec::Vec<nlink_lab::types::Assertion>
+pub nlink_lab::prelude::Topology::benchmarks: alloc::vec::Vec<nlink_lab::types::Benchmark>
+pub nlink_lab::prelude::Topology::directional_impairments: alloc::collections::btree::set::BTreeSet<alloc::string::String>
+pub nlink_lab::prelude::Topology::impairments: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Impairment>
+pub nlink_lab::prelude::Topology::lab: nlink_lab::types::LabConfig
+pub nlink_lab::prelude::Topology::links: alloc::vec::Vec<nlink_lab::types::Link>
+pub nlink_lab::prelude::Topology::networks: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Network>
+pub nlink_lab::prelude::Topology::nodes: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Node>
+pub nlink_lab::prelude::Topology::profiles: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Profile>
+pub nlink_lab::prelude::Topology::qdiscs: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::QdiscConfig>
+pub nlink_lab::prelude::Topology::rate_limits: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::RateLimit>
+pub nlink_lab::prelude::Topology::scenarios: alloc::vec::Vec<nlink_lab::types::Scenario>
+pub nlink_lab::prelude::Topology::sites: alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::vec::Vec<alloc::string::String>>
+pub nlink_lab::prelude::Topology::source_dir: core::option::Option<alloc::string::String>
+impl nlink_lab::types::Topology
+pub async fn nlink_lab::types::Topology::deploy(&self) -> nlink_lab::error::Result<nlink_lab::running::RunningLab>
+pub async fn nlink_lab::types::Topology::deploy_with(&self, ctx: &crate::ops::OpCtx) -> nlink_lab::error::Result<nlink_lab::running::RunningLab>
+pub fn nlink_lab::types::Topology::effective_firewall<'a>(&'a self, node: &'a nlink_lab::types::Node) -> core::option::Option<alloc::borrow::Cow<'a, nlink_lab::types::FirewallConfig>>
+pub fn nlink_lab::types::Topology::effective_frr(&self, node: &nlink_lab::types::Node) -> core::option::Option<nlink_lab::types::FrrConfig>
+pub fn nlink_lab::types::Topology::effective_sysctls(&self, node: &nlink_lab::types::Node) -> alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
+pub fn nlink_lab::types::Topology::namespace_name(&self, node_name: &str) -> alloc::string::String
+pub fn nlink_lab::types::Topology::rebase_host_paths(&mut self, base: &std::path::Path)
+pub fn nlink_lab::types::Topology::redacted(&self) -> nlink_lab::types::Topology
+impl nlink_lab::types::Topology
+pub fn nlink_lab::types::Topology::validate(&self) -> nlink_lab::validator::ValidationResult
+pub fn nlink_lab::types::Topology::validate_with(&self, opts: &nlink_lab::validator::RuleOptions) -> nlink_lab::validator::ValidationResult
+pub struct nlink_lab::prelude::TopologyBuilder
+impl nlink_lab::builder::TopologyBuilder
+pub fn nlink_lab::builder::TopologyBuilder::build(self) -> nlink_lab::types::Topology
+pub fn nlink_lab::builder::TopologyBuilder::build_validated(self) -> nlink_lab::error::Result<nlink_lab::types::Topology>
+pub fn nlink_lab::builder::TopologyBuilder::description(self, desc: &str) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::dns(self, mode: nlink_lab::types::DnsMode) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::impair(self, endpoint: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::ImpairmentBuilder) -> nlink_lab::builder::ImpairmentBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::link(self, ep1: &str, ep2: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::LinkBuilder) -> nlink_lab::builder::LinkBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::network(self, name: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::NetworkBuilder) -> nlink_lab::builder::NetworkBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::new(name: &str) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::node(self, name: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::NodeBuilder) -> nlink_lab::builder::NodeBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::prefix(self, prefix: &str) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::profile(self, name: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::ProfileBuilder) -> nlink_lab::builder::ProfileBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::qdisc(self, endpoint: &str, kind: nlink_lab::types::QdiscKind) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::rate_limit(self, endpoint: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::RateLimitBuilder) -> nlink_lab::builder::RateLimitBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::runtime(self, runtime: nlink_lab::types::ContainerRuntime) -> Self
+pub fn nlink_lab::prelude::feature(test_name: &str, what: &str, present: bool) -> bool
+pub fn nlink_lab::prelude::privileged(test_name: &str) -> bool
+pub type nlink_lab::prelude::Result<T> = core::result::Result<T, nlink_lab::error::Error>
+pub mod nlink_lab::running
+pub enum nlink_lab::running::LogStream
+pub nlink_lab::running::LogStream::Both
+pub nlink_lab::running::LogStream::Stderr
+pub nlink_lab::running::LogStream::Stdout
+pub enum nlink_lab::running::Signal
+pub nlink_lab::running::Signal::Cont
+pub nlink_lab::running::Signal::Hup
+pub nlink_lab::running::Signal::Int
+pub nlink_lab::running::Signal::Kill
+pub nlink_lab::running::Signal::Stop
+pub nlink_lab::running::Signal::Term
+pub nlink_lab::running::Signal::Usr1
+pub nlink_lab::running::Signal::Usr2
+impl nlink_lab::running::Signal
+pub fn nlink_lab::running::Signal::name(self) -> &'static str
+pub fn nlink_lab::running::Signal::number(self) -> core::ffi::primitives::c_int
+pub struct nlink_lab::running::ExecChild
+pub nlink_lab::running::ExecChild::child: std::process::Child
+impl nlink_lab::running::ExecChild
+pub fn nlink_lab::running::ExecChild::kill(&mut self)
+pub fn nlink_lab::running::ExecChild::stopper(&self) -> nlink_lab::running::ExecStopper
+pub struct nlink_lab::running::ExecMode
+pub nlink_lab::running::ExecMode::stdin: bool
+pub nlink_lab::running::ExecMode::stoppable: bool
+pub nlink_lab::running::ExecMode::tty: bool
+pub struct nlink_lab::running::ExecOpts<'a>
+pub nlink_lab::running::ExecOpts::env: &'a [(&'a str, &'a str)]
+pub nlink_lab::running::ExecOpts::timeout: core::option::Option<core::time::Duration>
+pub nlink_lab::running::ExecOpts::workdir: core::option::Option<&'a std::path::Path>
+pub struct nlink_lab::running::ExecOutput
+pub nlink_lab::running::ExecOutput::exit_code: i32
+pub nlink_lab::running::ExecOutput::stderr: alloc::string::String
+pub nlink_lab::running::ExecOutput::stdout: alloc::string::String
+pub struct nlink_lab::running::ExecStopper(_)
+impl nlink_lab::running::ExecStopper
+pub fn nlink_lab::running::ExecStopper::stop(&self)
+pub struct nlink_lab::running::FirewallCounter
+pub nlink_lab::running::FirewallCounter::bytes: u64
+pub nlink_lab::running::FirewallCounter::name: alloc::string::String
+pub nlink_lab::running::FirewallCounter::packets: u64
+pub struct nlink_lab::running::NodeDiagnostic
+pub nlink_lab::running::NodeDiagnostic::interfaces: alloc::vec::Vec<nlink::netlink::diagnostics::InterfaceDiag>
+pub nlink_lab::running::NodeDiagnostic::issues: alloc::vec::Vec<nlink::netlink::diagnostics::Issue>
+pub nlink_lab::running::NodeDiagnostic::node: alloc::string::String
+pub nlink_lab::running::NodeDiagnostic::taken_at: std::time::Instant
+impl nlink_lab::running::NodeDiagnostic
+pub fn nlink_lab::running::NodeDiagnostic::to_json(&self) -> serde_json::value::Value
+pub struct nlink_lab::running::PreparedExec
+impl nlink_lab::running::PreparedExec
+pub fn nlink_lab::running::PreparedExec::command(&mut self) -> &mut std::process::Command
+pub fn nlink_lab::running::PreparedExec::spawn(self) -> nlink_lab::error::Result<nlink_lab::running::ExecChild>
+pub struct nlink_lab::running::ProcessInfo
+pub nlink_lab::running::ProcessInfo::alive: bool
+pub nlink_lab::running::ProcessInfo::exit_code: core::option::Option<i32>
+pub nlink_lab::running::ProcessInfo::host_pid: u32
+pub nlink_lab::running::ProcessInfo::node: alloc::string::String
+pub nlink_lab::running::ProcessInfo::pid: u32
+pub nlink_lab::running::ProcessInfo::stderr_log: core::option::Option<alloc::string::String>
+pub nlink_lab::running::ProcessInfo::stdout_log: core::option::Option<alloc::string::String>
+pub struct nlink_lab::running::RouteHop
+pub nlink_lab::running::RouteHop::dev: core::option::Option<alloc::string::String>
+pub nlink_lab::running::RouteHop::via: core::option::Option<core::net::ip_addr::IpAddr>
+impl core::fmt::Display for nlink_lab::running::RouteHop
+pub fn nlink_lab::running::RouteHop::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct nlink_lab::running::RunningLab
+impl nlink_lab::running::RunningLab
+pub fn nlink_lab::running::RunningLab::assertion_results(&self) -> &[crate::test_runner::AssertionResult]
+pub fn nlink_lab::running::RunningLab::assertions_failed(&self) -> bool
+pub fn nlink_lab::running::RunningLab::capture_targets(&self) -> alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
+pub async fn nlink_lab::running::RunningLab::clear_impairment(&mut self, endpoint: &str) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::container_for(&self, node: &str) -> core::option::Option<&ContainerState>
+pub fn nlink_lab::running::RunningLab::containers(&self) -> &alloc::collections::btree::map::BTreeMap<alloc::string::String, ContainerState>
+pub async fn nlink_lab::running::RunningLab::destroy(self) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::destroy_with(self, ctx: &crate::ops::OpCtx) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::diagnose(&self, node: core::option::Option<&str>) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::NodeDiagnostic>>
+pub async fn nlink_lab::running::RunningLab::diagnose_since(&self, node: core::option::Option<&str>, previous: &[nlink_lab::running::NodeDiagnostic]) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::NodeDiagnostic>>
+pub fn nlink_lab::running::RunningLab::dns_injected(&self) -> bool
+pub fn nlink_lab::running::RunningLab::exec(&self, node: &str, cmd: &str, args: &[&str]) -> nlink_lab::error::Result<nlink_lab::running::ExecOutput>
+pub fn nlink_lab::running::RunningLab::exec_attached(&self, node: &str, cmd: &str, args: &[&str]) -> nlink_lab::error::Result<i32>
+pub fn nlink_lab::running::RunningLab::exec_attached_in(&self, node: &str, cmd: &str, args: &[&str], workdir: core::option::Option<&std::path::Path>) -> nlink_lab::error::Result<i32>
+pub fn nlink_lab::running::RunningLab::exec_attached_with_opts(&self, node: &str, cmd: &str, args: &[&str], opts: nlink_lab::running::ExecOpts<'_>) -> nlink_lab::error::Result<i32>
+pub fn nlink_lab::running::RunningLab::exec_in(&self, node: &str, cmd: &str, args: &[&str], workdir: core::option::Option<&std::path::Path>) -> nlink_lab::error::Result<nlink_lab::running::ExecOutput>
+pub fn nlink_lab::running::RunningLab::exec_pids(&self) -> &alloc::collections::btree::map::BTreeMap<alloc::string::String, u32>
+pub fn nlink_lab::running::RunningLab::exec_with_opts(&self, node: &str, cmd: &str, args: &[&str], opts: nlink_lab::running::ExecOpts<'_>) -> nlink_lab::error::Result<nlink_lab::running::ExecOutput>
+pub async fn nlink_lab::running::RunningLab::firewall_counters(&self, node: &str) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::FirewallCounter>>
+pub fn nlink_lab::running::RunningLab::firewall_counters_blocking(&self, node: &str) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::FirewallCounter>>
+pub async fn nlink_lab::running::RunningLab::heal(&mut self, endpoint: &str) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::host_pids(&self, node: &str, pids: &[u32]) -> nlink_lab::error::Result<alloc::vec::Vec<u32>>
+pub async fn nlink_lab::running::RunningLab::impair(&mut self, endpoint: &str, impairment: &nlink_lab::types::Impairment, dir: nlink_lab_shared::api::dto::Direction) -> nlink_lab::error::Result<core::option::Option<alloc::string::String>>
+pub fn nlink_lab::running::RunningLab::impair_show_blocking(&self, endpoint: &str) -> nlink_lab::error::Result<core::option::Option<crate::impair_parse::ImpairShow>>
+pub fn nlink_lab::running::RunningLab::is_partitioned(&self, endpoint: &str) -> bool
+pub fn nlink_lab::running::RunningLab::kill_process(&self, pid: u32) -> nlink_lab::error::Result<bool>
+pub fn nlink_lab::running::RunningLab::list() -> nlink_lab::error::Result<alloc::vec::Vec<LabInfo>>
+pub fn nlink_lab::running::RunningLab::live_impairments(&self) -> &alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Impairment>
+pub fn nlink_lab::running::RunningLab::load(name: &str) -> nlink_lab::error::Result<Self>
+pub fn nlink_lab::running::RunningLab::log_paths(&self, pid: u32) -> core::option::Option<(&str, &str)>
+pub fn nlink_lab::running::RunningLab::main_routes_to_blocking(&self, node: &str, dst: core::net::ip_addr::IpAddr, prefix_len: u8) -> nlink_lab::error::Result<alloc::vec::Vec<alloc::vec::Vec<nlink_lab::running::RouteHop>>>
+pub fn nlink_lab::running::RunningLab::name(&self) -> &str
+pub fn nlink_lab::running::RunningLab::namespace_count(&self) -> usize
+pub fn nlink_lab::running::RunningLab::namespace_for(&self, node: &str) -> nlink_lab::error::Result<&str>
+pub fn nlink_lab::running::RunningLab::namespace_name_of(&self, node: &str) -> core::option::Option<&str>
+pub fn nlink_lab::running::RunningLab::node_addresses(&self, node: &str) -> nlink_lab::error::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::vec::Vec<alloc::string::String>>>
+pub fn nlink_lab::running::RunningLab::node_names(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
+pub fn nlink_lab::running::RunningLab::node_pids(&self, node: &str) -> nlink_lab::error::Result<alloc::vec::Vec<u32>>
+pub fn nlink_lab::running::RunningLab::ns_resolver_of(&self, node: &str) -> core::option::Option<crate::deploy::NsRef>
+pub async fn nlink_lab::running::RunningLab::partition(&mut self, endpoint: &str) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::partitions(&self) -> &alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Impairment>
+pub fn nlink_lab::running::RunningLab::peer_endpoint(&self, endpoint: &str) -> nlink_lab::error::Result<alloc::string::String>
+pub fn nlink_lab::running::RunningLab::pids(&self) -> &[(alloc::string::String, u32)]
+pub fn nlink_lab::running::RunningLab::prepare_exec(&self, node: &str, cmd: &str, args: &[&str], opts: &nlink_lab::running::ExecOpts<'_>, mode: nlink_lab::running::ExecMode) -> nlink_lab::error::Result<nlink_lab::running::PreparedExec>
+pub fn nlink_lab::running::RunningLab::proc_stat(&self, node: &str, pid: u32) -> nlink_lab::error::Result<crate::proc_stat::ProcStat>
+pub fn nlink_lab::running::RunningLab::proc_stat_all(&self, node: &str) -> nlink_lab::error::Result<alloc::vec::Vec<crate::proc_stat::ProcStat>>
+pub fn nlink_lab::running::RunningLab::proc_stat_many(&self, node: &str, pids: &[u32]) -> nlink_lab::error::Result<alloc::vec::Vec<crate::proc_stat::ProcStat>>
+pub fn nlink_lab::running::RunningLab::proc_stat_pidfiles(&self, node: &str, pattern: &str) -> nlink_lab::error::Result<alloc::vec::Vec<crate::proc_stat::ProcStat>>
+pub fn nlink_lab::running::RunningLab::process_status(&self) -> alloc::vec::Vec<nlink_lab::running::ProcessInfo>
+pub fn nlink_lab::running::RunningLab::process_status_alive_only(&self) -> alloc::vec::Vec<nlink_lab::running::ProcessInfo>
+pub fn nlink_lab::running::RunningLab::runtime(&self) -> crate::container::Runtime
+pub fn nlink_lab::running::RunningLab::runtime_binary(&self) -> core::option::Option<&str>
+pub fn nlink_lab::running::RunningLab::save_state(&self) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::set_container_pid(&mut self, node: &str, pid: u32) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::set_directed_impairment(&mut self, endpoint: &str, egress: core::option::Option<&nlink_lab::types::Impairment>, ingress: core::option::Option<&nlink_lab::types::Impairment>) -> nlink_lab::error::Result<core::option::Option<alloc::string::String>>
+pub async fn nlink_lab::running::RunningLab::set_impairment(&mut self, endpoint: &str, impairment: &nlink_lab::types::Impairment) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::set_link_mtu(&mut self, endpoint: &str, mtu: u32) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::set_pair_impairment(&mut self, network: &str, src: &str, dst: &str, impairment: core::option::Option<&nlink_lab::types::Impairment>, rate_cap: core::option::Option<&str>) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::signal_process(&self, pid: u32, signal: nlink_lab::running::Signal) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::spawn(&mut self, node: &str, cmd: &[&str]) -> nlink_lab::error::Result<u32>
+pub fn nlink_lab::running::RunningLab::spawn_with_logs(&mut self, node: &str, cmd: &[&str], log_dir: core::option::Option<&std::path::Path>) -> nlink_lab::error::Result<u32>
+pub fn nlink_lab::running::RunningLab::spawn_with_logs_in(&mut self, node: &str, cmd: &[&str], log_dir: core::option::Option<&std::path::Path>, workdir: core::option::Option<&std::path::Path>) -> nlink_lab::error::Result<u32>
+pub fn nlink_lab::running::RunningLab::spawn_with_logs_with_opts(&mut self, node: &str, cmd: &[&str], opts: nlink_lab::running::SpawnOpts<'_>) -> nlink_lab::error::Result<u32>
+pub fn nlink_lab::running::RunningLab::tcp_connect(&self, node: &str, addr: core::net::socket_addr::SocketAddr, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::topology(&self) -> &nlink_lab::types::Topology
+pub async fn nlink_lab::running::RunningLab::wait_for_exec(&self, node: &str, cmd: &str, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::wait_for_fd_stable(&self, _node: &str, pid: u32, stable_for: core::time::Duration, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::wait_for_file(&self, node: &str, path: &str, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::wait_for_log_line(&self, pid: u32, pattern: &regex::regex::string::Regex, stream: nlink_lab::running::LogStream, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::wait_for_port(&self, node: &str, pid: core::option::Option<u32>, port: u16, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::wait_for_tcp(&self, node: &str, ip: &str, port: u16, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::wifi_loaded(&self) -> bool
+impl nlink_lab::running::RunningLab
+pub async fn nlink_lab::running::RunningLab::conntrack(&self, node: &str, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab_shared::api::dto::ConntrackFlow>>
+pub async fn nlink_lab::running::RunningLab::conntrack_of(&self, node: core::option::Option<&str>, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab_shared::api::dto::ConntrackFlow>>
+pub async fn nlink_lab::running::RunningLab::flush_conntrack(&self, node: &str, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<usize>
+pub async fn nlink_lab::running::RunningLab::flush_conntrack_of(&self, node: core::option::Option<&str>, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, usize>>
+impl nlink_lab::running::RunningLab
+pub async fn nlink_lab::running::RunningLab::wait_all(&self, node: &str, conditions: &[WaitCondition], timeout: core::time::Duration, interval: core::time::Duration, ctx: &OpCtx) -> nlink_lab::error::Result<()>
+impl core::clone::Clone for nlink_lab::running::RunningLab
+pub fn nlink_lab::running::RunningLab::clone(&self) -> Self
+pub struct nlink_lab::running::SpawnOpts<'a>
+pub nlink_lab::running::SpawnOpts::env: &'a [(&'a str, &'a str)]
+pub nlink_lab::running::SpawnOpts::log_dir: core::option::Option<&'a std::path::Path>
+pub nlink_lab::running::SpawnOpts::workdir: core::option::Option<&'a std::path::Path>
+pub fn nlink_lab::running::parse_signal(name: &str) -> nlink_lab::error::Result<nlink_lab::running::Signal>
+pub mod nlink_lab::test_helpers
+pub enum nlink_lab::test_helpers::RootGate
+pub nlink_lab::test_helpers::RootGate::Fail(alloc::string::String)
+pub nlink_lab::test_helpers::RootGate::Proceed
+pub nlink_lab::test_helpers::RootGate::Skip
+pub struct nlink_lab::test_helpers::CaptureGuard(_)
+impl core::ops::drop::Drop for nlink_lab::test_helpers::CaptureGuard
+pub fn nlink_lab::test_helpers::CaptureGuard::drop(&mut self)
+pub struct nlink_lab::test_helpers::CaptureSlot
+impl nlink_lab::test_helpers::CaptureSlot
+pub fn nlink_lab::test_helpers::CaptureSlot::finish(&self, failed: bool)
+pub fn nlink_lab::test_helpers::CaptureSlot::guard(&self) -> nlink_lab::test_helpers::CaptureGuard
+pub fn nlink_lab::test_helpers::CaptureSlot::new(dest: std::path::PathBuf) -> Self
+pub fn nlink_lab::test_helpers::CaptureSlot::start(&self, lab: &nlink_lab::running::RunningLab)
+pub struct nlink_lab::test_helpers::CleanupReport
+pub nlink_lab::test_helpers::CleanupReport::containers_removed: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::test_helpers::CleanupReport::destroyed_via_state: bool
+pub nlink_lab::test_helpers::CleanupReport::links_removed: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::test_helpers::CleanupReport::namespaces_removed: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::test_helpers::CleanupReport::warnings: alloc::vec::Vec<alloc::string::String>
+pub struct nlink_lab::test_helpers::LabCapture
+impl nlink_lab::test_helpers::LabCapture
+pub fn nlink_lab::test_helpers::LabCapture::persist_on_failure_in(self, failure: bool, dest_dir: &std::path::Path) -> nlink_lab::error::Result<core::option::Option<alloc::vec::Vec<std::path::PathBuf>>>
+pub fn nlink_lab::test_helpers::LabCapture::persist_to(self, dest_dir: &std::path::Path) -> nlink_lab::error::Result<alloc::vec::Vec<std::path::PathBuf>>
+pub fn nlink_lab::test_helpers::LabCapture::start(targets: &[(alloc::string::String, alloc::string::String)]) -> nlink_lab::error::Result<Self>
+impl core::ops::drop::Drop for nlink_lab::test_helpers::LabCapture
+pub fn nlink_lab::test_helpers::LabCapture::drop(&mut self)
+pub const nlink_lab::test_helpers::SKIP_ROOT_TESTS_ENV: &str
+pub const nlink_lab::test_helpers::STRICT_FEATURES_ENV: &str
+pub fn nlink_lab::test_helpers::capture_dir(workspace_root: &str, test: &str) -> std::path::PathBuf
+pub async fn nlink_lab::test_helpers::cleanup_lab(topology: &nlink_lab::types::Topology) -> nlink_lab::test_helpers::CleanupReport
+pub fn nlink_lab::test_helpers::cleanup_lab_blocking(topology: &nlink_lab::types::Topology) -> nlink_lab::test_helpers::CleanupReport
+pub fn nlink_lab::test_helpers::feature(test_name: &str, what: &str, present: bool) -> bool
+pub fn nlink_lab::test_helpers::feature_required(strict_env: core::option::Option<&str>, what: &str) -> bool
+pub fn nlink_lab::test_helpers::gate_for(has_privileges: bool, skip_env: core::option::Option<&str>, test_name: &str) -> nlink_lab::test_helpers::RootGate
+pub fn nlink_lab::test_helpers::has_privileges() -> bool
+pub fn nlink_lab::test_helpers::is_root() -> bool
+pub fn nlink_lab::test_helpers::privileged(test_name: &str) -> bool
+pub fn nlink_lab::test_helpers::root_gate(test_name: &str) -> nlink_lab::test_helpers::RootGate
+pub fn nlink_lab::test_helpers::root_required_message(test_name: &str) -> alloc::string::String
+pub fn nlink_lab::test_helpers::skip_root_tests_requested() -> bool
+pub mod nlink_lab::types
+pub enum nlink_lab::types::Assertion
+pub nlink_lab::types::Assertion::Counter
+pub nlink_lab::types::Assertion::Counter::metric: nlink_lab::types::CounterMetric
+pub nlink_lab::types::Assertion::Counter::name: alloc::string::String
+pub nlink_lab::types::Assertion::Counter::node: alloc::string::String
+pub nlink_lab::types::Assertion::Counter::op: nlink_lab::types::CompareOp
+pub nlink_lab::types::Assertion::Counter::value: u64
+pub nlink_lab::types::Assertion::DnsResolves
+pub nlink_lab::types::Assertion::DnsResolves::expected_ip: alloc::string::String
+pub nlink_lab::types::Assertion::DnsResolves::from: alloc::string::String
+pub nlink_lab::types::Assertion::DnsResolves::name: alloc::string::String
+pub nlink_lab::types::Assertion::LatencyUnder
+pub nlink_lab::types::Assertion::LatencyUnder::from: alloc::string::String
+pub nlink_lab::types::Assertion::LatencyUnder::max: alloc::string::String
+pub nlink_lab::types::Assertion::LatencyUnder::samples: core::option::Option<u32>
+pub nlink_lab::types::Assertion::LatencyUnder::to: alloc::string::String
+pub nlink_lab::types::Assertion::NoReach
+pub nlink_lab::types::Assertion::NoReach::from: alloc::string::String
+pub nlink_lab::types::Assertion::NoReach::to: alloc::string::String
+pub nlink_lab::types::Assertion::Reach
+pub nlink_lab::types::Assertion::Reach::from: alloc::string::String
+pub nlink_lab::types::Assertion::Reach::to: alloc::string::String
+pub nlink_lab::types::Assertion::RouteHas
+pub nlink_lab::types::Assertion::RouteHas::destination: alloc::string::String
+pub nlink_lab::types::Assertion::RouteHas::dev: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Assertion::RouteHas::node: alloc::string::String
+pub nlink_lab::types::Assertion::RouteHas::via: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Assertion::TcpConnect
+pub nlink_lab::types::Assertion::TcpConnect::from: alloc::string::String
+pub nlink_lab::types::Assertion::TcpConnect::interval: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Assertion::TcpConnect::port: u16
+pub nlink_lab::types::Assertion::TcpConnect::retries: core::option::Option<u32>
+pub nlink_lab::types::Assertion::TcpConnect::timeout: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Assertion::TcpConnect::to: alloc::string::String
+pub enum nlink_lab::types::BenchmarkTest
+pub nlink_lab::types::BenchmarkTest::Iperf3
+pub nlink_lab::types::BenchmarkTest::Iperf3::assertions: alloc::vec::Vec<nlink_lab::types::BenchmarkAssertion>
+pub nlink_lab::types::BenchmarkTest::Iperf3::duration: core::option::Option<alloc::string::String>
+pub nlink_lab::types::BenchmarkTest::Iperf3::from: alloc::string::String
+pub nlink_lab::types::BenchmarkTest::Iperf3::rate: core::option::Option<alloc::string::String>
+pub nlink_lab::types::BenchmarkTest::Iperf3::streams: core::option::Option<u32>
+pub nlink_lab::types::BenchmarkTest::Iperf3::to: alloc::string::String
+pub nlink_lab::types::BenchmarkTest::Iperf3::udp: bool
+pub nlink_lab::types::BenchmarkTest::Ping
+pub nlink_lab::types::BenchmarkTest::Ping::assertions: alloc::vec::Vec<nlink_lab::types::BenchmarkAssertion>
+pub nlink_lab::types::BenchmarkTest::Ping::count: core::option::Option<u32>
+pub nlink_lab::types::BenchmarkTest::Ping::from: alloc::string::String
+pub nlink_lab::types::BenchmarkTest::Ping::to: alloc::string::String
+pub enum nlink_lab::types::BondMode
+pub nlink_lab::types::BondMode::ActiveBackup
+pub nlink_lab::types::BondMode::BalanceAlb
+pub nlink_lab::types::BondMode::BalanceRr
+pub nlink_lab::types::BondMode::BalanceTlb
+pub nlink_lab::types::BondMode::BalanceXor
+pub nlink_lab::types::BondMode::Broadcast
+pub nlink_lab::types::BondMode::Lacp
+impl nlink_lab::types::BondMode
+pub fn nlink_lab::types::BondMode::as_str(&self) -> &'static str
+pub fn nlink_lab::types::BondMode::parse(s: &str) -> core::option::Option<Self>
+pub enum nlink_lab::types::CompareOp
+pub nlink_lab::types::CompareOp::Eq
+pub nlink_lab::types::CompareOp::Gt
+pub nlink_lab::types::CompareOp::Gte
+pub nlink_lab::types::CompareOp::Lt
+pub nlink_lab::types::CompareOp::Lte
+pub nlink_lab::types::CompareOp::Ne
+impl nlink_lab::types::CompareOp
+pub fn nlink_lab::types::CompareOp::as_str(self) -> &'static str
+pub fn nlink_lab::types::CompareOp::holds<T: core::cmp::PartialOrd>(self, value: T, threshold: T) -> bool
+pub enum nlink_lab::types::ContainerRuntime
+pub nlink_lab::types::ContainerRuntime::Auto
+pub nlink_lab::types::ContainerRuntime::Docker
+pub nlink_lab::types::ContainerRuntime::Podman
+pub enum nlink_lab::types::CounterMetric
+pub nlink_lab::types::CounterMetric::Bytes
+pub nlink_lab::types::CounterMetric::Packets
+pub enum nlink_lab::types::CtMarkAction
+pub nlink_lab::types::CtMarkAction::Restore
+pub nlink_lab::types::CtMarkAction::Save
+pub nlink_lab::types::CtMarkAction::Set(u32)
+pub enum nlink_lab::types::DnsMode
+pub nlink_lab::types::DnsMode::Hosts
+pub nlink_lab::types::DnsMode::Off
+pub enum nlink_lab::types::ForeignTarget
+pub nlink_lab::types::ForeignTarget::Container(alloc::string::String)
+pub nlink_lab::types::ForeignTarget::Netns(alloc::string::String)
+pub nlink_lab::types::ForeignTarget::Tap(alloc::string::String)
+impl nlink_lab::types::ForeignTarget
+pub fn nlink_lab::types::ForeignTarget::keyword(&self) -> &'static str
+pub fn nlink_lab::types::ForeignTarget::name(&self) -> &str
+pub fn nlink_lab::types::ForeignTarget::netns_path(&self) -> core::option::Option<std::path::PathBuf>
+impl core::fmt::Display for nlink_lab::types::ForeignTarget
+pub fn nlink_lab::types::ForeignTarget::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum nlink_lab::types::InterfaceKind
+pub nlink_lab::types::InterfaceKind::Bond
+pub nlink_lab::types::InterfaceKind::Dummy
+pub nlink_lab::types::InterfaceKind::Loopback
+pub nlink_lab::types::InterfaceKind::Vlan
+pub nlink_lab::types::InterfaceKind::Vxlan
+pub enum nlink_lab::types::IpvlanMode
+pub nlink_lab::types::IpvlanMode::L2
+pub nlink_lab::types::IpvlanMode::L3
+pub nlink_lab::types::IpvlanMode::L3S
+pub enum nlink_lab::types::LacpRate
+pub nlink_lab::types::LacpRate::Fast
+pub nlink_lab::types::LacpRate::Slow
+pub enum nlink_lab::types::LimitPer
+pub nlink_lab::types::LimitPer::Day
+pub nlink_lab::types::LimitPer::Hour
+pub nlink_lab::types::LimitPer::Minute
+pub nlink_lab::types::LimitPer::Second
+impl nlink_lab::types::LimitPer
+pub fn nlink_lab::types::LimitPer::as_str(self) -> &'static str
+pub fn nlink_lab::types::LimitPer::parse(s: &str) -> core::option::Option<Self>
+pub enum nlink_lab::types::MacvlanMode
+pub nlink_lab::types::MacvlanMode::Bridge
+pub nlink_lab::types::MacvlanMode::Passthru
+pub nlink_lab::types::MacvlanMode::Private
+pub nlink_lab::types::MacvlanMode::Vepa
+pub enum nlink_lab::types::MssClamp
+pub nlink_lab::types::MssClamp::Mss(u16)
+pub nlink_lab::types::MssClamp::Pmtu
+pub enum nlink_lab::types::NatAction
+pub nlink_lab::types::NatAction::Dnat
+pub nlink_lab::types::NatAction::Masquerade
+pub nlink_lab::types::NatAction::Redirect
+pub nlink_lab::types::NatAction::Snat
+pub nlink_lab::types::NatAction::Translate
+pub enum nlink_lab::types::NatFlag
+pub nlink_lab::types::NatFlag::FullyRandom
+pub nlink_lab::types::NatFlag::Persistent
+pub nlink_lab::types::NatFlag::Random
+impl nlink_lab::types::NatFlag
+pub fn nlink_lab::types::NatFlag::name(self) -> &'static str
+pub enum nlink_lab::types::NatProto
+pub nlink_lab::types::NatProto::Tcp
+pub nlink_lab::types::NatProto::Udp
+pub enum nlink_lab::types::QdiscKind
+pub nlink_lab::types::QdiscKind::FqCodel
+pub nlink_lab::types::QdiscKind::FqCodel::ecn: core::option::Option<bool>
+pub nlink_lab::types::QdiscKind::FqCodel::flows: core::option::Option<u32>
+pub nlink_lab::types::QdiscKind::FqCodel::interval: core::option::Option<alloc::string::String>
+pub nlink_lab::types::QdiscKind::FqCodel::limit: core::option::Option<u32>
+pub nlink_lab::types::QdiscKind::FqCodel::quantum: core::option::Option<u32>
+pub nlink_lab::types::QdiscKind::FqCodel::target: core::option::Option<alloc::string::String>
+pub nlink_lab::types::QdiscKind::Prio
+pub nlink_lab::types::QdiscKind::Prio::bands: core::option::Option<u8>
+pub nlink_lab::types::QdiscKind::Sfq
+pub nlink_lab::types::QdiscKind::Sfq::limit: core::option::Option<u32>
+pub nlink_lab::types::QdiscKind::Sfq::perturb: core::option::Option<alloc::string::String>
+pub nlink_lab::types::QdiscKind::Sfq::quantum: core::option::Option<u32>
+pub nlink_lab::types::QdiscKind::Tbf
+pub nlink_lab::types::QdiscKind::Tbf::burst: alloc::string::String
+pub nlink_lab::types::QdiscKind::Tbf::limit: core::option::Option<alloc::string::String>
+pub nlink_lab::types::QdiscKind::Tbf::mtu: core::option::Option<u32>
+pub nlink_lab::types::QdiscKind::Tbf::peakrate: core::option::Option<alloc::string::String>
+pub nlink_lab::types::QdiscKind::Tbf::rate: alloc::string::String
+impl nlink_lab::types::QdiscKind
+pub fn nlink_lab::types::QdiscKind::name(&self) -> &'static str
+pub fn nlink_lab::types::QdiscKind::parse_spec(spec: &str) -> core::result::Result<nlink_lab::types::QdiscKind, alloc::string::String>
+pub enum nlink_lab::types::RejectWith
+pub nlink_lab::types::RejectWith::AdminProhibited
+pub nlink_lab::types::RejectWith::HostUnreachable
+pub nlink_lab::types::RejectWith::NoRoute
+pub nlink_lab::types::RejectWith::PortUnreachable
+pub nlink_lab::types::RejectWith::TcpReset
+impl nlink_lab::types::RejectWith
+pub fn nlink_lab::types::RejectWith::as_str(self) -> &'static str
+pub fn nlink_lab::types::RejectWith::parse(s: &str) -> core::option::Option<Self>
+pub enum nlink_lab::types::RoutingMode
+pub nlink_lab::types::RoutingMode::Auto
+pub nlink_lab::types::RoutingMode::Frr
+pub nlink_lab::types::RoutingMode::Manual
+pub enum nlink_lab::types::ScenarioAction
+pub nlink_lab::types::ScenarioAction::Clear(alloc::string::String)
+pub nlink_lab::types::ScenarioAction::Down(alloc::string::String)
+pub nlink_lab::types::ScenarioAction::Exec
+pub nlink_lab::types::ScenarioAction::Exec::cmd: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::ScenarioAction::Exec::node: alloc::string::String
+pub nlink_lab::types::ScenarioAction::Heal
+pub nlink_lab::types::ScenarioAction::Heal::both: bool
+pub nlink_lab::types::ScenarioAction::Heal::endpoint: alloc::string::String
+pub nlink_lab::types::ScenarioAction::Impair
+pub nlink_lab::types::ScenarioAction::Impair::endpoint: alloc::string::String
+pub nlink_lab::types::ScenarioAction::Impair::impairment: nlink_lab::types::Impairment
+pub nlink_lab::types::ScenarioAction::Log(alloc::string::String)
+pub nlink_lab::types::ScenarioAction::PairImpair
+pub nlink_lab::types::ScenarioAction::PairImpair::dst: alloc::string::String
+pub nlink_lab::types::ScenarioAction::PairImpair::impairment: nlink_lab::types::Impairment
+pub nlink_lab::types::ScenarioAction::PairImpair::network: alloc::string::String
+pub nlink_lab::types::ScenarioAction::PairImpair::rate_cap: core::option::Option<alloc::string::String>
+pub nlink_lab::types::ScenarioAction::PairImpair::src: alloc::string::String
+pub nlink_lab::types::ScenarioAction::Partition
+pub nlink_lab::types::ScenarioAction::Partition::both: bool
+pub nlink_lab::types::ScenarioAction::Partition::endpoint: alloc::string::String
+pub nlink_lab::types::ScenarioAction::Replay
+pub nlink_lab::types::ScenarioAction::Replay::file: alloc::string::String
+pub nlink_lab::types::ScenarioAction::Replay::looped: bool
+pub nlink_lab::types::ScenarioAction::Replay::step_ms: u64
+pub nlink_lab::types::ScenarioAction::Replay::target: crate::replay::ReplayTarget
+pub nlink_lab::types::ScenarioAction::Up(alloc::string::String)
+pub nlink_lab::types::ScenarioAction::Validate(alloc::vec::Vec<nlink_lab::types::Assertion>)
+pub enum nlink_lab::types::SetKey
+pub nlink_lab::types::SetKey::Ipv4
+pub nlink_lab::types::SetKey::Ipv6
+pub nlink_lab::types::SetKey::Mark
+pub nlink_lab::types::SetKey::Port
+impl nlink_lab::types::SetKey
+pub fn nlink_lab::types::SetKey::as_str(self) -> &'static str
+pub fn nlink_lab::types::SetKey::parse(s: &str) -> core::option::Option<Self>
+pub enum nlink_lab::types::VlanProtocol
+pub nlink_lab::types::VlanProtocol::Dot1ad
+pub nlink_lab::types::VlanProtocol::Dot1q
+impl nlink_lab::types::VlanProtocol
+pub fn nlink_lab::types::VlanProtocol::as_str(&self) -> &'static str
+pub fn nlink_lab::types::VlanProtocol::parse(s: &str) -> core::option::Option<Self>
+pub enum nlink_lab::types::WifiMode
+pub nlink_lab::types::WifiMode::Ap
+pub nlink_lab::types::WifiMode::Mesh
+pub nlink_lab::types::WifiMode::Station
+pub enum nlink_lab::types::XmitHashPolicy
+pub nlink_lab::types::XmitHashPolicy::Encap23
+pub nlink_lab::types::XmitHashPolicy::Encap34
+pub nlink_lab::types::XmitHashPolicy::Layer2
+pub nlink_lab::types::XmitHashPolicy::Layer23
+pub nlink_lab::types::XmitHashPolicy::Layer34
+impl nlink_lab::types::XmitHashPolicy
+pub fn nlink_lab::types::XmitHashPolicy::as_str(&self) -> &'static str
+pub fn nlink_lab::types::XmitHashPolicy::parse(s: &str) -> core::option::Option<Self>
+pub fn nlink_lab::types::XmitHashPolicy::to_nlink(self) -> nlink::netlink::link::XmitHashPolicy
+pub struct nlink_lab::types::Benchmark
+pub nlink_lab::types::Benchmark::name: alloc::string::String
+pub nlink_lab::types::Benchmark::tests: alloc::vec::Vec<nlink_lab::types::BenchmarkTest>
+pub struct nlink_lab::types::BenchmarkAssertion
+pub nlink_lab::types::BenchmarkAssertion::metric: alloc::string::String
+pub nlink_lab::types::BenchmarkAssertion::op: nlink_lab::types::CompareOp
+pub nlink_lab::types::BenchmarkAssertion::value: alloc::string::String
+pub struct nlink_lab::types::BgpConfig
+pub nlink_lab::types::BgpConfig::asn: u32
+pub nlink_lab::types::BgpConfig::neighbors: alloc::vec::Vec<nlink_lab::types::BgpNeighbor>
+pub nlink_lab::types::BgpConfig::networks: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::BgpConfig::redistribute: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::BgpConfig::router_id: core::option::Option<alloc::string::String>
+pub struct nlink_lab::types::BgpNeighbor
+pub nlink_lab::types::BgpNeighbor::node: alloc::string::String
+pub nlink_lab::types::BgpNeighbor::remote: core::option::Option<alloc::string::String>
+pub nlink_lab::types::BgpNeighbor::remote_as: core::option::Option<u32>
+pub struct nlink_lab::types::BondOptions
+pub nlink_lab::types::BondOptions::downdelay: core::option::Option<u32>
+pub nlink_lab::types::BondOptions::lacp_rate: core::option::Option<nlink_lab::types::LacpRate>
+pub nlink_lab::types::BondOptions::miimon: core::option::Option<u32>
+pub nlink_lab::types::BondOptions::min_links: core::option::Option<u32>
+pub nlink_lab::types::BondOptions::mode: core::option::Option<nlink_lab::types::BondMode>
+pub nlink_lab::types::BondOptions::updelay: core::option::Option<u32>
+pub nlink_lab::types::BondOptions::xmit_hash: core::option::Option<nlink_lab::types::XmitHashPolicy>
+pub struct nlink_lab::types::EndpointRef
+pub nlink_lab::types::EndpointRef::iface: alloc::string::String
+pub nlink_lab::types::EndpointRef::node: alloc::string::String
+impl nlink_lab::types::EndpointRef
+pub fn nlink_lab::types::EndpointRef::parse(s: &str) -> core::option::Option<Self>
+impl core::fmt::Display for nlink_lab::types::EndpointRef
+pub fn nlink_lab::types::EndpointRef::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct nlink_lab::types::ExecConfig
+pub nlink_lab::types::ExecConfig::background: bool
+pub nlink_lab::types::ExecConfig::cmd: alloc::vec::Vec<alloc::string::String>
+pub struct nlink_lab::types::FirewallChain
+pub nlink_lab::types::FirewallChain::policy: core::option::Option<alloc::string::String>
+pub nlink_lab::types::FirewallChain::rules: alloc::vec::Vec<nlink_lab::types::FirewallRule>
+pub struct nlink_lab::types::FirewallConfig
+pub nlink_lab::types::FirewallConfig::forward: core::option::Option<nlink_lab::types::FirewallChain>
+pub nlink_lab::types::FirewallConfig::output: core::option::Option<nlink_lab::types::FirewallChain>
+pub nlink_lab::types::FirewallConfig::policy: core::option::Option<alloc::string::String>
+pub nlink_lab::types::FirewallConfig::rules: alloc::vec::Vec<nlink_lab::types::FirewallRule>
+pub nlink_lab::types::FirewallConfig::sets: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::FirewallSet>
+impl nlink_lab::types::FirewallConfig
+pub fn nlink_lab::types::FirewallConfig::all_rules(&self) -> impl core::iter::traits::iterator::Iterator<Item = &nlink_lab::types::FirewallRule>
+pub fn nlink_lab::types::FirewallConfig::all_rules_mut(&mut self) -> impl core::iter::traits::iterator::Iterator<Item = &mut nlink_lab::types::FirewallRule>
+pub fn nlink_lab::types::FirewallConfig::declares_anything(&self) -> bool
+pub fn nlink_lab::types::FirewallConfig::input_declared(&self) -> bool
+pub fn nlink_lab::types::FirewallConfig::merge_from(&mut self, other: &nlink_lab::types::FirewallConfig)
+pub struct nlink_lab::types::FirewallLimit
+pub nlink_lab::types::FirewallLimit::burst: core::option::Option<u32>
+pub nlink_lab::types::FirewallLimit::bytes: bool
+pub nlink_lab::types::FirewallLimit::over: bool
+pub nlink_lab::types::FirewallLimit::per: nlink_lab::types::LimitPer
+pub nlink_lab::types::FirewallLimit::rate: u64
+pub struct nlink_lab::types::FirewallLog
+pub nlink_lab::types::FirewallLog::group: core::option::Option<u16>
+pub nlink_lab::types::FirewallLog::level: core::option::Option<alloc::string::String>
+pub nlink_lab::types::FirewallLog::prefix: core::option::Option<alloc::string::String>
+pub struct nlink_lab::types::FirewallRule
+pub nlink_lab::types::FirewallRule::action: core::option::Option<alloc::string::String>
+pub nlink_lab::types::FirewallRule::clamp_mss: core::option::Option<nlink_lab::types::MssClamp>
+pub nlink_lab::types::FirewallRule::classify: core::option::Option<alloc::string::String>
+pub nlink_lab::types::FirewallRule::counter: bool
+pub nlink_lab::types::FirewallRule::counter_name: core::option::Option<alloc::string::String>
+pub nlink_lab::types::FirewallRule::ct_mark: core::option::Option<nlink_lab::types::CtMarkAction>
+pub nlink_lab::types::FirewallRule::limit: core::option::Option<nlink_lab::types::FirewallLimit>
+pub nlink_lab::types::FirewallRule::log: core::option::Option<nlink_lab::types::FirewallLog>
+pub nlink_lab::types::FirewallRule::match_expr: core::option::Option<alloc::string::String>
+pub nlink_lab::types::FirewallRule::reject_with: core::option::Option<nlink_lab::types::RejectWith>
+pub nlink_lab::types::FirewallRule::set_mark: core::option::Option<nlink_lab::types::MarkValue>
+impl nlink_lab::types::FirewallRule
+pub fn nlink_lab::types::FirewallRule::has_statement(&self) -> bool
+pub struct nlink_lab::types::FirewallSet
+pub nlink_lab::types::FirewallSet::dynamic: bool
+pub nlink_lab::types::FirewallSet::elements: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::FirewallSet::key: alloc::vec::Vec<nlink_lab::types::SetKey>
+pub nlink_lab::types::FirewallSet::size: core::option::Option<u32>
+pub nlink_lab::types::FirewallSet::timeout: core::option::Option<alloc::string::String>
+pub struct nlink_lab::types::Foreign
+pub nlink_lab::types::Foreign::manage_addresses: bool
+pub nlink_lab::types::Foreign::manage_tc: bool
+pub nlink_lab::types::Foreign::target: nlink_lab::types::ForeignTarget
+pub struct nlink_lab::types::FrrConfig
+pub nlink_lab::types::FrrConfig::bgp: core::option::Option<nlink_lab::types::BgpConfig>
+pub nlink_lab::types::FrrConfig::ospf: core::option::Option<nlink_lab::types::OspfConfig>
+pub struct nlink_lab::types::Impairment
+pub nlink_lab::types::Impairment::corrupt: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Impairment::delay: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Impairment::delay_correlation: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Impairment::duplicate: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Impairment::jitter: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Impairment::limit: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Impairment::loss: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Impairment::loss_correlation: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Impairment::rate: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Impairment::reorder: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Impairment::seed: core::option::Option<alloc::string::String>
+impl nlink_lab::types::Impairment
+pub const nlink_lab::types::Impairment::PROPERTIES: [&'static str; 11]
+pub fn nlink_lab::types::Impairment::loss_correlation_warning(&self) -> core::option::Option<alloc::string::String>
+pub fn nlink_lab::types::Impairment::parse_spec(input: &str) -> core::result::Result<nlink_lab::types::Impairment, alloc::string::String>
+pub fn nlink_lab::types::Impairment::set_property(&mut self, key: &str, value: &str) -> core::result::Result<(), alloc::string::String>
+pub fn nlink_lab::types::Impairment::summary(&self) -> alloc::string::String
+pub fn nlink_lab::types::Impairment::validate_property(key: &str, value: &str) -> core::result::Result<(), alloc::string::String>
+impl core::convert::From<&nlink_lab::types::Impairment> for nlink_lab_shared::api::dto::ImpairmentSpec
+pub fn nlink_lab_shared::api::dto::ImpairmentSpec::from(i: &nlink_lab::types::Impairment) -> Self
+impl core::convert::From<&nlink_lab_shared::api::dto::ImpairmentSpec> for nlink_lab::types::Impairment
+pub fn nlink_lab::types::Impairment::from(s: &nlink_lab_shared::api::dto::ImpairmentSpec) -> Self
+pub struct nlink_lab::types::InterfaceConfig
+pub nlink_lab::types::InterfaceConfig::addresses: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::InterfaceConfig::bond: core::option::Option<nlink_lab::types::BondOptions>
+pub nlink_lab::types::InterfaceConfig::kind: core::option::Option<nlink_lab::types::InterfaceKind>
+pub nlink_lab::types::InterfaceConfig::local: core::option::Option<alloc::string::String>
+pub nlink_lab::types::InterfaceConfig::members: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::InterfaceConfig::mtu: core::option::Option<u32>
+pub nlink_lab::types::InterfaceConfig::parent: core::option::Option<alloc::string::String>
+pub nlink_lab::types::InterfaceConfig::port: core::option::Option<u16>
+pub nlink_lab::types::InterfaceConfig::remote: core::option::Option<alloc::string::String>
+pub nlink_lab::types::InterfaceConfig::underlay: core::option::Option<alloc::string::String>
+pub nlink_lab::types::InterfaceConfig::vlan_protocol: core::option::Option<nlink_lab::types::VlanProtocol>
+pub nlink_lab::types::InterfaceConfig::vni: core::option::Option<u32>
+pub struct nlink_lab::types::IpvlanConfig
+pub nlink_lab::types::IpvlanConfig::addresses: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::IpvlanConfig::mode: nlink_lab::types::IpvlanMode
+pub nlink_lab::types::IpvlanConfig::name: alloc::string::String
+pub nlink_lab::types::IpvlanConfig::parent: alloc::string::String
+pub struct nlink_lab::types::LabConfig
+pub nlink_lab::types::LabConfig::author: core::option::Option<alloc::string::String>
+pub nlink_lab::types::LabConfig::description: core::option::Option<alloc::string::String>
+pub nlink_lab::types::LabConfig::dns: nlink_lab::types::DnsMode
+pub nlink_lab::types::LabConfig::frr: core::option::Option<nlink_lab::types::FrrConfig>
+pub nlink_lab::types::LabConfig::mgmt_host_reachable: bool
+pub nlink_lab::types::LabConfig::mgmt_subnet: core::option::Option<alloc::string::String>
+pub nlink_lab::types::LabConfig::name: alloc::string::String
+pub nlink_lab::types::LabConfig::prefix: core::option::Option<alloc::string::String>
+pub nlink_lab::types::LabConfig::routing: nlink_lab::types::RoutingMode
+pub nlink_lab::types::LabConfig::runtime: core::option::Option<nlink_lab::types::ContainerRuntime>
+pub nlink_lab::types::LabConfig::seed: core::option::Option<u64>
+pub nlink_lab::types::LabConfig::tags: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::LabConfig::version: core::option::Option<alloc::string::String>
+impl nlink_lab::types::LabConfig
+pub fn nlink_lab::types::LabConfig::add_suffix(&mut self, suffix: &str)
+pub fn nlink_lab::types::LabConfig::mgmt_bridge_name(&self) -> alloc::string::String
+pub fn nlink_lab::types::LabConfig::mgmt_peer_name(&self, idx: usize) -> alloc::string::String
+pub fn nlink_lab::types::LabConfig::prefix(&self) -> &str
+pub fn nlink_lab::types::LabConfig::tap_bridge_name(&self, node: &str) -> alloc::string::String
+pub fn nlink_lab::types::LabConfig::tap_port_name(&self, node: &str, k: usize) -> alloc::string::String
+pub struct nlink_lab::types::Link
+pub nlink_lab::types::Link::addresses: core::option::Option<[alloc::string::String; 2]>
+pub nlink_lab::types::Link::endpoints: [alloc::string::String; 2]
+pub nlink_lab::types::Link::mtu: core::option::Option<u32>
+pub struct nlink_lab::types::MacvlanConfig
+pub nlink_lab::types::MacvlanConfig::addresses: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::MacvlanConfig::mode: nlink_lab::types::MacvlanMode
+pub nlink_lab::types::MacvlanConfig::name: alloc::string::String
+pub nlink_lab::types::MacvlanConfig::parent: alloc::string::String
+pub struct nlink_lab::types::MarkValue
+pub nlink_lab::types::MarkValue::mask: core::option::Option<u32>
+pub nlink_lab::types::MarkValue::value: u32
+pub struct nlink_lab::types::NatConfig
+pub nlink_lab::types::NatConfig::rules: alloc::vec::Vec<nlink_lab::types::NatRule>
+pub struct nlink_lab::types::NatRule
+pub nlink_lab::types::NatRule::action: nlink_lab::types::NatAction
+pub nlink_lab::types::NatRule::dport: core::option::Option<u16>
+pub nlink_lab::types::NatRule::dst: core::option::Option<alloc::string::String>
+pub nlink_lab::types::NatRule::flags: alloc::vec::Vec<nlink_lab::types::NatFlag>
+pub nlink_lab::types::NatRule::iif: core::option::Option<alloc::string::String>
+pub nlink_lab::types::NatRule::oif: core::option::Option<alloc::string::String>
+pub nlink_lab::types::NatRule::proto: core::option::Option<nlink_lab::types::NatProto>
+pub nlink_lab::types::NatRule::src: core::option::Option<alloc::string::String>
+pub nlink_lab::types::NatRule::target: core::option::Option<alloc::string::String>
+pub nlink_lab::types::NatRule::target_end: core::option::Option<alloc::string::String>
+pub nlink_lab::types::NatRule::target_port: core::option::Option<u16>
+pub nlink_lab::types::NatRule::target_port_end: core::option::Option<u16>
+pub struct nlink_lab::types::Network
+pub nlink_lab::types::Network::impairments: alloc::vec::Vec<nlink_lab::types::NetworkImpairment>
+pub nlink_lab::types::Network::kind: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Network::members: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::Network::mtu: core::option::Option<u32>
+pub nlink_lab::types::Network::ports: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::PortConfig>
+pub nlink_lab::types::Network::subnet: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Network::vlan_filtering: core::option::Option<bool>
+pub nlink_lab::types::Network::vlans: alloc::collections::btree::map::BTreeMap<u16, nlink_lab::types::VlanConfig>
+pub struct nlink_lab::types::NetworkImpairment
+pub nlink_lab::types::NetworkImpairment::dst: alloc::string::String
+pub nlink_lab::types::NetworkImpairment::impairment: nlink_lab::types::Impairment
+pub nlink_lab::types::NetworkImpairment::rate_cap: core::option::Option<alloc::string::String>
+pub nlink_lab::types::NetworkImpairment::src: alloc::string::String
+pub struct nlink_lab::types::Node
+pub nlink_lab::types::Node::cap_add: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::Node::cap_drop: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::Node::cmd: core::option::Option<alloc::vec::Vec<alloc::string::String>>
+pub nlink_lab::types::Node::configs: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
+pub nlink_lab::types::Node::container_exec: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::Node::cpu: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Node::depends_on: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::Node::entrypoint: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Node::env: core::option::Option<alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>>
+pub nlink_lab::types::Node::env_file: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Node::exec: alloc::vec::Vec<nlink_lab::types::ExecConfig>
+pub nlink_lab::types::Node::firewall: core::option::Option<nlink_lab::types::FirewallConfig>
+pub nlink_lab::types::Node::foreign: core::option::Option<nlink_lab::types::Foreign>
+pub nlink_lab::types::Node::frr: core::option::Option<nlink_lab::types::FrrConfig>
+pub nlink_lab::types::Node::healthcheck: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Node::healthcheck_interval: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Node::healthcheck_retries: core::option::Option<u32>
+pub nlink_lab::types::Node::healthcheck_timeout: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Node::hostname: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Node::image: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Node::interfaces: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::InterfaceConfig>
+pub nlink_lab::types::Node::ipvlans: alloc::vec::Vec<nlink_lab::types::IpvlanConfig>
+pub nlink_lab::types::Node::labels: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::Node::macvlans: alloc::vec::Vec<nlink_lab::types::MacvlanConfig>
+pub nlink_lab::types::Node::memory: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Node::nat: core::option::Option<nlink_lab::types::NatConfig>
+pub nlink_lab::types::Node::overlay: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Node::privileged: bool
+pub nlink_lab::types::Node::profiles: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::Node::pull: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Node::routes: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::RouteConfig>
+pub nlink_lab::types::Node::startup_delay: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Node::sysctls: alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
+pub nlink_lab::types::Node::volumes: core::option::Option<alloc::vec::Vec<alloc::string::String>>
+pub nlink_lab::types::Node::vrfs: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::VrfConfig>
+pub nlink_lab::types::Node::wifi: alloc::vec::Vec<nlink_lab::types::WifiConfig>
+pub nlink_lab::types::Node::wireguard: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::WireguardConfig>
+pub nlink_lab::types::Node::workdir: core::option::Option<alloc::string::String>
+impl nlink_lab::types::Node
+pub fn nlink_lab::types::Node::is_container(&self) -> bool
+pub fn nlink_lab::types::Node::is_foreign(&self) -> bool
+pub struct nlink_lab::types::OspfConfig
+pub nlink_lab::types::OspfConfig::area: core::option::Option<alloc::string::String>
+pub nlink_lab::types::OspfConfig::dead: core::option::Option<u32>
+pub nlink_lab::types::OspfConfig::hello: core::option::Option<u32>
+pub nlink_lab::types::OspfConfig::passive: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::OspfConfig::redistribute: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::OspfConfig::router_id: core::option::Option<alloc::string::String>
+pub struct nlink_lab::types::PortConfig
+pub nlink_lab::types::PortConfig::addresses: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::PortConfig::interface: core::option::Option<alloc::string::String>
+pub nlink_lab::types::PortConfig::pvid: core::option::Option<u16>
+pub nlink_lab::types::PortConfig::tagged: core::option::Option<bool>
+pub nlink_lab::types::PortConfig::untagged: core::option::Option<bool>
+pub nlink_lab::types::PortConfig::vlans: alloc::vec::Vec<u16>
+pub struct nlink_lab::types::Profile
+pub nlink_lab::types::Profile::firewall: core::option::Option<nlink_lab::types::FirewallConfig>
+pub nlink_lab::types::Profile::frr: core::option::Option<nlink_lab::types::FrrConfig>
+pub nlink_lab::types::Profile::sysctls: alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
+pub struct nlink_lab::types::QdiscConfig
+pub nlink_lab::types::QdiscConfig::kind: nlink_lab::types::QdiscKind
+pub struct nlink_lab::types::RateLimit
+pub nlink_lab::types::RateLimit::burst: core::option::Option<alloc::string::String>
+pub nlink_lab::types::RateLimit::egress: core::option::Option<alloc::string::String>
+pub nlink_lab::types::RateLimit::ingress: core::option::Option<alloc::string::String>
+pub struct nlink_lab::types::RouteConfig
+pub nlink_lab::types::RouteConfig::dev: core::option::Option<alloc::string::String>
+pub nlink_lab::types::RouteConfig::metric: core::option::Option<u32>
+pub nlink_lab::types::RouteConfig::via: core::option::Option<alloc::string::String>
+pub struct nlink_lab::types::Scenario
+pub nlink_lab::types::Scenario::keep: bool
+pub nlink_lab::types::Scenario::name: alloc::string::String
+pub nlink_lab::types::Scenario::steps: alloc::vec::Vec<nlink_lab::types::ScenarioStep>
+pub struct nlink_lab::types::ScenarioStep
+pub nlink_lab::types::ScenarioStep::actions: alloc::vec::Vec<nlink_lab::types::ScenarioAction>
+pub nlink_lab::types::ScenarioStep::time_ms: u64
+pub struct nlink_lab::types::Topology
+pub nlink_lab::types::Topology::assertion_interval: core::option::Option<alloc::string::String>
+pub nlink_lab::types::Topology::assertion_retries: core::option::Option<u32>
+pub nlink_lab::types::Topology::assertions: alloc::vec::Vec<nlink_lab::types::Assertion>
+pub nlink_lab::types::Topology::benchmarks: alloc::vec::Vec<nlink_lab::types::Benchmark>
+pub nlink_lab::types::Topology::directional_impairments: alloc::collections::btree::set::BTreeSet<alloc::string::String>
+pub nlink_lab::types::Topology::impairments: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Impairment>
+pub nlink_lab::types::Topology::lab: nlink_lab::types::LabConfig
+pub nlink_lab::types::Topology::links: alloc::vec::Vec<nlink_lab::types::Link>
+pub nlink_lab::types::Topology::networks: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Network>
+pub nlink_lab::types::Topology::nodes: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Node>
+pub nlink_lab::types::Topology::profiles: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Profile>
+pub nlink_lab::types::Topology::qdiscs: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::QdiscConfig>
+pub nlink_lab::types::Topology::rate_limits: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::RateLimit>
+pub nlink_lab::types::Topology::scenarios: alloc::vec::Vec<nlink_lab::types::Scenario>
+pub nlink_lab::types::Topology::sites: alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::vec::Vec<alloc::string::String>>
+pub nlink_lab::types::Topology::source_dir: core::option::Option<alloc::string::String>
+impl nlink_lab::types::Topology
+pub async fn nlink_lab::types::Topology::deploy(&self) -> nlink_lab::error::Result<nlink_lab::running::RunningLab>
+pub async fn nlink_lab::types::Topology::deploy_with(&self, ctx: &crate::ops::OpCtx) -> nlink_lab::error::Result<nlink_lab::running::RunningLab>
+pub fn nlink_lab::types::Topology::effective_firewall<'a>(&'a self, node: &'a nlink_lab::types::Node) -> core::option::Option<alloc::borrow::Cow<'a, nlink_lab::types::FirewallConfig>>
+pub fn nlink_lab::types::Topology::effective_frr(&self, node: &nlink_lab::types::Node) -> core::option::Option<nlink_lab::types::FrrConfig>
+pub fn nlink_lab::types::Topology::effective_sysctls(&self, node: &nlink_lab::types::Node) -> alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
+pub fn nlink_lab::types::Topology::namespace_name(&self, node_name: &str) -> alloc::string::String
+pub fn nlink_lab::types::Topology::rebase_host_paths(&mut self, base: &std::path::Path)
+pub fn nlink_lab::types::Topology::redacted(&self) -> nlink_lab::types::Topology
+impl nlink_lab::types::Topology
+pub fn nlink_lab::types::Topology::validate(&self) -> nlink_lab::validator::ValidationResult
+pub fn nlink_lab::types::Topology::validate_with(&self, opts: &nlink_lab::validator::RuleOptions) -> nlink_lab::validator::ValidationResult
+pub struct nlink_lab::types::VlanConfig
+pub nlink_lab::types::VlanConfig::name: core::option::Option<alloc::string::String>
+pub struct nlink_lab::types::VrfConfig
+pub nlink_lab::types::VrfConfig::interfaces: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::VrfConfig::routes: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::RouteConfig>
+pub nlink_lab::types::VrfConfig::table: u32
+pub struct nlink_lab::types::WifiConfig
+pub nlink_lab::types::WifiConfig::addresses: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::WifiConfig::channel: core::option::Option<u32>
+pub nlink_lab::types::WifiConfig::mesh_id: core::option::Option<alloc::string::String>
+pub nlink_lab::types::WifiConfig::mode: nlink_lab::types::WifiMode
+pub nlink_lab::types::WifiConfig::name: alloc::string::String
+pub nlink_lab::types::WifiConfig::passphrase: core::option::Option<alloc::string::String>
+pub nlink_lab::types::WifiConfig::ssid: core::option::Option<alloc::string::String>
+pub struct nlink_lab::types::WireguardConfig
+pub nlink_lab::types::WireguardConfig::addresses: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::WireguardConfig::fwmark: core::option::Option<u32>
+pub nlink_lab::types::WireguardConfig::listen_port: core::option::Option<u16>
+pub nlink_lab::types::WireguardConfig::peer_settings: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::WireguardPeer>
+pub nlink_lab::types::WireguardConfig::peers: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::WireguardConfig::private_key: core::option::Option<alloc::string::String>
+pub struct nlink_lab::types::WireguardPeer
+pub nlink_lab::types::WireguardPeer::allowed_ips: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::types::WireguardPeer::endpoint: core::option::Option<alloc::string::String>
+pub const nlink_lab::types::DEFAULT_REPLAY_STEP_MS: u64
+pub const nlink_lab::types::LOG_LEVELS: [&str; 8]
+pub const nlink_lab::types::REDACTED: &str
+pub fn nlink_lab::types::mgmt_bridge_name_for(lab_name: &str) -> alloc::string::String
+pub fn nlink_lab::types::network_bridge_name_for(net_name: &str) -> alloc::string::String
+pub fn nlink_lab::types::network_peer_name_for(net_name: &str, idx: usize) -> alloc::string::String
+pub mod nlink_lab::validator
+pub enum nlink_lab::validator::Severity
+pub nlink_lab::validator::Severity::Error
+pub nlink_lab::validator::Severity::Warning
+pub struct nlink_lab::validator::RuleOptions
+pub nlink_lab::validator::RuleOptions::allow: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::validator::RuleOptions::deny: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::validator::RuleOptions::strict: bool
+impl nlink_lab::validator::RuleOptions
+pub fn nlink_lab::validator::RuleOptions::check_known(&self) -> core::result::Result<(), alloc::string::String>
+pub struct nlink_lab::validator::ValidationIssue
+pub nlink_lab::validator::ValidationIssue::location: core::option::Option<alloc::string::String>
+pub nlink_lab::validator::ValidationIssue::message: alloc::string::String
+pub nlink_lab::validator::ValidationIssue::rule: &'static str
+pub nlink_lab::validator::ValidationIssue::severity: nlink_lab::validator::Severity
+impl core::fmt::Display for nlink_lab::validator::ValidationIssue
+pub fn nlink_lab::validator::ValidationIssue::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct nlink_lab::validator::ValidationResult
+impl nlink_lab::validator::ValidationResult
+pub fn nlink_lab::validator::ValidationResult::bail(&self) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::validator::ValidationResult::errors(&self) -> impl core::iter::traits::iterator::Iterator<Item = &nlink_lab::validator::ValidationIssue>
+pub fn nlink_lab::validator::ValidationResult::has_errors(&self) -> bool
+pub fn nlink_lab::validator::ValidationResult::has_warnings(&self) -> bool
+pub fn nlink_lab::validator::ValidationResult::issues(&self) -> &[nlink_lab::validator::ValidationIssue]
+pub fn nlink_lab::validator::ValidationResult::warnings(&self) -> impl core::iter::traits::iterator::Iterator<Item = &nlink_lab::validator::ValidationIssue>
+pub const nlink_lab::validator::RULE_IDS: &[&str]
+pub fn nlink_lab::validator::rule_ids() -> &'static [&'static str]
+pub fn nlink_lab::validator::rule_severity(id: &str) -> core::option::Option<nlink_lab::validator::Severity>
+pub enum nlink_lab::ContainerRuntime
+pub nlink_lab::ContainerRuntime::Auto
+pub nlink_lab::ContainerRuntime::Docker
+pub nlink_lab::ContainerRuntime::Podman
+pub enum nlink_lab::DnsMode
+pub nlink_lab::DnsMode::Hosts
+pub nlink_lab::DnsMode::Off
+pub enum nlink_lab::Error
+pub nlink_lab::Error::AlreadyExists
+pub nlink_lab::Error::AlreadyExists::name: alloc::string::String
+pub nlink_lab::Error::Api(alloc::boxed::Box<nlink_lab_shared::api::error::ApiError>)
+pub nlink_lab::Error::Busy(alloc::string::String)
+pub nlink_lab::Error::Cancelled(alloc::string::String)
+pub nlink_lab::Error::Capture(alloc::string::String)
+pub nlink_lab::Error::DeployFailed(alloc::string::String)
+pub nlink_lab::Error::InvalidArgument(alloc::string::String)
+pub nlink_lab::Error::InvalidEndpoint
+pub nlink_lab::Error::InvalidEndpoint::endpoint: alloc::string::String
+pub nlink_lab::Error::InvalidTopology(alloc::string::String)
+pub nlink_lab::Error::Io(core::io::error::Error)
+pub nlink_lab::Error::Json(serde_json::error::Error)
+pub nlink_lab::Error::Locked
+pub nlink_lab::Error::Locked::name: alloc::string::String
+pub nlink_lab::Error::MovedState
+pub nlink_lab::Error::MovedState::name: alloc::string::String
+pub nlink_lab::Error::MovedState::path: std::path::PathBuf
+pub nlink_lab::Error::Namespace
+pub nlink_lab::Error::Namespace::ns: alloc::string::String
+pub nlink_lab::Error::Namespace::op: &'static str
+pub nlink_lab::Error::Namespace::source: nlink::netlink::error::Error
+pub nlink_lab::Error::Nlink(nlink::netlink::error::Error)
+pub nlink_lab::Error::NlinkOp
+pub nlink_lab::Error::NlinkOp::context: alloc::string::String
+pub nlink_lab::Error::NlinkOp::source: nlink::netlink::error::Error
+pub nlink_lab::Error::NllDiagnostic(alloc::boxed::Box<nlink_lab::error::NllDiagnostic>)
+pub nlink_lab::Error::NllParse(alloc::string::String)
+pub nlink_lab::Error::NllParseAt
+pub nlink_lab::Error::NllParseAt::message: alloc::string::String
+pub nlink_lab::Error::NllParseAt::span: core::ops::range::Range<usize>
+pub nlink_lab::Error::NodeNotFound
+pub nlink_lab::Error::NodeNotFound::name: alloc::string::String
+pub nlink_lab::Error::NotFound
+pub nlink_lab::Error::NotFound::name: alloc::string::String
+pub nlink_lab::Error::PermissionDenied
+pub nlink_lab::Error::PermissionDenied::hint: alloc::string::String
+pub nlink_lab::Error::PermissionDenied::path: std::path::PathBuf
+pub nlink_lab::Error::Privileges(alloc::string::String)
+pub nlink_lab::Error::Runtime(alloc::string::String)
+pub nlink_lab::Error::State
+pub nlink_lab::Error::State::detail: alloc::string::String
+pub nlink_lab::Error::State::op: &'static str
+pub nlink_lab::Error::State::path: std::path::PathBuf
+pub nlink_lab::Error::TimedOut(alloc::string::String)
+pub nlink_lab::Error::Timeout(core::time::Duration)
+pub nlink_lab::Error::Unsupported(alloc::string::String)
+pub nlink_lab::Error::Validation(alloc::string::String)
+pub nlink_lab::Error::ValidationErrors(alloc::vec::Vec<nlink_lab::validator::ValidationIssue>)
+impl nlink_lab::error::Error
+pub fn nlink_lab::error::Error::at(span: core::ops::range::Range<usize>, message: impl core::convert::Into<alloc::string::String>) -> Self
+pub fn nlink_lab::error::Error::deploy_failed(message: impl core::convert::Into<alloc::string::String>) -> Self
+pub fn nlink_lab::error::Error::errno(&self) -> core::option::Option<i32>
+pub fn nlink_lab::error::Error::ext_ack(&self) -> core::option::Option<&str>
+pub fn nlink_lab::error::Error::ext_ack_offset(&self) -> core::option::Option<u32>
+pub fn nlink_lab::error::Error::invalid_argument(message: impl core::convert::Into<alloc::string::String>) -> Self
+pub fn nlink_lab::error::Error::invalid_topology(message: impl core::convert::Into<alloc::string::String>) -> Self
+pub fn nlink_lab::error::Error::is_not_found(&self) -> bool
+pub fn nlink_lab::error::Error::nlink(context: impl core::convert::Into<alloc::string::String>, source: nlink::netlink::error::Error) -> Self
+pub fn nlink_lab::error::Error::nlink_error(&self) -> core::option::Option<&nlink::netlink::error::Error>
+pub fn nlink_lab::error::Error::to_api(&self) -> nlink_lab_shared::api::error::ApiError
+impl core::convert::From<core::net::parser::AddrParseError> for nlink_lab::error::Error
+pub fn nlink_lab::error::Error::from(e: core::net::parser::AddrParseError) -> Self
+impl core::convert::From<core::num::error::ParseIntError> for nlink_lab::error::Error
+pub fn nlink_lab::error::Error::from(e: core::num::error::ParseIntError) -> Self
+impl core::convert::From<nlink_lab::error::NllDiagnostic> for nlink_lab::error::Error
+pub fn nlink_lab::error::Error::from(diag: nlink_lab::error::NllDiagnostic) -> Self
+pub enum nlink_lab::InterfaceKind
+pub nlink_lab::InterfaceKind::Bond
+pub nlink_lab::InterfaceKind::Dummy
+pub nlink_lab::InterfaceKind::Loopback
+pub nlink_lab::InterfaceKind::Vlan
+pub nlink_lab::InterfaceKind::Vxlan
+pub enum nlink_lab::LogStream
+pub nlink_lab::LogStream::Both
+pub nlink_lab::LogStream::Stderr
+pub nlink_lab::LogStream::Stdout
+pub enum nlink_lab::Severity
+pub nlink_lab::Severity::Error
+pub nlink_lab::Severity::Warning
+pub enum nlink_lab::Signal
+pub nlink_lab::Signal::Cont
+pub nlink_lab::Signal::Hup
+pub nlink_lab::Signal::Int
+pub nlink_lab::Signal::Kill
+pub nlink_lab::Signal::Stop
+pub nlink_lab::Signal::Term
+pub nlink_lab::Signal::Usr1
+pub nlink_lab::Signal::Usr2
+impl nlink_lab::running::Signal
+pub fn nlink_lab::running::Signal::name(self) -> &'static str
+pub fn nlink_lab::running::Signal::number(self) -> core::ffi::primitives::c_int
+pub struct nlink_lab::EndpointRef
+pub nlink_lab::EndpointRef::iface: alloc::string::String
+pub nlink_lab::EndpointRef::node: alloc::string::String
+impl nlink_lab::types::EndpointRef
+pub fn nlink_lab::types::EndpointRef::parse(s: &str) -> core::option::Option<Self>
+impl core::fmt::Display for nlink_lab::types::EndpointRef
+pub fn nlink_lab::types::EndpointRef::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct nlink_lab::ExecChild
+pub nlink_lab::ExecChild::child: std::process::Child
+impl nlink_lab::running::ExecChild
+pub fn nlink_lab::running::ExecChild::kill(&mut self)
+pub fn nlink_lab::running::ExecChild::stopper(&self) -> nlink_lab::running::ExecStopper
+pub struct nlink_lab::ExecConfig
+pub nlink_lab::ExecConfig::background: bool
+pub nlink_lab::ExecConfig::cmd: alloc::vec::Vec<alloc::string::String>
+pub struct nlink_lab::ExecMode
+pub nlink_lab::ExecMode::stdin: bool
+pub nlink_lab::ExecMode::stoppable: bool
+pub nlink_lab::ExecMode::tty: bool
+pub struct nlink_lab::ExecOpts<'a>
+pub nlink_lab::ExecOpts::env: &'a [(&'a str, &'a str)]
+pub nlink_lab::ExecOpts::timeout: core::option::Option<core::time::Duration>
+pub nlink_lab::ExecOpts::workdir: core::option::Option<&'a std::path::Path>
+pub struct nlink_lab::ExecOutput
+pub nlink_lab::ExecOutput::exit_code: i32
+pub nlink_lab::ExecOutput::stderr: alloc::string::String
+pub nlink_lab::ExecOutput::stdout: alloc::string::String
+pub struct nlink_lab::FirewallConfig
+pub nlink_lab::FirewallConfig::forward: core::option::Option<nlink_lab::types::FirewallChain>
+pub nlink_lab::FirewallConfig::output: core::option::Option<nlink_lab::types::FirewallChain>
+pub nlink_lab::FirewallConfig::policy: core::option::Option<alloc::string::String>
+pub nlink_lab::FirewallConfig::rules: alloc::vec::Vec<nlink_lab::types::FirewallRule>
+pub nlink_lab::FirewallConfig::sets: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::FirewallSet>
+impl nlink_lab::types::FirewallConfig
+pub fn nlink_lab::types::FirewallConfig::all_rules(&self) -> impl core::iter::traits::iterator::Iterator<Item = &nlink_lab::types::FirewallRule>
+pub fn nlink_lab::types::FirewallConfig::all_rules_mut(&mut self) -> impl core::iter::traits::iterator::Iterator<Item = &mut nlink_lab::types::FirewallRule>
+pub fn nlink_lab::types::FirewallConfig::declares_anything(&self) -> bool
+pub fn nlink_lab::types::FirewallConfig::input_declared(&self) -> bool
+pub fn nlink_lab::types::FirewallConfig::merge_from(&mut self, other: &nlink_lab::types::FirewallConfig)
+pub struct nlink_lab::FirewallRule
+pub nlink_lab::FirewallRule::action: core::option::Option<alloc::string::String>
+pub nlink_lab::FirewallRule::clamp_mss: core::option::Option<nlink_lab::types::MssClamp>
+pub nlink_lab::FirewallRule::classify: core::option::Option<alloc::string::String>
+pub nlink_lab::FirewallRule::counter: bool
+pub nlink_lab::FirewallRule::counter_name: core::option::Option<alloc::string::String>
+pub nlink_lab::FirewallRule::ct_mark: core::option::Option<nlink_lab::types::CtMarkAction>
+pub nlink_lab::FirewallRule::limit: core::option::Option<nlink_lab::types::FirewallLimit>
+pub nlink_lab::FirewallRule::log: core::option::Option<nlink_lab::types::FirewallLog>
+pub nlink_lab::FirewallRule::match_expr: core::option::Option<alloc::string::String>
+pub nlink_lab::FirewallRule::reject_with: core::option::Option<nlink_lab::types::RejectWith>
+pub nlink_lab::FirewallRule::set_mark: core::option::Option<nlink_lab::types::MarkValue>
+impl nlink_lab::types::FirewallRule
+pub fn nlink_lab::types::FirewallRule::has_statement(&self) -> bool
+pub struct nlink_lab::Impairment
+pub nlink_lab::Impairment::corrupt: core::option::Option<alloc::string::String>
+pub nlink_lab::Impairment::delay: core::option::Option<alloc::string::String>
+pub nlink_lab::Impairment::delay_correlation: core::option::Option<alloc::string::String>
+pub nlink_lab::Impairment::duplicate: core::option::Option<alloc::string::String>
+pub nlink_lab::Impairment::jitter: core::option::Option<alloc::string::String>
+pub nlink_lab::Impairment::limit: core::option::Option<alloc::string::String>
+pub nlink_lab::Impairment::loss: core::option::Option<alloc::string::String>
+pub nlink_lab::Impairment::loss_correlation: core::option::Option<alloc::string::String>
+pub nlink_lab::Impairment::rate: core::option::Option<alloc::string::String>
+pub nlink_lab::Impairment::reorder: core::option::Option<alloc::string::String>
+pub nlink_lab::Impairment::seed: core::option::Option<alloc::string::String>
+impl nlink_lab::types::Impairment
+pub const nlink_lab::types::Impairment::PROPERTIES: [&'static str; 11]
+pub fn nlink_lab::types::Impairment::loss_correlation_warning(&self) -> core::option::Option<alloc::string::String>
+pub fn nlink_lab::types::Impairment::parse_spec(input: &str) -> core::result::Result<nlink_lab::types::Impairment, alloc::string::String>
+pub fn nlink_lab::types::Impairment::set_property(&mut self, key: &str, value: &str) -> core::result::Result<(), alloc::string::String>
+pub fn nlink_lab::types::Impairment::summary(&self) -> alloc::string::String
+pub fn nlink_lab::types::Impairment::validate_property(key: &str, value: &str) -> core::result::Result<(), alloc::string::String>
+impl core::convert::From<&nlink_lab::types::Impairment> for nlink_lab_shared::api::dto::ImpairmentSpec
+pub fn nlink_lab_shared::api::dto::ImpairmentSpec::from(i: &nlink_lab::types::Impairment) -> Self
+impl core::convert::From<&nlink_lab_shared::api::dto::ImpairmentSpec> for nlink_lab::types::Impairment
+pub fn nlink_lab::types::Impairment::from(s: &nlink_lab_shared::api::dto::ImpairmentSpec) -> Self
+pub struct nlink_lab::InterfaceConfig
+pub nlink_lab::InterfaceConfig::addresses: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::InterfaceConfig::bond: core::option::Option<nlink_lab::types::BondOptions>
+pub nlink_lab::InterfaceConfig::kind: core::option::Option<nlink_lab::types::InterfaceKind>
+pub nlink_lab::InterfaceConfig::local: core::option::Option<alloc::string::String>
+pub nlink_lab::InterfaceConfig::members: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::InterfaceConfig::mtu: core::option::Option<u32>
+pub nlink_lab::InterfaceConfig::parent: core::option::Option<alloc::string::String>
+pub nlink_lab::InterfaceConfig::port: core::option::Option<u16>
+pub nlink_lab::InterfaceConfig::remote: core::option::Option<alloc::string::String>
+pub nlink_lab::InterfaceConfig::underlay: core::option::Option<alloc::string::String>
+pub nlink_lab::InterfaceConfig::vlan_protocol: core::option::Option<nlink_lab::types::VlanProtocol>
+pub nlink_lab::InterfaceConfig::vni: core::option::Option<u32>
+pub struct nlink_lab::LabConfig
+pub nlink_lab::LabConfig::author: core::option::Option<alloc::string::String>
+pub nlink_lab::LabConfig::description: core::option::Option<alloc::string::String>
+pub nlink_lab::LabConfig::dns: nlink_lab::types::DnsMode
+pub nlink_lab::LabConfig::frr: core::option::Option<nlink_lab::types::FrrConfig>
+pub nlink_lab::LabConfig::mgmt_host_reachable: bool
+pub nlink_lab::LabConfig::mgmt_subnet: core::option::Option<alloc::string::String>
+pub nlink_lab::LabConfig::name: alloc::string::String
+pub nlink_lab::LabConfig::prefix: core::option::Option<alloc::string::String>
+pub nlink_lab::LabConfig::routing: nlink_lab::types::RoutingMode
+pub nlink_lab::LabConfig::runtime: core::option::Option<nlink_lab::types::ContainerRuntime>
+pub nlink_lab::LabConfig::seed: core::option::Option<u64>
+pub nlink_lab::LabConfig::tags: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::LabConfig::version: core::option::Option<alloc::string::String>
+impl nlink_lab::types::LabConfig
+pub fn nlink_lab::types::LabConfig::add_suffix(&mut self, suffix: &str)
+pub fn nlink_lab::types::LabConfig::mgmt_bridge_name(&self) -> alloc::string::String
+pub fn nlink_lab::types::LabConfig::mgmt_peer_name(&self, idx: usize) -> alloc::string::String
+pub fn nlink_lab::types::LabConfig::prefix(&self) -> &str
+pub fn nlink_lab::types::LabConfig::tap_bridge_name(&self, node: &str) -> alloc::string::String
+pub fn nlink_lab::types::LabConfig::tap_port_name(&self, node: &str, k: usize) -> alloc::string::String
+pub struct nlink_lab::Link
+pub nlink_lab::Link::addresses: core::option::Option<[alloc::string::String; 2]>
+pub nlink_lab::Link::endpoints: [alloc::string::String; 2]
+pub nlink_lab::Link::mtu: core::option::Option<u32>
+pub struct nlink_lab::Network
+pub nlink_lab::Network::impairments: alloc::vec::Vec<nlink_lab::types::NetworkImpairment>
+pub nlink_lab::Network::kind: core::option::Option<alloc::string::String>
+pub nlink_lab::Network::members: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::Network::mtu: core::option::Option<u32>
+pub nlink_lab::Network::ports: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::PortConfig>
+pub nlink_lab::Network::subnet: core::option::Option<alloc::string::String>
+pub nlink_lab::Network::vlan_filtering: core::option::Option<bool>
+pub nlink_lab::Network::vlans: alloc::collections::btree::map::BTreeMap<u16, nlink_lab::types::VlanConfig>
+pub struct nlink_lab::Node
+pub nlink_lab::Node::cap_add: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::Node::cap_drop: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::Node::cmd: core::option::Option<alloc::vec::Vec<alloc::string::String>>
+pub nlink_lab::Node::configs: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
+pub nlink_lab::Node::container_exec: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::Node::cpu: core::option::Option<alloc::string::String>
+pub nlink_lab::Node::depends_on: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::Node::entrypoint: core::option::Option<alloc::string::String>
+pub nlink_lab::Node::env: core::option::Option<alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>>
+pub nlink_lab::Node::env_file: core::option::Option<alloc::string::String>
+pub nlink_lab::Node::exec: alloc::vec::Vec<nlink_lab::types::ExecConfig>
+pub nlink_lab::Node::firewall: core::option::Option<nlink_lab::types::FirewallConfig>
+pub nlink_lab::Node::foreign: core::option::Option<nlink_lab::types::Foreign>
+pub nlink_lab::Node::frr: core::option::Option<nlink_lab::types::FrrConfig>
+pub nlink_lab::Node::healthcheck: core::option::Option<alloc::string::String>
+pub nlink_lab::Node::healthcheck_interval: core::option::Option<alloc::string::String>
+pub nlink_lab::Node::healthcheck_retries: core::option::Option<u32>
+pub nlink_lab::Node::healthcheck_timeout: core::option::Option<alloc::string::String>
+pub nlink_lab::Node::hostname: core::option::Option<alloc::string::String>
+pub nlink_lab::Node::image: core::option::Option<alloc::string::String>
+pub nlink_lab::Node::interfaces: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::InterfaceConfig>
+pub nlink_lab::Node::ipvlans: alloc::vec::Vec<nlink_lab::types::IpvlanConfig>
+pub nlink_lab::Node::labels: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::Node::macvlans: alloc::vec::Vec<nlink_lab::types::MacvlanConfig>
+pub nlink_lab::Node::memory: core::option::Option<alloc::string::String>
+pub nlink_lab::Node::nat: core::option::Option<nlink_lab::types::NatConfig>
+pub nlink_lab::Node::overlay: core::option::Option<alloc::string::String>
+pub nlink_lab::Node::privileged: bool
+pub nlink_lab::Node::profiles: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::Node::pull: core::option::Option<alloc::string::String>
+pub nlink_lab::Node::routes: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::RouteConfig>
+pub nlink_lab::Node::startup_delay: core::option::Option<alloc::string::String>
+pub nlink_lab::Node::sysctls: alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
+pub nlink_lab::Node::volumes: core::option::Option<alloc::vec::Vec<alloc::string::String>>
+pub nlink_lab::Node::vrfs: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::VrfConfig>
+pub nlink_lab::Node::wifi: alloc::vec::Vec<nlink_lab::types::WifiConfig>
+pub nlink_lab::Node::wireguard: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::WireguardConfig>
+pub nlink_lab::Node::workdir: core::option::Option<alloc::string::String>
+impl nlink_lab::types::Node
+pub fn nlink_lab::types::Node::is_container(&self) -> bool
+pub fn nlink_lab::types::Node::is_foreign(&self) -> bool
+pub struct nlink_lab::NodeDiagnostic
+pub nlink_lab::NodeDiagnostic::interfaces: alloc::vec::Vec<nlink::netlink::diagnostics::InterfaceDiag>
+pub nlink_lab::NodeDiagnostic::issues: alloc::vec::Vec<nlink::netlink::diagnostics::Issue>
+pub nlink_lab::NodeDiagnostic::node: alloc::string::String
+pub nlink_lab::NodeDiagnostic::taken_at: std::time::Instant
+impl nlink_lab::running::NodeDiagnostic
+pub fn nlink_lab::running::NodeDiagnostic::to_json(&self) -> serde_json::value::Value
+pub struct nlink_lab::PortConfig
+pub nlink_lab::PortConfig::addresses: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::PortConfig::interface: core::option::Option<alloc::string::String>
+pub nlink_lab::PortConfig::pvid: core::option::Option<u16>
+pub nlink_lab::PortConfig::tagged: core::option::Option<bool>
+pub nlink_lab::PortConfig::untagged: core::option::Option<bool>
+pub nlink_lab::PortConfig::vlans: alloc::vec::Vec<u16>
+pub struct nlink_lab::PreparedExec
+impl nlink_lab::running::PreparedExec
+pub fn nlink_lab::running::PreparedExec::command(&mut self) -> &mut std::process::Command
+pub fn nlink_lab::running::PreparedExec::spawn(self) -> nlink_lab::error::Result<nlink_lab::running::ExecChild>
+pub struct nlink_lab::ProcessInfo
+pub nlink_lab::ProcessInfo::alive: bool
+pub nlink_lab::ProcessInfo::exit_code: core::option::Option<i32>
+pub nlink_lab::ProcessInfo::host_pid: u32
+pub nlink_lab::ProcessInfo::node: alloc::string::String
+pub nlink_lab::ProcessInfo::pid: u32
+pub nlink_lab::ProcessInfo::stderr_log: core::option::Option<alloc::string::String>
+pub nlink_lab::ProcessInfo::stdout_log: core::option::Option<alloc::string::String>
+pub struct nlink_lab::Profile
+pub nlink_lab::Profile::firewall: core::option::Option<nlink_lab::types::FirewallConfig>
+pub nlink_lab::Profile::frr: core::option::Option<nlink_lab::types::FrrConfig>
+pub nlink_lab::Profile::sysctls: alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
+pub struct nlink_lab::RateLimit
+pub nlink_lab::RateLimit::burst: core::option::Option<alloc::string::String>
+pub nlink_lab::RateLimit::egress: core::option::Option<alloc::string::String>
+pub nlink_lab::RateLimit::ingress: core::option::Option<alloc::string::String>
+pub struct nlink_lab::RouteConfig
+pub nlink_lab::RouteConfig::dev: core::option::Option<alloc::string::String>
+pub nlink_lab::RouteConfig::metric: core::option::Option<u32>
+pub nlink_lab::RouteConfig::via: core::option::Option<alloc::string::String>
+pub struct nlink_lab::RuleOptions
+pub nlink_lab::RuleOptions::allow: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::RuleOptions::deny: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::RuleOptions::strict: bool
+impl nlink_lab::validator::RuleOptions
+pub fn nlink_lab::validator::RuleOptions::check_known(&self) -> core::result::Result<(), alloc::string::String>
+pub struct nlink_lab::RunningLab
+impl nlink_lab::running::RunningLab
+pub fn nlink_lab::running::RunningLab::assertion_results(&self) -> &[crate::test_runner::AssertionResult]
+pub fn nlink_lab::running::RunningLab::assertions_failed(&self) -> bool
+pub fn nlink_lab::running::RunningLab::capture_targets(&self) -> alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
+pub async fn nlink_lab::running::RunningLab::clear_impairment(&mut self, endpoint: &str) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::container_for(&self, node: &str) -> core::option::Option<&ContainerState>
+pub fn nlink_lab::running::RunningLab::containers(&self) -> &alloc::collections::btree::map::BTreeMap<alloc::string::String, ContainerState>
+pub async fn nlink_lab::running::RunningLab::destroy(self) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::destroy_with(self, ctx: &crate::ops::OpCtx) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::diagnose(&self, node: core::option::Option<&str>) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::NodeDiagnostic>>
+pub async fn nlink_lab::running::RunningLab::diagnose_since(&self, node: core::option::Option<&str>, previous: &[nlink_lab::running::NodeDiagnostic]) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::NodeDiagnostic>>
+pub fn nlink_lab::running::RunningLab::dns_injected(&self) -> bool
+pub fn nlink_lab::running::RunningLab::exec(&self, node: &str, cmd: &str, args: &[&str]) -> nlink_lab::error::Result<nlink_lab::running::ExecOutput>
+pub fn nlink_lab::running::RunningLab::exec_attached(&self, node: &str, cmd: &str, args: &[&str]) -> nlink_lab::error::Result<i32>
+pub fn nlink_lab::running::RunningLab::exec_attached_in(&self, node: &str, cmd: &str, args: &[&str], workdir: core::option::Option<&std::path::Path>) -> nlink_lab::error::Result<i32>
+pub fn nlink_lab::running::RunningLab::exec_attached_with_opts(&self, node: &str, cmd: &str, args: &[&str], opts: nlink_lab::running::ExecOpts<'_>) -> nlink_lab::error::Result<i32>
+pub fn nlink_lab::running::RunningLab::exec_in(&self, node: &str, cmd: &str, args: &[&str], workdir: core::option::Option<&std::path::Path>) -> nlink_lab::error::Result<nlink_lab::running::ExecOutput>
+pub fn nlink_lab::running::RunningLab::exec_pids(&self) -> &alloc::collections::btree::map::BTreeMap<alloc::string::String, u32>
+pub fn nlink_lab::running::RunningLab::exec_with_opts(&self, node: &str, cmd: &str, args: &[&str], opts: nlink_lab::running::ExecOpts<'_>) -> nlink_lab::error::Result<nlink_lab::running::ExecOutput>
+pub async fn nlink_lab::running::RunningLab::firewall_counters(&self, node: &str) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::FirewallCounter>>
+pub fn nlink_lab::running::RunningLab::firewall_counters_blocking(&self, node: &str) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab::running::FirewallCounter>>
+pub async fn nlink_lab::running::RunningLab::heal(&mut self, endpoint: &str) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::host_pids(&self, node: &str, pids: &[u32]) -> nlink_lab::error::Result<alloc::vec::Vec<u32>>
+pub async fn nlink_lab::running::RunningLab::impair(&mut self, endpoint: &str, impairment: &nlink_lab::types::Impairment, dir: nlink_lab_shared::api::dto::Direction) -> nlink_lab::error::Result<core::option::Option<alloc::string::String>>
+pub fn nlink_lab::running::RunningLab::impair_show_blocking(&self, endpoint: &str) -> nlink_lab::error::Result<core::option::Option<crate::impair_parse::ImpairShow>>
+pub fn nlink_lab::running::RunningLab::is_partitioned(&self, endpoint: &str) -> bool
+pub fn nlink_lab::running::RunningLab::kill_process(&self, pid: u32) -> nlink_lab::error::Result<bool>
+pub fn nlink_lab::running::RunningLab::list() -> nlink_lab::error::Result<alloc::vec::Vec<LabInfo>>
+pub fn nlink_lab::running::RunningLab::live_impairments(&self) -> &alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Impairment>
+pub fn nlink_lab::running::RunningLab::load(name: &str) -> nlink_lab::error::Result<Self>
+pub fn nlink_lab::running::RunningLab::log_paths(&self, pid: u32) -> core::option::Option<(&str, &str)>
+pub fn nlink_lab::running::RunningLab::main_routes_to_blocking(&self, node: &str, dst: core::net::ip_addr::IpAddr, prefix_len: u8) -> nlink_lab::error::Result<alloc::vec::Vec<alloc::vec::Vec<nlink_lab::running::RouteHop>>>
+pub fn nlink_lab::running::RunningLab::name(&self) -> &str
+pub fn nlink_lab::running::RunningLab::namespace_count(&self) -> usize
+pub fn nlink_lab::running::RunningLab::namespace_for(&self, node: &str) -> nlink_lab::error::Result<&str>
+pub fn nlink_lab::running::RunningLab::namespace_name_of(&self, node: &str) -> core::option::Option<&str>
+pub fn nlink_lab::running::RunningLab::node_addresses(&self, node: &str) -> nlink_lab::error::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::vec::Vec<alloc::string::String>>>
+pub fn nlink_lab::running::RunningLab::node_names(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
+pub fn nlink_lab::running::RunningLab::node_pids(&self, node: &str) -> nlink_lab::error::Result<alloc::vec::Vec<u32>>
+pub fn nlink_lab::running::RunningLab::ns_resolver_of(&self, node: &str) -> core::option::Option<crate::deploy::NsRef>
+pub async fn nlink_lab::running::RunningLab::partition(&mut self, endpoint: &str) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::partitions(&self) -> &alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Impairment>
+pub fn nlink_lab::running::RunningLab::peer_endpoint(&self, endpoint: &str) -> nlink_lab::error::Result<alloc::string::String>
+pub fn nlink_lab::running::RunningLab::pids(&self) -> &[(alloc::string::String, u32)]
+pub fn nlink_lab::running::RunningLab::prepare_exec(&self, node: &str, cmd: &str, args: &[&str], opts: &nlink_lab::running::ExecOpts<'_>, mode: nlink_lab::running::ExecMode) -> nlink_lab::error::Result<nlink_lab::running::PreparedExec>
+pub fn nlink_lab::running::RunningLab::proc_stat(&self, node: &str, pid: u32) -> nlink_lab::error::Result<crate::proc_stat::ProcStat>
+pub fn nlink_lab::running::RunningLab::proc_stat_all(&self, node: &str) -> nlink_lab::error::Result<alloc::vec::Vec<crate::proc_stat::ProcStat>>
+pub fn nlink_lab::running::RunningLab::proc_stat_many(&self, node: &str, pids: &[u32]) -> nlink_lab::error::Result<alloc::vec::Vec<crate::proc_stat::ProcStat>>
+pub fn nlink_lab::running::RunningLab::proc_stat_pidfiles(&self, node: &str, pattern: &str) -> nlink_lab::error::Result<alloc::vec::Vec<crate::proc_stat::ProcStat>>
+pub fn nlink_lab::running::RunningLab::process_status(&self) -> alloc::vec::Vec<nlink_lab::running::ProcessInfo>
+pub fn nlink_lab::running::RunningLab::process_status_alive_only(&self) -> alloc::vec::Vec<nlink_lab::running::ProcessInfo>
+pub fn nlink_lab::running::RunningLab::runtime(&self) -> crate::container::Runtime
+pub fn nlink_lab::running::RunningLab::runtime_binary(&self) -> core::option::Option<&str>
+pub fn nlink_lab::running::RunningLab::save_state(&self) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::set_container_pid(&mut self, node: &str, pid: u32) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::set_directed_impairment(&mut self, endpoint: &str, egress: core::option::Option<&nlink_lab::types::Impairment>, ingress: core::option::Option<&nlink_lab::types::Impairment>) -> nlink_lab::error::Result<core::option::Option<alloc::string::String>>
+pub async fn nlink_lab::running::RunningLab::set_impairment(&mut self, endpoint: &str, impairment: &nlink_lab::types::Impairment) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::set_link_mtu(&mut self, endpoint: &str, mtu: u32) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::set_pair_impairment(&mut self, network: &str, src: &str, dst: &str, impairment: core::option::Option<&nlink_lab::types::Impairment>, rate_cap: core::option::Option<&str>) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::signal_process(&self, pid: u32, signal: nlink_lab::running::Signal) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::spawn(&mut self, node: &str, cmd: &[&str]) -> nlink_lab::error::Result<u32>
+pub fn nlink_lab::running::RunningLab::spawn_with_logs(&mut self, node: &str, cmd: &[&str], log_dir: core::option::Option<&std::path::Path>) -> nlink_lab::error::Result<u32>
+pub fn nlink_lab::running::RunningLab::spawn_with_logs_in(&mut self, node: &str, cmd: &[&str], log_dir: core::option::Option<&std::path::Path>, workdir: core::option::Option<&std::path::Path>) -> nlink_lab::error::Result<u32>
+pub fn nlink_lab::running::RunningLab::spawn_with_logs_with_opts(&mut self, node: &str, cmd: &[&str], opts: nlink_lab::running::SpawnOpts<'_>) -> nlink_lab::error::Result<u32>
+pub fn nlink_lab::running::RunningLab::tcp_connect(&self, node: &str, addr: core::net::socket_addr::SocketAddr, timeout: core::time::Duration) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::topology(&self) -> &nlink_lab::types::Topology
+pub async fn nlink_lab::running::RunningLab::wait_for_exec(&self, node: &str, cmd: &str, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::wait_for_fd_stable(&self, _node: &str, pid: u32, stable_for: core::time::Duration, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::wait_for_file(&self, node: &str, path: &str, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::wait_for_log_line(&self, pid: u32, pattern: &regex::regex::string::Regex, stream: nlink_lab::running::LogStream, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::wait_for_port(&self, node: &str, pid: core::option::Option<u32>, port: u16, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub async fn nlink_lab::running::RunningLab::wait_for_tcp(&self, node: &str, ip: &str, port: u16, timeout: core::time::Duration, interval: core::time::Duration) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::running::RunningLab::wifi_loaded(&self) -> bool
+impl nlink_lab::running::RunningLab
+pub async fn nlink_lab::running::RunningLab::conntrack(&self, node: &str, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab_shared::api::dto::ConntrackFlow>>
+pub async fn nlink_lab::running::RunningLab::conntrack_of(&self, node: core::option::Option<&str>, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<alloc::vec::Vec<nlink_lab_shared::api::dto::ConntrackFlow>>
+pub async fn nlink_lab::running::RunningLab::flush_conntrack(&self, node: &str, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<usize>
+pub async fn nlink_lab::running::RunningLab::flush_conntrack_of(&self, node: core::option::Option<&str>, query: &nlink_lab_shared::api::dto::ConntrackQuery) -> nlink_lab::error::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, usize>>
+impl nlink_lab::running::RunningLab
+pub async fn nlink_lab::running::RunningLab::wait_all(&self, node: &str, conditions: &[WaitCondition], timeout: core::time::Duration, interval: core::time::Duration, ctx: &OpCtx) -> nlink_lab::error::Result<()>
+impl core::clone::Clone for nlink_lab::running::RunningLab
+pub fn nlink_lab::running::RunningLab::clone(&self) -> Self
+pub struct nlink_lab::SpawnOpts<'a>
+pub nlink_lab::SpawnOpts::env: &'a [(&'a str, &'a str)]
+pub nlink_lab::SpawnOpts::log_dir: core::option::Option<&'a std::path::Path>
+pub nlink_lab::SpawnOpts::workdir: core::option::Option<&'a std::path::Path>
+pub struct nlink_lab::Topology
+pub nlink_lab::Topology::assertion_interval: core::option::Option<alloc::string::String>
+pub nlink_lab::Topology::assertion_retries: core::option::Option<u32>
+pub nlink_lab::Topology::assertions: alloc::vec::Vec<nlink_lab::types::Assertion>
+pub nlink_lab::Topology::benchmarks: alloc::vec::Vec<nlink_lab::types::Benchmark>
+pub nlink_lab::Topology::directional_impairments: alloc::collections::btree::set::BTreeSet<alloc::string::String>
+pub nlink_lab::Topology::impairments: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Impairment>
+pub nlink_lab::Topology::lab: nlink_lab::types::LabConfig
+pub nlink_lab::Topology::links: alloc::vec::Vec<nlink_lab::types::Link>
+pub nlink_lab::Topology::networks: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Network>
+pub nlink_lab::Topology::nodes: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Node>
+pub nlink_lab::Topology::profiles: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::Profile>
+pub nlink_lab::Topology::qdiscs: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::QdiscConfig>
+pub nlink_lab::Topology::rate_limits: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::RateLimit>
+pub nlink_lab::Topology::scenarios: alloc::vec::Vec<nlink_lab::types::Scenario>
+pub nlink_lab::Topology::sites: alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::vec::Vec<alloc::string::String>>
+pub nlink_lab::Topology::source_dir: core::option::Option<alloc::string::String>
+impl nlink_lab::types::Topology
+pub async fn nlink_lab::types::Topology::deploy(&self) -> nlink_lab::error::Result<nlink_lab::running::RunningLab>
+pub async fn nlink_lab::types::Topology::deploy_with(&self, ctx: &crate::ops::OpCtx) -> nlink_lab::error::Result<nlink_lab::running::RunningLab>
+pub fn nlink_lab::types::Topology::effective_firewall<'a>(&'a self, node: &'a nlink_lab::types::Node) -> core::option::Option<alloc::borrow::Cow<'a, nlink_lab::types::FirewallConfig>>
+pub fn nlink_lab::types::Topology::effective_frr(&self, node: &nlink_lab::types::Node) -> core::option::Option<nlink_lab::types::FrrConfig>
+pub fn nlink_lab::types::Topology::effective_sysctls(&self, node: &nlink_lab::types::Node) -> alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
+pub fn nlink_lab::types::Topology::namespace_name(&self, node_name: &str) -> alloc::string::String
+pub fn nlink_lab::types::Topology::rebase_host_paths(&mut self, base: &std::path::Path)
+pub fn nlink_lab::types::Topology::redacted(&self) -> nlink_lab::types::Topology
+impl nlink_lab::types::Topology
+pub fn nlink_lab::types::Topology::validate(&self) -> nlink_lab::validator::ValidationResult
+pub fn nlink_lab::types::Topology::validate_with(&self, opts: &nlink_lab::validator::RuleOptions) -> nlink_lab::validator::ValidationResult
+pub struct nlink_lab::TopologyBuilder
+impl nlink_lab::builder::TopologyBuilder
+pub fn nlink_lab::builder::TopologyBuilder::build(self) -> nlink_lab::types::Topology
+pub fn nlink_lab::builder::TopologyBuilder::build_validated(self) -> nlink_lab::error::Result<nlink_lab::types::Topology>
+pub fn nlink_lab::builder::TopologyBuilder::description(self, desc: &str) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::dns(self, mode: nlink_lab::types::DnsMode) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::impair(self, endpoint: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::ImpairmentBuilder) -> nlink_lab::builder::ImpairmentBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::link(self, ep1: &str, ep2: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::LinkBuilder) -> nlink_lab::builder::LinkBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::network(self, name: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::NetworkBuilder) -> nlink_lab::builder::NetworkBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::new(name: &str) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::node(self, name: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::NodeBuilder) -> nlink_lab::builder::NodeBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::prefix(self, prefix: &str) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::profile(self, name: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::ProfileBuilder) -> nlink_lab::builder::ProfileBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::qdisc(self, endpoint: &str, kind: nlink_lab::types::QdiscKind) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::rate_limit(self, endpoint: &str, f: impl core::ops::function::FnOnce(nlink_lab::builder::RateLimitBuilder) -> nlink_lab::builder::RateLimitBuilder) -> Self
+pub fn nlink_lab::builder::TopologyBuilder::runtime(self, runtime: nlink_lab::types::ContainerRuntime) -> Self
+pub struct nlink_lab::ValidationIssue
+pub nlink_lab::ValidationIssue::location: core::option::Option<alloc::string::String>
+pub nlink_lab::ValidationIssue::message: alloc::string::String
+pub nlink_lab::ValidationIssue::rule: &'static str
+pub nlink_lab::ValidationIssue::severity: nlink_lab::validator::Severity
+impl core::fmt::Display for nlink_lab::validator::ValidationIssue
+pub fn nlink_lab::validator::ValidationIssue::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct nlink_lab::ValidationResult
+impl nlink_lab::validator::ValidationResult
+pub fn nlink_lab::validator::ValidationResult::bail(&self) -> nlink_lab::error::Result<()>
+pub fn nlink_lab::validator::ValidationResult::errors(&self) -> impl core::iter::traits::iterator::Iterator<Item = &nlink_lab::validator::ValidationIssue>
+pub fn nlink_lab::validator::ValidationResult::has_errors(&self) -> bool
+pub fn nlink_lab::validator::ValidationResult::has_warnings(&self) -> bool
+pub fn nlink_lab::validator::ValidationResult::issues(&self) -> &[nlink_lab::validator::ValidationIssue]
+pub fn nlink_lab::validator::ValidationResult::warnings(&self) -> impl core::iter::traits::iterator::Iterator<Item = &nlink_lab::validator::ValidationIssue>
+pub struct nlink_lab::VlanConfig
+pub nlink_lab::VlanConfig::name: core::option::Option<alloc::string::String>
+pub struct nlink_lab::VrfConfig
+pub nlink_lab::VrfConfig::interfaces: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::VrfConfig::routes: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::RouteConfig>
+pub nlink_lab::VrfConfig::table: u32
+pub struct nlink_lab::WireguardConfig
+pub nlink_lab::WireguardConfig::addresses: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::WireguardConfig::fwmark: core::option::Option<u32>
+pub nlink_lab::WireguardConfig::listen_port: core::option::Option<u16>
+pub nlink_lab::WireguardConfig::peer_settings: alloc::collections::btree::map::BTreeMap<alloc::string::String, nlink_lab::types::WireguardPeer>
+pub nlink_lab::WireguardConfig::peers: alloc::vec::Vec<alloc::string::String>
+pub nlink_lab::WireguardConfig::private_key: core::option::Option<alloc::string::String>
+pub fn nlink_lab::parse_signal(name: &str) -> nlink_lab::error::Result<nlink_lab::running::Signal>
+pub fn nlink_lab::rule_ids() -> &'static [&'static str]
+pub fn nlink_lab::rule_severity(id: &str) -> core::option::Option<nlink_lab::validator::Severity>
+pub type nlink_lab::Result<T> = core::result::Result<T, nlink_lab::error::Error>

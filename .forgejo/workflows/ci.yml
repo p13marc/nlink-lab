@@ -118,6 +118,31 @@ jobs:
           cache-targets: false
       - run: cargo doc --no-deps --all-features
 
+  # The library's public API (#331): docs/public-api.txt is what
+  # `cargo public-api` lists, so a change to the stable layer is reviewed.
+  public-api:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v7.0.1
+      - name: sccache guard
+        run: test -x "$RUSTC_WRAPPER" || { echo "::warning::sccache missing at $RUSTC_WRAPPER; building without it"; echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"; }
+      # the nightly whose rustdoc JSON cargo-public-api 0.51 reads
+      - uses: https://github.com/dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-10-28
+      - uses: https://github.com/Swatinem/rust-cache@v2.9.2
+        with:
+          cache-targets: false
+      - uses: https://github.com/taiki-e/install-action@v2.87.7
+        with:
+          tool: cargo-public-api@0.51.0
+      - run: cargo +nightly-2026-10-28 public-api -p nlink-lab --all-features -sss > docs/public-api.txt
+      - run: |
+          git diff --exit-code docs/public-api.txt || {
+            echo "::error::the library's public API changed: run \`just public-api\` and commit docs/public-api.txt"
+            exit 1
+          }
+
   deny:
     runs-on: ubuntu-24.04
     steps:

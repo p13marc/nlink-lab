@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use iced::advanced::text::highlighter::{self, Format};
 use iced::{Color, Font, Theme};
-use nlink_lab::analysis::symbols;
+use nlink_lab::internal::analysis::symbols;
 use nlink_lab::parser::nll::lexer::{Token, lex_lenient};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

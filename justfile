@@ -65,6 +65,12 @@ ci: fmt-check lint
 smoke:
     cargo build -p nlink-lab-cli && ./scripts/cli-smoke.sh target/debug/nlink-lab
 
+# Regenerate docs/public-api.txt, the library's public API (#331). CI diffs it:
+# a change to the stable layer shows up in review. The nightly matches
+# cargo-public-api 0.51's rustdoc JSON.
+public-api:
+    cargo +nightly-2026-10-28 public-api -p nlink-lab --all-features -sss > docs/public-api.txt
+
 # Regenerate the reference blocks in docs/cli/*.md from the clap definitions
 # (and drop the pages of removed commands)
 docs-cli:

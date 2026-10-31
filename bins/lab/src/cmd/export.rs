@@ -24,7 +24,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let running = nlink_lab::RunningLab::load(&lab)?;
     let topo = running.topology();
     let content = if args.nll {
-        nlink_lab::render::try_render(topo)?
+        nlink_lab::internal::render::try_render(topo)?
     } else if ctx.json {
         format!("{}\n", serde_json::to_string_pretty(topo)?)
     } else {

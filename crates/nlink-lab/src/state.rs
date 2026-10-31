@@ -1949,7 +1949,7 @@ link r1:eth0 -- h1:eth0
     #[test]
     fn snapshots_save_list_load_remove() {
         let _env = temp_state_env();
-        let topo = crate::Lab::new("snap-lab")
+        let topo = crate::TopologyBuilder::new("snap-lab")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| {
@@ -2016,7 +2016,9 @@ link r1:eth0 -- h1:eth0
     #[test]
     fn live_impairments_survive_state_roundtrip() {
         let _env = temp_state_env();
-        let topo = crate::Lab::new("live-lab").node("a", |n| n).build();
+        let topo = crate::TopologyBuilder::new("live-lab")
+            .node("a", |n| n)
+            .build();
         let mut st = LabState::new("live-lab".to_string(), "t".to_string());
         st.live_impairments.insert(
             "a:eth0".into(),

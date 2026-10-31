@@ -169,47 +169,6 @@ pub(crate) fn remove_hosts_from(path: &str, lab_name: &str) -> Result<()> {
     replace_file_preserving(path, &cleaned)
 }
 
-/// Remove all NLINK-LAB sections from /etc/hosts (for `destroy --all`).
-///
-/// Same global lock as [`inject_hosts`].
-pub fn remove_all_hosts() -> Result<()> {
-    let _lock = crate::state::hosts_lock()?;
-    remove_all_hosts_from(HOSTS_PATH)
-}
-
-/// Remove all sections from a specific file (for testing).
-pub(crate) fn remove_all_hosts_from(path: &str) -> Result<()> {
-    let existing = match std::fs::read_to_string(path) {
-        Ok(s) => s,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(e) => return Err(Error::deploy_failed(format!("failed to read {path}: {e}"))),
-    };
-
-    let mut result = String::new();
-    let mut in_section = false;
-
-    for line in existing.lines() {
-        if line.starts_with("###### NLINK-LAB-") && line.ends_with("-START ######") {
-            in_section = true;
-            continue;
-        }
-        if line.starts_with("###### NLINK-LAB-") && line.ends_with("-END ######") {
-            in_section = false;
-            continue;
-        }
-        if !in_section {
-            result.push_str(line);
-            result.push('\n');
-        }
-    }
-
-    if result == existing {
-        return Ok(());
-    }
-
-    replace_file_preserving(path, &result)
-}
-
 /// Atomically replace the contents of `path`, keeping its identity.
 ///
 /// `/etc/hosts` is a system file other tools care about, so a plain
@@ -818,28 +777,6 @@ link a:eth0 -- b:eth0 { fd00::1/64 -- fd00::2/64 }
         assert_eq!(strip_prefix_len("fd00::1/64"), Some("fd00::1".into()));
         assert_eq!(strip_prefix_len("10.0.0.1"), Some("10.0.0.1".into()));
         assert_eq!(strip_prefix_len(""), None);
-    }
-
-    #[test]
-    fn test_remove_all_hosts() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("hosts");
-        let content = "\
-127.0.0.1\tlocalhost
-###### NLINK-LAB-lab-a-START ######
-10.0.0.1\tserver-a
-###### NLINK-LAB-lab-a-END ######
-###### NLINK-LAB-lab-b-START ######
-10.1.0.1\tserver-b
-###### NLINK-LAB-lab-b-END ######
-";
-        std::fs::write(&path, content).unwrap();
-
-        remove_all_hosts_from(path.to_str().unwrap()).unwrap();
-
-        let result = std::fs::read_to_string(&path).unwrap();
-        assert!(result.contains("localhost"));
-        assert!(!result.contains("NLINK-LAB"));
     }
 
     // ── replace_file_preserving (#38) ───────────────────────────────

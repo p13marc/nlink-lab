@@ -1,6 +1,6 @@
 //! A topology shown from its source, in design mode: a file (watched for
 //! changes) or a template not saved yet. Loading analyses it with its
-//! params (`nlink_lab::analysis`, the LSP's): whatever goes wrong is a
+//! params (`nlink_lab::internal::analysis`, the LSP's): whatever goes wrong is a
 //! problem to list, with its place in the text, not a message on stderr.
 
 use std::ops::Range;
@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use nlink_lab::Topology;
-use nlink_lab::analysis::{self, Severity as ASeverity};
+use nlink_lab::internal::analysis::{self, Severity as ASeverity};
 use nlink_lab_view::Positions;
 
 use crate::settings::Dirs;

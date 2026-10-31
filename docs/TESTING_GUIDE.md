@@ -139,8 +139,7 @@ bundle -L LAB` collects one on demand.
 Point the macro at an NLL topology file:
 
 ```rust
-use nlink_lab::lab_test;
-use nlink_lab::RunningLab;
+use nlink_lab::prelude::*;
 
 #[lab_test("examples/simple.nll")]
 async fn test_connectivity(lab: RunningLab) {
@@ -149,15 +148,21 @@ async fn test_connectivity(lab: RunningLab) {
 }
 ```
 
+`nlink_lab::prelude::*` brings `lab_test`, `RunningLab`, `Topology`,
+`TopologyBuilder`, `ExecOutput`, `Impairment`, `Error`/`Result` and the
+`feature`/`privileged` gates. Everything a test needs is in the
+library's stable layer; `nlink_lab::internal` is for nlink-lab's own
+binaries (#331).
+
 ### Builder-based form
 
 Reference a function that returns a `Topology`:
 
 ```rust
-use nlink_lab::{lab_test, Lab, RunningLab};
+use nlink_lab::{lab_test, TopologyBuilder, RunningLab};
 
 fn two_nodes() -> nlink_lab::Topology {
-    Lab::new("two-nodes")
+    TopologyBuilder::new("two-nodes")
         .node("a", |n| n)
         .node("b", |n| n.route("default", |r| r.via("10.0.0.1")))
         .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24"))
@@ -240,10 +245,10 @@ The builder DSL lets you construct topologies in pure Rust, which is useful when
 test parameters are dynamic or you want the topology definition next to the test.
 
 ```rust
-use nlink_lab::{Lab, Topology};
+use nlink_lab::{TopologyBuilder, Topology};
 
 fn triangle() -> Topology {
-    Lab::new("triangle")
+    TopologyBuilder::new("triangle")
         .profile("router", |p| p.sysctl("net.ipv4.ip_forward", "1"))
         .node("r1", |n| n.profile("router"))
         .node("r2", |n| n.profile("router"))
@@ -265,7 +270,7 @@ You can also add impairments to test degraded-network behavior:
 
 ```rust
 fn lossy_link() -> Topology {
-    Lab::new("lossy")
+    TopologyBuilder::new("lossy")
         .node("a", |n| n)
         .node("b", |n| n)
         .link("a:eth0", "b:eth0", |l| {

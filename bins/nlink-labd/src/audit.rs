@@ -28,7 +28,10 @@ impl Audit {
     /// The record of `request` by `peer`, to finish with [`Audit::record`].
     pub fn entry(&self, peer: &Peer, request: &Request) -> Entry {
         let mut line = serde_json::Map::new();
-        line.insert("ts".into(), nlink_lab::events::now_iso8601().into());
+        line.insert(
+            "ts".into(),
+            nlink_lab::internal::events::now_iso8601().into(),
+        );
         line.insert("uid".into(), peer.uid.into());
         line.insert("user".into(), peer.user.clone().into());
         if let Some(pid) = peer.pid {

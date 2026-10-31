@@ -7,7 +7,7 @@
 
 use std::fmt::Write;
 
-use nlink_lab::Lab;
+use nlink_lab::TopologyBuilder;
 
 /// Generate an NLL string for a ring topology with `n` nodes.
 fn ring_nll(n: usize) -> String {
@@ -342,7 +342,7 @@ network mgmt {
 /// Parse and validate a topology built entirely with the Rust builder DSL.
 #[test]
 fn build_full_feature_topology() {
-    let topo = Lab::new("builder-full")
+    let topo = TopologyBuilder::new("builder-full")
         .profile("router", |p| p.sysctl("net.ipv4.ip_forward", "1"))
         .node("r1", |n| n.profile("router"))
         .node("r2", |n| n.profile("router"))

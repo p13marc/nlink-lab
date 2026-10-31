@@ -45,7 +45,7 @@ pub struct DoctorReport {
 /// `--fix`: what can be repaired on this host, as lines saying what was
 /// done (or why not).
 fn fix() -> nlink_lab::Result<Vec<String>> {
-    use nlink_lab::state;
+    use nlink_lab::internal::state;
     if !crate::ctx::has_privileges() {
         return Err(nlink_lab::Error::Privileges(
             "doctor --fix changes the host: run it with sudo".into(),
@@ -93,7 +93,7 @@ fn fix() -> nlink_lab::Result<Vec<String>> {
         .into_iter()
         .filter_map(|info| state::load(&info.name).ok().map(|(_, t)| (info.name, t)))
         .collect();
-    match nlink_lab::host_registry::rebuild(labs) {
+    match nlink_lab::internal::host_registry::rebuild(labs) {
         Ok(n) => done.push(format!(
             "rebuilt the host claims registry from the running labs ({n} with claims)"
         )),
@@ -210,11 +210,14 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     // FRR routing daemons (#65): not on $PATH on Debian (/usr/lib/frr).
     for (daemon, why) in [
-        (nlink_lab::frr::Daemon::Zebra, "routing frr"),
-        (nlink_lab::frr::Daemon::Ospfd, "routing frr { ospf }"),
-        (nlink_lab::frr::Daemon::Bgpd, "frr { bgp … }"),
+        (nlink_lab::internal::frr::Daemon::Zebra, "routing frr"),
+        (
+            nlink_lab::internal::frr::Daemon::Ospfd,
+            "routing frr { ospf }",
+        ),
+        (nlink_lab::internal::frr::Daemon::Bgpd, "frr { bgp … }"),
     ] {
-        let found = nlink_lab::frr::locate_daemon(daemon);
+        let found = nlink_lab::internal::frr::locate_daemon(daemon);
         checks.push(check(
             "binary (optional)",
             found.is_some(),
@@ -224,16 +227,16 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 None => format!(
                     "{} not found ($PATH, {}) — {why} unavailable",
                     daemon.name(),
-                    nlink_lab::frr::DAEMON_DIRS.join(", ")
+                    nlink_lab::internal::frr::DAEMON_DIRS.join(", ")
                 ),
             },
         ));
     }
     checks.push(check(
         "binary (optional)",
-        nlink_lab::frr::locate_vtysh().is_some(),
+        nlink_lab::internal::frr::locate_vtysh().is_some(),
         false,
-        match nlink_lab::frr::locate_vtysh() {
+        match nlink_lab::internal::frr::locate_vtysh() {
             Some(p) => format!(
                 "vtysh found at {} — FRR convergence wait / inspection",
                 p.display()
@@ -243,23 +246,26 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     ));
     checks.push(check(
         "frr user",
-        nlink_lab::frr::frr_ids().is_some(),
+        nlink_lab::internal::frr::frr_ids().is_some(),
         false,
-        match nlink_lab::frr::frr_ids() {
+        match nlink_lab::internal::frr::frr_ids() {
             Some((uid, gid)) => format!(
                 "user '{}' exists (uid {uid}, gid {gid})",
-                nlink_lab::frr::FRR_USER
+                nlink_lab::internal::frr::FRR_USER
             ),
             None => format!(
                 "user '{}' missing — FRR daemons drop to it (install the frr package)",
-                nlink_lab::frr::FRR_USER
+                nlink_lab::internal::frr::FRR_USER
             ),
         },
     ));
     // What deploy does: a runtime counts when `BIN version` answers. On
     // PATH alone was "ok" with docker's daemon stopped (#226).
     let on_path_rt = ["podman", "docker"].iter().find(|b| on_path(b).is_some());
-    let (status, detail) = match (nlink_lab::container::Runtime::detect(), on_path_rt) {
+    let (status, detail) = match (
+        nlink_lab::internal::container::Runtime::detect(),
+        on_path_rt,
+    ) {
         (Ok(rt), _) => (Status::Ok, format!("{} answers `version`", rt.binary())),
         (Err(_), Some(b)) => (
             Status::Warn,
@@ -299,7 +305,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
 
     // Host-namespace claims of labs that are gone (#332).
-    match nlink_lab::host_registry::stale() {
+    match nlink_lab::internal::host_registry::stale() {
         Ok(stale) if stale.is_empty() => {}
         Ok(stale) => checks.push(Check {
             name: "host claims",
@@ -319,9 +325,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     // Netem seeds (#337): what a deploy found the last time it probed
     // this kernel; root probes now when nothing is cached yet.
-    let release = nlink_lab::seed::kernel_release();
-    let honoured = nlink_lab::seed::read_cache(&release)
-        .or_else(|| nlink_lab::privileges::has_privileges().then(nlink_lab::seed::kernel_honours));
+    let release = nlink_lab::internal::seed::kernel_release();
+    let honoured = nlink_lab::internal::seed::read_cache(&release).or_else(|| {
+        nlink_lab::internal::privileges::has_privileges()
+            .then(nlink_lab::internal::seed::kernel_honours)
+    });
     checks.push(Check {
         name: "netem seeds",
         status: match honoured {
@@ -339,18 +347,18 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         },
     });
 
-    let (cg_status, cg_detail) = if !nlink_lab::cgroup::available() {
+    let (cg_status, cg_detail) = if !nlink_lab::internal::cgroup::available() {
         (
             Status::Info,
             "no cgroup v2 hierarchy; `cpu`/`memory` on namespace nodes are ignored".to_string(),
         )
-    } else if !nlink_lab::cgroup::controllers_delegated() {
+    } else if !nlink_lab::internal::cgroup::controllers_delegated() {
         (
             Status::Info,
             format!(
                 "{} mounted but cpu/memory not delegated below it (container?); \
                  `cpu`/`memory` on namespace nodes are ignored",
-                nlink_lab::cgroup::ROOT
+                nlink_lab::internal::cgroup::ROOT
             ),
         )
     } else {
@@ -358,7 +366,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             Status::Ok,
             format!(
                 "{} (cpu/memory limits for namespace nodes)",
-                nlink_lab::cgroup::ROOT
+                nlink_lab::internal::cgroup::ROOT
             ),
         )
     };
@@ -392,10 +400,10 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     // One state root for every user (#234): root writes it, members of
     // the `nlink-lab` group read it.
-    let root = nlink_lab::state::root_dir();
-    let group = nlink_lab::state::group_gid();
+    let root = nlink_lab::internal::state::root_dir();
+    let group = nlink_lab::internal::state::group_gid();
     if privileged {
-        let created = nlink_lab::state::ensure_state_root();
+        let created = nlink_lab::internal::state::ensure_state_root();
         let ok = created.is_ok() && writable_dir(&root);
         checks.push(check(
             "state dir",
@@ -426,7 +434,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 format!(
                     "{} is not readable: join the `{}` group to see the labs",
                     root.display(),
-                    nlink_lab::state::GROUP
+                    nlink_lab::internal::state::GROUP
                 ),
             ),
         };
@@ -442,16 +450,16 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         detail: match group {
             Some(gid) => format!(
                 "`{}` (gid {gid}): its members can read every lab",
-                nlink_lab::state::GROUP
+                nlink_lab::internal::state::GROUP
             ),
             None => format!(
                 "no `{}` group: only root can read the labs (groupadd --system {})",
-                nlink_lab::state::GROUP,
-                nlink_lab::state::GROUP
+                nlink_lab::internal::state::GROUP,
+                nlink_lab::internal::state::GROUP
             ),
         },
     });
-    let legacy = nlink_lab::state::legacy_labs();
+    let legacy = nlink_lab::internal::state::legacy_labs();
     if !legacy.is_empty() {
         let names: Vec<String> = legacy
             .iter()
@@ -468,8 +476,8 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         });
     }
 
-    let labs = nlink_lab::state::list().unwrap_or_default();
-    let pending = nlink_lab::state::labs_with_pending_journal();
+    let labs = nlink_lab::internal::state::list().unwrap_or_default();
+    let pending = nlink_lab::internal::state::labs_with_pending_journal();
     checks.push(Check {
         name: "pending journals",
         status: if pending.is_empty() {
@@ -489,7 +497,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // Stale lock files (#103): harmless, but nothing used to report or
     // remove them, so they accumulated silently — one per lab name ever
     // locked, which on a machine that runs the test suite is thousands.
-    let stale_locks = nlink_lab::state::stale_locks();
+    let stale_locks = nlink_lab::internal::state::stale_locks();
     checks.push(Check {
         name: "lock files",
         status: if stale_locks.len() < STALE_LOCK_WARN {

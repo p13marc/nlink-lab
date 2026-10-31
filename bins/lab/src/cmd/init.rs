@@ -41,7 +41,7 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             "TEMPLATE", "NODES", "LINKS"
         );
         println!("{}", "─".repeat(70));
-        for t in nlink_lab::templates::list() {
+        for t in nlink_lab::internal::templates::list() {
             println!(
                 "{:<15} {:<5} {:<5} {}",
                 t.name, t.node_count, t.link_count, t.description
@@ -51,13 +51,13 @@ pub fn run(_ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
 
     let template_name = template.unwrap();
-    let t = nlink_lab::templates::get(&template_name).ok_or_else(|| {
+    let t = nlink_lab::internal::templates::get(&template_name).ok_or_else(|| {
         nlink_lab::Error::invalid_argument(format!(
             "unknown template '{template_name}'. Use --list to see available templates"
         ))
     })?;
 
-    let nll_content = nlink_lab::templates::render(t, name.as_deref());
+    let nll_content = nlink_lab::internal::templates::render(t, name.as_deref());
     let out_dir = output.unwrap_or_else(|| PathBuf::from("."));
     let lab_name = name.as_deref().unwrap_or(t.name);
 

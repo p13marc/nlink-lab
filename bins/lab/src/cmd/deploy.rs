@@ -19,7 +19,7 @@ pub struct DeployReport {
     pub duration_ms: u64,
     /// The `validate { … }` results, when there are assertions.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub assertions: Vec<nlink_lab::test_runner::AssertionResult>,
+    pub assertions: Vec<nlink_lab::internal::test_runner::AssertionResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assertions_failed: Option<bool>,
     /// The seed the lab was deployed with (#337); absent on a kernel
@@ -128,7 +128,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         println!("Topology {:?} is valid", topo.lab.name);
         print_topology_summary(&topo);
         // The plan is pure: this is exactly what `deploy` would do.
-        let plan = nlink_lab::plan_for(&topo)?;
+        let plan = nlink_lab::internal::plan_for(&topo)?;
         if ctx.json {
             let ops: Vec<serde_json::Value> = plan
                 .ops
@@ -150,7 +150,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     // Handle --force: destroy existing lab first
     if force {
-        if nlink_lab::state::exists(&topo.lab.name) {
+        if nlink_lab::internal::state::exists(&topo.lab.name) {
             let lab = nlink_lab::RunningLab::load(&topo.lab.name)?;
             lab.destroy().await?;
         } else {
@@ -161,7 +161,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     if archive {
         // the lab's files live with its state, and go with it
-        let dir = nlink_lab::state::state_dir(&topo.lab.name).join("source");
+        let dir = nlink_lab::internal::state::state_dir(&topo.lab.name).join("source");
         topo = adjust(common::archive_topology(&topology, &dir, no_reparse)?);
     }
 
@@ -173,7 +173,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let lab = deployed?;
     let elapsed = start.elapsed();
     // what it came from, for a later `apply` (#234)
-    let source = nlink_lab::state::LabSource {
+    let source = nlink_lab::internal::state::LabSource {
         path: std::path::absolute(&topology)
             .ok()
             .map(|p| p.to_string_lossy().into_owned()),
@@ -181,7 +181,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         suffix: suffix.clone(),
         dir: None,
     };
-    if let Err(e) = nlink_lab::state::set_source(lab.name(), &source) {
+    if let Err(e) = nlink_lab::internal::state::set_source(lab.name(), &source) {
         tracing::warn!("could not record the source of '{}': {e}", lab.name());
     }
     let assertions_failed = lab.assertions_failed();

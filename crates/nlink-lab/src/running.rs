@@ -3139,7 +3139,7 @@ impl RunningLab {
     ///
     /// `alive` is `true` only if the PID still exists **and** is not a
     /// zombie. Spawned processes are detached (double-forked and
-    /// reparented to init, see [`crate::ns_exec::spawn_detached`]), so
+    /// reparented to init, see `ns_exec::spawn_detached`), so
     /// nlink-lab itself never leaves zombies; the check still matters
     /// for processes a spawned program forks and abandons (hostapd's
     /// `-B` parent, shell wrappers), which `kill(pid, 0)` keeps
@@ -3916,7 +3916,7 @@ pub(crate) fn signal_tracked(
 /// exited but hasn't been waited-on by its parent) still has an entry
 /// in the kernel process table and `kill(pid, 0)` returns 0. nlink-lab's
 /// own spawns are detached and reaped by init
-/// ([`crate::ns_exec::spawn_detached`]), but a tracked pid may still be
+/// (`ns_exec::spawn_detached`), but a tracked pid may still be
 /// a zombie of *its* parent (a daemon's `-B` wrapper, a shell).
 ///
 /// To match the user-facing meaning of "alive" (the process is

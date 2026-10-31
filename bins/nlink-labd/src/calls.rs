@@ -35,7 +35,7 @@ pub(crate) async fn dispatch(ctx: &mut CallCtx, request: Request) -> Result<Resp
             labs: ctx.shared.hub.lab_count(),
             clients: ctx.shared.clients.load(Ordering::Relaxed),
             legacy_labs: tokio::task::spawn_blocking(|| {
-                nlink_lab::state::legacy_labs()
+                nlink_lab::internal::state::legacy_labs()
                     .into_iter()
                     .map(|(_, name)| name)
                     .collect()
@@ -133,7 +133,7 @@ async fn local(ctx: &CallCtx, request: Request) -> Result<Response, ApiError> {
             .build()
             .map_err(|e| ApiError::new(ErrorCode::Internal, format!("a runtime: {e}")))?;
         let ctx = nlink_lab::OpCtx::default();
-        Ok::<_, ApiError>(rt.block_on(nlink_lab::ops::mutate::handle(request, &ctx)))
+        Ok::<_, ApiError>(rt.block_on(nlink_lab::internal::ops::mutate::handle(request, &ctx)))
     });
     tokio::select! {
         done = work => match done {
@@ -157,7 +157,7 @@ async fn read(ctx: &CallCtx, request: Request) -> Result<Response, ApiError> {
             .enable_all()
             .build()
             .map_err(|e| ApiError::new(ErrorCode::Internal, format!("a reader runtime: {e}")))?;
-        Ok::<_, ApiError>(rt.block_on(nlink_lab::ops::read::handle(&request)))
+        Ok::<_, ApiError>(rt.block_on(nlink_lab::internal::ops::read::handle(&request)))
     });
     tokio::select! {
         done = work => match done {

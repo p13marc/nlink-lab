@@ -6,6 +6,22 @@ All notable changes to this project will be documented in this file.
 
 ### Migration
 
+- **The library has a public surface of its own** (#331). What a test
+  or a tool built on nlink-lab uses is the stable layer: `Topology` and
+  its builder, `parser`, `validator`, `Error`/`Result`, `RunningLab`
+  and its exec types, `test_helpers`, `bundle`, `lab_test` and the new
+  `nlink_lab::prelude`. `docs/public-api.txt` lists all of it, and a CI
+  job fails when the API changes without that file (`just
+  public-api`).
+  - **Internal.** What the CLI, the daemon and the app share with the
+    library (`ops`, `state`, `deploy`, `render`, `analysis`, `host`,
+    `events`, `metrics`, `watch` and the rest) is hidden from the docs,
+    reached through `nlink_lab::internal`, and carries no semver.
+  - **Private.** `dns`, `ns_exec` and `ipfunc` are private now.
+  - **Renamed.** The builder `nlink_lab::Lab` is now
+    `nlink_lab::TopologyBuilder` (`TopologyBuilder::new("name")…build()`),
+    which frees `Lab` for the lab handle (#328).
+
 - **`impair --partition` is a black hole again** (#347). Since 0.14 its
   egress filter dropped packets (TC_ACT_SHOT), which the partitioned
   node's own stack is told about: its TCP took that for local

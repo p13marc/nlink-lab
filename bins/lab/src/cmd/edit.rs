@@ -4,7 +4,7 @@
 use crate::ctx::{Ctx, require_root};
 use crate::output::{DryRunReport, print_layered};
 use anstream::println;
-use nlink_lab::edit::Edit;
+use nlink_lab::internal::edit::Edit;
 
 /// Make `edits` to `lab`: checked together, the result validated, then
 /// applied (MTUs live, the rest through `apply`). `node` and `link` run
@@ -21,13 +21,13 @@ pub async fn run_edits(
     // Every edit is checked, and the result validated, before anything
     // changes: a bad edit next to an MTU change used to fail after the MTU
     // changed (#209).
-    let ed = nlink_lab::edit::edited(running.topology(), edits)?;
+    let ed = nlink_lab::internal::edit::edited(running.topology(), edits)?;
     crate::cmd::common::print_warnings(&ed.warnings);
     if !ed.structural {
         // MTU changes are applied directly (both ends, live) rather than
         // through the plan: the plan only knows an MTU at veth creation.
         if !dry_run {
-            nlink_lab::edit::apply_edited(&mut running, &ed).await?;
+            nlink_lab::internal::edit::apply_edited(&mut running, &ed).await?;
         }
         if ctx.json {
             println!(
@@ -42,8 +42,8 @@ pub async fn run_edits(
         return Ok(());
     }
     if dry_run {
-        let plan = nlink_lab::apply_plan(&running, &ed.topology)?;
-        let layered = nlink_lab::compute_layered_diff(&running, &ed.topology).await?;
+        let plan = nlink_lab::internal::apply_plan(&running, &ed.topology)?;
+        let layered = nlink_lab::internal::compute_layered_diff(&running, &ed.topology).await?;
         if ctx.json {
             let removals: Vec<String> = plan
                 .ops
@@ -69,7 +69,7 @@ pub async fn run_edits(
     }
     let progress = crate::progress::Progress::new(ctx);
     let op = progress.op("apply", &lab);
-    let applied = nlink_lab::edit::apply_edited_with(&mut running, &ed, &op).await;
+    let applied = nlink_lab::internal::edit::apply_edited_with(&mut running, &ed, &op).await;
     progress.finish();
     let report = applied?.expect("a structural edit applies");
     if ctx.json {

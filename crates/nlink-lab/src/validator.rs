@@ -4111,7 +4111,7 @@ link r1:eth0 -- h1:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
     #[test]
     fn test_invalid_cidr() {
         // Use builder: NLL parser enforces CIDR format during parsing
-        let topo = crate::Lab::new("bad-cidr")
+        let topo = crate::TopologyBuilder::new("bad-cidr")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| {
@@ -4127,7 +4127,7 @@ link r1:eth0 -- h1:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
 
     #[test]
     fn test_invalid_cidr_prefix_too_large() {
-        let topo = crate::Lab::new("bad-prefix")
+        let topo = crate::TopologyBuilder::new("bad-prefix")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| {
@@ -4185,7 +4185,7 @@ link a:eth0 -- nonexistent:eth0
     fn test_duplicate_interface() {
         // NLL can't create explicit interfaces with the same name as link endpoints
         // easily, so use the builder
-        let mut topo = crate::Lab::new("dup-iface")
+        let mut topo = crate::TopologyBuilder::new("dup-iface")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| l)
@@ -4697,7 +4697,7 @@ link a:eth0 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
 
     #[test]
     fn test_mtu_consistency_warning() {
-        let mut topo = crate::Lab::new("mtu-mismatch")
+        let mut topo = crate::TopologyBuilder::new("mtu-mismatch")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| l.mtu(9000))
@@ -5194,7 +5194,7 @@ benchmark "perf" {
 
     #[test]
     fn test_unresolved_interpolation_rejected() {
-        let mut topo = crate::Lab::new("t")
+        let mut topo = crate::TopologyBuilder::new("t")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| {
@@ -5337,7 +5337,7 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
 
     #[test]
     fn test_invalid_impairment_values() {
-        let mut topo = crate::Lab::new("t")
+        let mut topo = crate::TopologyBuilder::new("t")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| l)
@@ -5647,7 +5647,7 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
 
     #[test]
     fn test_mgmt_subnet_ipv6_accepted() {
-        let mut topo = crate::Lab::new("t")
+        let mut topo = crate::TopologyBuilder::new("t")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| {
@@ -5662,7 +5662,7 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
 
     #[test]
     fn test_mgmt_subnet_ipv6_capacity() {
-        let mut topo = crate::Lab::new("t")
+        let mut topo = crate::TopologyBuilder::new("t")
             .node("a", |n| n)
             .node("b", |n| n)
             .node("c", |n| n)
@@ -5679,7 +5679,7 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
     #[test]
     fn test_qdisc_rules() {
         use crate::types::{QdiscConfig, QdiscKind};
-        let mut topo = crate::Lab::new("t")
+        let mut topo = crate::TopologyBuilder::new("t")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| {
@@ -5746,7 +5746,7 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
             (Some("0.4"), Some("zero bytes")),
             (Some("100kb"), None),
         ] {
-            let mut topo = crate::Lab::new("t")
+            let mut topo = crate::TopologyBuilder::new("t")
                 .node("a", |n| n)
                 .node("b", |n| n)
                 .link("a:eth0", "b:eth0", |l| {
@@ -5769,7 +5769,7 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
 
     #[test]
     fn test_nat_family_mismatch() {
-        let mut topo = crate::Lab::new("t").node("r", |n| n).build();
+        let mut topo = crate::TopologyBuilder::new("t").node("r", |n| n).build();
         topo.nodes.get_mut("r").unwrap().nat = Some(crate::types::NatConfig {
             rules: vec![
                 crate::types::NatRule {
@@ -5812,7 +5812,7 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24 }
 
     #[test]
     fn test_firewall_match_expr_ip6_ok_and_family_mismatch() {
-        let mut topo = crate::Lab::new("t").node("r", |n| n).build();
+        let mut topo = crate::TopologyBuilder::new("t").node("r", |n| n).build();
         topo.nodes.get_mut("r").unwrap().firewall = Some(crate::types::FirewallConfig {
             policy: None,
             rules: vec![
@@ -5883,7 +5883,7 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
         assert_eq!(missing[0].severity, Severity::Warning);
 
         // JSON / builder topologies bypass the parser's checks
-        let mut topo = crate::Lab::new("t").node("r", |n| n).build();
+        let mut topo = crate::TopologyBuilder::new("t").node("r", |n| n).build();
         topo.nodes.get_mut("r").unwrap().firewall = Some(crate::types::FirewallConfig {
             policy: Some("reject".into()),
             rules: vec![
@@ -6022,7 +6022,7 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
         // classify twice, no prio qdisc / rate on the node
         assert_eq!(rules_of(&result, "firewall-classify-no-effect").len(), 2);
 
-        let mut topo = crate::Lab::new("t").node("r", |n| n).build();
+        let mut topo = crate::TopologyBuilder::new("t").node("r", |n| n).build();
         topo.nodes.get_mut("r").unwrap().nat = Some(crate::types::NatConfig {
             rules: vec![crate::types::NatRule {
                 action: crate::types::NatAction::Masquerade,
@@ -6047,7 +6047,7 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
 
     #[test]
     fn test_vxlan_underlay_address_rules() {
-        let mut topo = crate::Lab::new("t").node("r", |n| n).build();
+        let mut topo = crate::TopologyBuilder::new("t").node("r", |n| n).build();
         let mut vx = crate::types::InterfaceConfig {
             kind: Some(InterfaceKind::Vxlan),
             vni: Some(100),

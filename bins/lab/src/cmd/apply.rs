@@ -62,7 +62,7 @@ fn desired_topology(
     file: Option<PathBuf>,
     lab: &crate::ctx::LabArg,
     params: Vec<(String, String)>,
-) -> nlink_lab::Result<(nlink_lab::Topology, nlink_lab::state::LabSource)> {
+) -> nlink_lab::Result<(nlink_lab::Topology, nlink_lab::internal::state::LabSource)> {
     let target = match (&file, &lab.lab) {
         (_, Some(lab)) => Some(lab.clone()),
         (None, None) => Some(lab.resolve()?),
@@ -70,7 +70,7 @@ fn desired_topology(
     };
     let recorded = target
         .as_deref()
-        .and_then(nlink_lab::state::source_of)
+        .and_then(nlink_lab::internal::state::source_of)
         .unwrap_or_default();
     // a file named here is its own; the recorded one may be a daemon's
     // staged copy, its host files the client's (#285)
@@ -100,7 +100,7 @@ fn desired_topology(
         let name = target.clone().unwrap_or_default();
         common::archive_topology(
             &path,
-            &nlink_lab::state::state_dir(&name).join("source"),
+            &nlink_lab::internal::state::state_dir(&name).join("source"),
             false,
         )?
     } else {
@@ -127,7 +127,7 @@ fn desired_topology(
             desired.lab.name
         )));
     }
-    let source = nlink_lab::state::LabSource {
+    let source = nlink_lab::internal::state::LabSource {
         path: std::path::absolute(&path)
             .ok()
             .map(|p| p.to_string_lossy().into_owned()),
@@ -149,7 +149,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         reset_impairments,
         keep_conntrack,
     } = args;
-    let apply_opts = nlink_lab::ApplyOptions {
+    let apply_opts = nlink_lab::internal::ApplyOptions {
         reset_impairments,
         keep_conntrack,
     };
@@ -162,17 +162,17 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     // Load current topology from running lab state
     let lab_name = &desired.lab.name.clone();
-    if !nlink_lab::state::exists(lab_name) {
+    if !nlink_lab::internal::state::exists(lab_name) {
         return Err(nlink_lab::Error::NotFound {
             name: format!("{lab_name} (deploy first, then apply changes)"),
         });
     }
     let mut running = nlink_lab::RunningLab::load(lab_name)?;
     // `subnet auto` networks get the subnets the deploy allocated
-    nlink_lab::subnet_pool::resolve_auto_subnets(running.topology(), &mut desired)?;
+    nlink_lab::internal::subnet_pool::resolve_auto_subnets(running.topology(), &mut desired)?;
     let current = running.topology();
 
-    let diff = nlink_lab::diff_topologies(current, &desired);
+    let diff = nlink_lab::internal::diff_topologies(current, &desired);
 
     // Plan 158f Phase 2 — when --dry-run is set,
     // compute the layered diff (topology + per-namespace
@@ -186,7 +186,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // on a quiet host. The cost only applies on
     // --dry-run path; normal apply doesn't pay it.
     let layered_view = if dry_run {
-        Some(nlink_lab::compute_layered_diff_with(&running, &desired, &apply_opts).await?)
+        Some(nlink_lab::internal::compute_layered_diff_with(&running, &desired, &apply_opts).await?)
     } else {
         None
     };
@@ -196,7 +196,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     // …and so does the plan's other work: a container re-created because
     // its options changed is in neither the lab graph nor the layers.
     let (removals, plan_ops): (Vec<String>, Vec<String>) = if dry_run {
-        common::plan_lists(&nlink_lab::apply_plan_with(
+        common::plan_lists(&nlink_lab::internal::apply_plan_with(
             &running,
             &desired,
             &apply_opts,
@@ -240,10 +240,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let mut drift_view = None;
     if !dry_run && diff.is_empty() {
         require_root()?;
-        let layered = nlink_lab::compute_layered_diff_with(&running, &desired, &apply_opts).await?;
+        let layered =
+            nlink_lab::internal::compute_layered_diff_with(&running, &desired, &apply_opts).await?;
         // A change only the plan sees (container options) is work too: it
         // used to be reported as "No changes to apply" and never applied.
-        let plan = nlink_lab::apply_plan_with(&running, &desired, &apply_opts)?;
+        let plan = nlink_lab::internal::apply_plan_with(&running, &desired, &apply_opts)?;
         let plan_has_work = plan.work().next().is_some() || plan.ops.iter().any(|o| o.is_removal());
         if layered.is_empty() && !plan_has_work {
             if ctx.json {
@@ -295,12 +296,13 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let start = Instant::now();
     let progress = crate::progress::Progress::new(ctx);
     let op = progress.op("apply", lab_name);
-    let applied = nlink_lab::apply_with_ctx(&mut running, &desired, &apply_opts, &op).await;
+    let applied =
+        nlink_lab::internal::apply_with_ctx(&mut running, &desired, &apply_opts, &op).await;
     progress.finish();
     let report = applied?;
     tracing::info!("apply: {} op(s), {} removal(s)", report.ops, report.removed);
     // what the next `apply` without a file converges on
-    if let Err(e) = nlink_lab::state::set_source(lab_name, &source) {
+    if let Err(e) = nlink_lab::internal::state::set_source(lab_name, &source) {
         tracing::warn!("could not record the source of '{lab_name}': {e}");
     }
     let elapsed = start.elapsed();

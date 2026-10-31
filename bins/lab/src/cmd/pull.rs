@@ -19,7 +19,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let topo = parse_topology(&topology, &params)?;
     let progress = crate::progress::Progress::new(ctx);
     let op = progress.op("pull", &topo.lab.name);
-    let pulled = nlink_lab::ops::mutate::pull_images(&topo, &op).await;
+    let pulled = nlink_lab::internal::ops::mutate::pull_images(&topo, &op).await;
     progress.finish();
     match pulled?.len() {
         0 => println!("No container images in topology."),

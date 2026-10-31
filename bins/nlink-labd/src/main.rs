@@ -94,7 +94,7 @@ fn serve(config: Config) -> std::io::Result<()> {
         Some(listener) => (listener, None),
         None => (listen::bind(&config.socket)?, Some(config.socket.clone())),
     };
-    if let Err(e) = nlink_lab::state::ensure_state_root() {
+    if let Err(e) = nlink_lab::internal::state::ensure_state_root() {
         tracing::warn!("the state root: {e}");
     }
     let rt = runtime();

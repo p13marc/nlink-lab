@@ -50,7 +50,7 @@ pub enum Action {
 }
 
 pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
-    use nlink_lab::portability::{
+    use nlink_lab::internal::portability::{
         ArchiveSource, ExportOptions, export_archive, import_archive, inspect_archive,
     };
     match args.action {

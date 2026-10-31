@@ -80,14 +80,16 @@ pub(crate) async fn logs(
             use std::io::Write as _;
             let offset = match tail {
                 Some(n) => {
-                    let (text, offset) = nlink_lab::logs::tail_lines_at(&path, n)?;
+                    let (text, offset) = nlink_lab::internal::logs::tail_lines_at(&path, n)?;
                     writer.write_all(text.as_bytes())?;
                     offset
                 }
-                None => nlink_lab::logs::cat_to(&path, &mut writer)?,
+                None => nlink_lab::internal::logs::cat_to(&path, &mut writer)?,
             };
             if follow {
-                nlink_lab::logs::follow(&path, offset, &mut writer, || !stop.is_cancelled())?;
+                nlink_lab::internal::logs::follow(&path, offset, &mut writer, || {
+                    !stop.is_cancelled()
+                })?;
             }
             Ok(())
         };
@@ -133,15 +135,16 @@ pub(crate) async fn capture(
         .namespace_for(&ep.node)
         .map_err(|e| e.to_api())?
         .to_string();
-    let mut config = nlink_lab::capture::CaptureConfig::on(&ep.iface);
+    let mut config = nlink_lab::internal::capture::CaptureConfig::on(&ep.iface);
     config.count = count;
     config.duration = duration_ms.map(Duration::from_millis);
-    config.bpf_filter = nlink_lab::capture::build_filter(filter).map_err(|e| e.to_api())?;
-    let output = nlink_lab::capture::CaptureOutput::Stream(Box::new(
+    config.bpf_filter =
+        nlink_lab::internal::capture::build_filter(filter).map_err(|e| e.to_api())?;
+    let output = nlink_lab::internal::capture::CaptureOutput::Stream(Box::new(
         ctx.data_sender().writer(DataStream::Pcap),
     ));
     let shutdown = Arc::new(AtomicBool::new(false));
-    let handle = nlink_lab::capture::spawn_capture(ns, config, output, shutdown.clone())
+    let handle = nlink_lab::internal::capture::spawn_capture(ns, config, output, shutdown.clone())
         .map_err(|e| e.to_api())?;
     let stop = CancelToken::new();
     let watcher = {
@@ -174,7 +177,7 @@ pub(crate) async fn wait_for(
     cond: &WaitSpec,
 ) -> Result<Response, ApiError> {
     let conditions =
-        nlink_lab::wait::WaitCondition::from_spec(cond, None).map_err(|e| e.to_api())?;
+        nlink_lab::internal::wait::WaitCondition::from_spec(cond, None).map_err(|e| e.to_api())?;
     if conditions.is_empty() {
         return Err(ApiError::new(
             ErrorCode::InvalidArgument,
@@ -229,8 +232,8 @@ pub(crate) async fn wait_for(
 
 /// `export`: the lab as an `.nlz` archive, streamed as `archive` data.
 pub(crate) async fn export(ctx: &CallCtx, lab: &str) -> Result<Response, ApiError> {
-    nlink_lab::state::validate_lab_name(lab).map_err(|e| e.to_api())?;
-    if !nlink_lab::state::exists(lab) {
+    nlink_lab::internal::state::validate_lab_name(lab).map_err(|e| e.to_api())?;
+    if !nlink_lab::internal::state::exists(lab) {
         return Err(nlink_lab::Error::NotFound {
             name: lab.to_string(),
         }
@@ -239,12 +242,12 @@ pub(crate) async fn export(ctx: &CallCtx, lab: &str) -> Result<Response, ApiErro
     let dir = tempfile_dir()?;
     let path = dir.join(format!("{lab}.nlz"));
     let (name, archive) = (lab.to_string(), path.clone());
-    let source = nlink_lab::state::source_of(lab);
+    let source = nlink_lab::internal::state::source_of(lab);
     tokio::task::spawn_blocking(move || {
-        nlink_lab::portability::export_archive(
-            nlink_lab::portability::ArchiveSource::Lab { name },
+        nlink_lab::internal::portability::export_archive(
+            nlink_lab::internal::portability::ArchiveSource::Lab { name },
             &archive,
-            nlink_lab::portability::ExportOptions {
+            nlink_lab::internal::portability::ExportOptions {
                 params: source.map(|s| s.params).unwrap_or_default(),
                 ..Default::default()
             },

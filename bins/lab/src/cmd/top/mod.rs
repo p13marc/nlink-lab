@@ -54,7 +54,7 @@ enum Source {
     /// socket in every namespace.
     Local {
         lab: nlink_lab::RunningLab,
-        collector: nlink_lab::metrics::MetricsCollector,
+        collector: nlink_lab::internal::metrics::MetricsCollector,
     },
     /// A metrics subscription to the daemon; an operator also changes
     /// impairments through it.
@@ -99,7 +99,7 @@ impl Source {
             return Self::open_daemon(lab, interval, args.daemon || from_env).await;
         }
         let lab = nlink_lab::RunningLab::load(lab)?;
-        let collector = nlink_lab::metrics::MetricsCollector::new(&lab);
+        let collector = nlink_lab::internal::metrics::MetricsCollector::new(&lab);
         Ok(Source::Local { lab, collector })
     }
 
@@ -577,7 +577,7 @@ fn refresh_impairments(app: &mut App, source: &Source) {
 /// The lab's `created_at` as unix seconds, for the header uptime; `0`
 /// when the state file is unreadable or the timestamp does not parse.
 fn deployed_at_unix(lab: &str) -> u64 {
-    let Ok(labs) = nlink_lab::state::list() else {
+    let Ok(labs) = nlink_lab::internal::state::list() else {
         return 0;
     };
     let Some(info) = labs.iter().find(|l| l.name == lab) else {

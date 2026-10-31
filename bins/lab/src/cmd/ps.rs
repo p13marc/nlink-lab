@@ -71,7 +71,10 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             .get(node)
             .is_some_and(|n| n.is_foreign())
         {
-            return Err(nlink_lab::foreign::refuse(node, "track processes"));
+            return Err(nlink_lab::internal::foreign::refuse(
+                node,
+                "track processes",
+            ));
         }
     }
     let mut processes = if alive_only {

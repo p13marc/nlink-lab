@@ -15,12 +15,12 @@ pub struct Args {
     pub lab: LabArg,
 }
 
-/// `status`'s result: the lab's [`LabStatus`](nlink_lab::ops::view::LabStatus),
+/// `status`'s result: the lab's [`LabStatus`](nlink_lab::internal::ops::view::LabStatus),
 /// and whether it is the caller's current lab.
 #[derive(serde::Serialize, schemars::JsonSchema)]
 pub struct StatusReport {
     #[serde(flatten)]
-    pub status: nlink_lab::ops::view::LabStatus,
+    pub status: nlink_lab::internal::ops::view::LabStatus,
     /// The caller's current lab (`nlink-lab use`).
     pub current: bool,
 }
@@ -138,16 +138,18 @@ impl Report for StatusReport {
 pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let lab = match args.name {
         Some(name) => {
-            nlink_lab::state::validate_lab_name(&name)?;
+            nlink_lab::internal::state::validate_lab_name(&name)?;
             name
         }
         None => args.lab.resolve()?,
     };
     let running = nlink_lab::RunningLab::load(&lab)?;
-    let (state, _) = nlink_lab::state::load(&lab)?;
-    let status = nlink_lab::ops::view::lab_status(&running, &state, crate::ctx::has_privileges());
+    let (state, _) = nlink_lab::internal::state::load(&lab)?;
+    let status =
+        nlink_lab::internal::ops::view::lab_status(&running, &state, crate::ctx::has_privileges());
     let report = StatusReport {
-        current: nlink_lab::state::context_get(caller_uid()).as_deref() == Some(lab.as_str()),
+        current: nlink_lab::internal::state::context_get(caller_uid()).as_deref()
+            == Some(lab.as_str()),
         status,
     };
     emit(ctx, &report)

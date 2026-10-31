@@ -35,7 +35,7 @@
 //! }
 //!
 //! fn my_topology() -> nlink_lab::Topology {
-//!     nlink_lab::Lab::new("custom")
+//!     nlink_lab::TopologyBuilder::new("custom")
 //!         .node("a", |n| n)
 //!         .node("b", |n| n)
 //!         .link("a:eth0", "b:eth0", |l| l.addresses("10.0.0.1/24", "10.0.0.2/24"))

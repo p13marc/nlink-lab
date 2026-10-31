@@ -29,7 +29,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     if paths.len() == 1 && paths[0].as_os_str() == "-" {
         let mut src = String::new();
         std::io::Read::read_to_string(&mut std::io::stdin(), &mut src)?;
-        let out = nlink_lab::fmt::format(&src)?;
+        let out = nlink_lab::internal::fmt::format(&src)?;
         if check {
             if out != src {
                 set_exit_code(EXIT_VALIDATION);
@@ -46,7 +46,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let mut changed = Vec::new();
     for path in &files {
         let src = std::fs::read_to_string(path)?;
-        let out = nlink_lab::fmt::format(&src)
+        let out = nlink_lab::internal::fmt::format(&src)
             .map_err(|e| nlink_lab::Error::invalid_topology(format!("{}: {e}", path.display())))?;
         if !check && !write {
             if files.len() > 1 {

@@ -49,7 +49,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     require_root()?;
     let progress = crate::progress::Progress::new(ctx);
     let op = progress.op("scenario", running.name());
-    let ran = nlink_lab::scenario::run_scenario_with(&mut running, &scenario, &op).await;
+    let ran = nlink_lab::internal::scenario::run_scenario_with(&mut running, &scenario, &op).await;
     progress.finish();
     let result = ran?;
     if ctx.json {
@@ -64,7 +64,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 red("FAIL")
             }
         );
-        let line = |action: &nlink_lab::scenario::ActionResult| {
+        let line = |action: &nlink_lab::internal::scenario::ActionResult| {
             let mark = if action.ok { green("ok") } else { red("FAIL") };
             let detail = action
                 .detail

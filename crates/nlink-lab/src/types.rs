@@ -2,7 +2,7 @@
 //!
 //! These types represent the topology of a network lab. They can be constructed
 //! from an NLL file via [`crate::parser::parse`] or programmatically via the
-//! builder DSL ([`crate::Lab`]).
+//! builder DSL ([`crate::TopologyBuilder`]).
 //!
 //! The type hierarchy:
 //!

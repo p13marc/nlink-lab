@@ -43,7 +43,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         Some(Diagram::Mermaid) => print!("{}", topology_to_mermaid(&topo)),
         Some(Diagram::Ascii) => print!("{}", topology_to_ascii(&topo)),
         None if ctx.json => println!("{}", serde_json::to_string_pretty(&topo)?),
-        None => print!("{}", nlink_lab::render::try_render(&topo)?),
+        None => print!("{}", nlink_lab::internal::render::try_render(&topo)?),
     }
     Ok(())
 }

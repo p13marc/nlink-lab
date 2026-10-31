@@ -46,12 +46,12 @@ pub fn reduce(app: &mut App, msg: Message) -> Vec<Effect> {
             effects.extend(open(app, Source::File(path), BTreeMap::new()));
             effects
         }
-        Message::OpenTemplate(name) => match nlink_lab::templates::get(name) {
+        Message::OpenTemplate(name) => match nlink_lab::internal::templates::get(name) {
             Some(t) => open(
                 app,
                 Source::Untitled {
                     name: name.to_string(),
-                    text: nlink_lab::templates::render(t, None),
+                    text: nlink_lab::internal::templates::render(t, None),
                 },
                 BTreeMap::new(),
             ),
@@ -251,7 +251,7 @@ pub fn reduce(app: &mut App, msg: Message) -> Vec<Effect> {
                 return vec![];
             };
             let text = d.source_text();
-            match nlink_lab::fmt::format(&text) {
+            match nlink_lab::internal::fmt::format(&text) {
                 Ok(formatted) if formatted == text => {
                     app.toast(Level::Info, "Already formatted");
                     vec![]
@@ -2956,7 +2956,7 @@ mod tests {
     #[test]
     fn a_template_opens_unsaved_and_save_as_makes_it_a_file() {
         let mut app = app();
-        let name = nlink_lab::templates::list()[0].name;
+        let name = nlink_lab::internal::templates::list()[0].name;
         let e = reduce(&mut app, Message::OpenTemplate(name));
         settle(&mut app, e);
         let t = app.current().unwrap();
@@ -4017,7 +4017,7 @@ mod editor_tests {
         let mut app = app();
         let id = open_text(&mut app, "lab   \"t\"\nnode    a\n");
         let e = reduce(&mut app, Message::Shortcut(Shortcut::Format));
-        let formatted = nlink_lab::fmt::format("lab   \"t\"\nnode    a\n").unwrap();
+        let formatted = nlink_lab::internal::fmt::format("lab   \"t\"\nnode    a\n").unwrap();
         assert_eq!(design(&app).source_text(), formatted);
         assert!(design(&app).edited);
         assert!(matches!(&e[..], [Effect::Load { text: Some(_), .. }]));

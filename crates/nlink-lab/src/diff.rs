@@ -916,7 +916,7 @@ pub fn diff_topologies(current: &Topology, desired: &Topology) -> TopologyDiff {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Lab;
+    use crate::TopologyBuilder;
 
     /// A node whose nftables diff only says what it cannot do prints its
     /// header and that line: nlink's `Display` opens with a count line
@@ -1009,7 +1009,7 @@ validate { reach a b }
     #[test]
     fn qdisc_added_changed_removed() {
         use crate::types::{QdiscConfig, QdiscKind};
-        let base = crate::Lab::new("t")
+        let base = crate::TopologyBuilder::new("t")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| {
@@ -1055,7 +1055,7 @@ validate { reach a b }
 
     #[test]
     fn test_identical_topologies() {
-        let topo = Lab::new("test")
+        let topo = TopologyBuilder::new("test")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| {
@@ -1068,12 +1068,12 @@ validate { reach a b }
 
     #[test]
     fn test_node_added() {
-        let current = Lab::new("test")
+        let current = TopologyBuilder::new("test")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| l)
             .build();
-        let desired = Lab::new("test")
+        let desired = TopologyBuilder::new("test")
             .node("a", |n| n)
             .node("b", |n| n)
             .node("c", |n| n)
@@ -1088,14 +1088,14 @@ validate { reach a b }
 
     #[test]
     fn test_node_removed() {
-        let current = Lab::new("test")
+        let current = TopologyBuilder::new("test")
             .node("a", |n| n)
             .node("b", |n| n)
             .node("c", |n| n)
             .link("a:eth0", "b:eth0", |l| l)
             .link("b:eth1", "c:eth0", |l| l)
             .build();
-        let desired = Lab::new("test")
+        let desired = TopologyBuilder::new("test")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| l)
@@ -1107,13 +1107,13 @@ validate { reach a b }
 
     #[test]
     fn test_impairment_changed() {
-        let current = Lab::new("test")
+        let current = TopologyBuilder::new("test")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| l)
             .impair("a:eth0", |i| i.delay("10ms"))
             .build();
-        let desired = Lab::new("test")
+        let desired = TopologyBuilder::new("test")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| l)
@@ -1630,12 +1630,12 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
 
     #[test]
     fn test_display() {
-        let current = Lab::new("test")
+        let current = TopologyBuilder::new("test")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| l)
             .build();
-        let desired = Lab::new("test")
+        let desired = TopologyBuilder::new("test")
             .node("a", |n| n)
             .node("b", |n| n)
             .node("c", |n| n)

@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use nlink_lab::ops::view::NodeStats;
+use nlink_lab::internal::ops::view::NodeStats;
 
 use crate::ctx::{Ctx, require_root};
 use crate::output::{Report, Table, emit, table::terminal_width};
@@ -90,7 +90,7 @@ fn mib(bytes: u64) -> String {
 pub struct ProcsReport {
     pub lab: String,
     pub node: String,
-    pub processes: Vec<nlink_lab::proc_stat::ProcStat>,
+    pub processes: Vec<nlink_lab::internal::proc_stat::ProcStat>,
 }
 
 impl Report for ProcsReport {
@@ -179,7 +179,10 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 ctx,
                 &StatsReport {
                     lab: lab.clone(),
-                    nodes: nlink_lab::ops::view::node_stats(&running, args.node.as_deref()),
+                    nodes: nlink_lab::internal::ops::view::node_stats(
+                        &running,
+                        args.node.as_deref(),
+                    ),
                 },
             )?;
         }

@@ -690,7 +690,7 @@ async fn apply_diff_phase6_configures_wireguard_for_added_node() {
     }
 
     // Step 1 — deploy a starting topology with two plain nodes.
-    let topo = nlink_lab::Lab::new(&format!("apply-wg-phase6-{}", std::process::id()))
+    let topo = nlink_lab::TopologyBuilder::new(&format!("apply-wg-phase6-{}", std::process::id()))
         .node("a", |n| n)
         .node("b", |n| n)
         .link("a:eth0", "b:eth0", |l| {

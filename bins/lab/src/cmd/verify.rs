@@ -46,12 +46,15 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         None => running.topology().clone(),
     };
     // a lab deployed with `--suffix`/`--unique`: its file's name plus that
-    nlink_lab::ops::mutate::target_lab(&mut desired, &lab)?;
+    nlink_lab::internal::ops::mutate::target_lab(&mut desired, &lab)?;
     // the plan's other work too, as `apply` would do it: a change that
     // only re-creates a container verified clean (#209)
-    let check =
-        nlink_lab::ops::mutate::check(&running, &desired, &nlink_lab::ApplyOptions::default())
-            .await?;
+    let check = nlink_lab::internal::ops::mutate::check(
+        &running,
+        &desired,
+        &nlink_lab::internal::ApplyOptions::default(),
+    )
+    .await?;
     let (layered, removals, plan_ops) = (&check.layered, &check.removals, &check.ops);
     let report = check.report(&lab);
     let drift = !report.no_op;

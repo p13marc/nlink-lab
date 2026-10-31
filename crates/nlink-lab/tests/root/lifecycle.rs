@@ -98,7 +98,7 @@ async fn deploy_from_builder(lab: RunningLab) {
 }
 
 fn builder_topology() -> nlink_lab::Topology {
-    nlink_lab::Lab::new("builder-test")
+    nlink_lab::TopologyBuilder::new("builder-test")
         .node("a", |n| n)
         .node("b", |n| n)
         .link("a:eth0", "b:eth0", |l| {

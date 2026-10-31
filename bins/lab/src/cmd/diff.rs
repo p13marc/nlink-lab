@@ -21,7 +21,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args { a, b, params } = args;
     let topo_a = parse_topology(&a, &params)?;
     let topo_b = parse_topology(&b, &params)?;
-    let diff = nlink_lab::diff_topologies(&topo_a, &topo_b);
+    let diff = nlink_lab::internal::diff_topologies(&topo_a, &topo_b);
     if ctx.json {
         // The whole diff, as `verify --json` has it under
         // `topology`: the summary left routes, sysctls and the rest out,

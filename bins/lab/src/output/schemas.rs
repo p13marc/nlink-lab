@@ -2,7 +2,7 @@
 
 use super::{DryRunReport, ValidateReport};
 
-pub use nlink_lab::ops::view::output_schema_for;
+pub use nlink_lab::internal::ops::view::output_schema_for;
 
 /// Every JSON schema `docs-gen --schemas` writes: file stem → schema.
 pub fn all_schemas() -> Vec<(&'static str, schemars::Schema)> {

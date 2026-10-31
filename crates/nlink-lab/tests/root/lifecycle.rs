@@ -790,6 +790,27 @@ async fn the_lab_handles_drive_a_lab(lab: Lab) {
     assert_ne!(ping.exit_code, 0, "a partitioned link carries nothing");
     eth0.heal().await.unwrap();
     assert!(!eth0.is_partitioned().unwrap());
+
+    // a change that fails leaves the handles on what the state file has:
+    // here another handle's partition, which this lab's snapshot had not seen
+    let other = Lab::attach(lab.name()).unwrap();
+    other
+        .endpoint("client:eth0")
+        .unwrap()
+        .partition()
+        .await
+        .unwrap();
+    assert!(!eth0.is_partitioned().unwrap(), "read from the snapshot");
+    let not_cut = lab.endpoint("server:eth0").unwrap();
+    assert!(
+        not_cut.heal().await.is_err(),
+        "server:eth0 is not partitioned"
+    );
+    assert!(
+        eth0.is_partitioned().unwrap(),
+        "the failed change re-read the state"
+    );
+    eth0.heal().await.unwrap();
     eth0.clear_impairment().await.unwrap();
 
     // a per-pair rule

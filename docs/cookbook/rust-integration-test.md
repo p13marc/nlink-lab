@@ -33,7 +33,9 @@ use nlink_lab::Lab;
 #[lab_test("examples/simple.nll")]
 async fn ping_works(lab: Lab) {
     let out = lab
-        .exec("host", "ping", &["-c1", "10.0.0.1"])
+        .node("host")
+        .unwrap()
+        .exec("ping", &["-c1", "10.0.0.1"])
         .unwrap();
     assert_eq!(out.exit_code, 0);
 }

@@ -49,6 +49,10 @@ use syn::{ItemFn, LitInt, LitStr, braced, parse_macro_input};
 
 /// Attribute that wraps an async test with lab deploy/destroy lifecycle.
 ///
+/// The test's one parameter is the deployed lab: typed `Lab` (any path
+/// ending in `Lab`, such as `nlink_lab::Lab`) it is the lab handle (#328),
+/// otherwise (`RunningLab`) the engine.
+///
 /// # Forms
 ///
 /// ```ignore
@@ -97,7 +101,9 @@ pub fn lab_test(attr: TokenStream, item: TokenStream) -> TokenStream {
     let fn_block = &input_fn.block;
     let fn_attrs = &input_fn.attrs;
     let fn_vis = &input_fn.vis;
-    // `lab: Lab` gets the handle (#328); `lab: RunningLab` the engine
+    // `lab: Lab` (a type whose last path segment is `Lab`, so
+    // `nlink_lab::Lab` too) gets the handle (#328); anything else, as
+    // `lab: RunningLab`, the engine
     let wants_handle = input_fn.sig.inputs.first().is_some_and(|arg| match arg {
         syn::FnArg::Typed(pat) => match &*pat.ty {
             syn::Type::Path(p) => p.path.segments.last().is_some_and(|s| s.ident == "Lab"),

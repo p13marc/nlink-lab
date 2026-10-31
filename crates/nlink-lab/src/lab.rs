@@ -112,9 +112,26 @@ impl Lab {
     ) -> Result<R> {
         let _turn = self.0.write.lock().await;
         let mut engine = (*self.engine()?).clone();
-        let out = change(&mut engine).await?;
-        self.swap(engine);
-        Ok(out)
+        match change(&mut engine).await {
+            Ok(out) => {
+                self.swap(engine);
+                Ok(out)
+            }
+            Err(e) => {
+                self.resync(&engine);
+                Err(e)
+            }
+        }
+    }
+
+    /// After a failed change: the snapshot becomes what the state file has
+    /// now, which is what the change (or another process) saved. The copy
+    /// it ran on is not kept, as it may hold changes that were never saved.
+    fn resync(&self, engine: &RunningLab) {
+        match engine.reloaded() {
+            Ok(fresh) => self.swap(fresh),
+            Err(e) => tracing::warn!("lab '{}': re-reading its state: {e}", self.0.name),
+        }
     }
 
     /// A sync change (a spawn), off the runtime's threads.
@@ -130,9 +147,16 @@ impl Lab {
         })
         .await
         .map_err(|e| Error::Runtime(format!("{e}")))?;
-        let out = out?;
-        self.swap(engine);
-        Ok(out)
+        match out {
+            Ok(out) => {
+                self.swap(engine);
+                Ok(out)
+            }
+            Err(e) => {
+                self.resync(&engine);
+                Err(e)
+            }
+        }
     }
 
     /// The lab's name.
@@ -232,15 +256,17 @@ impl Lab {
         crate::bundle::collect(&*self.engine()?, dir, opts).await
     }
 
-    /// Destroy the lab. Every other clone, and every handle from it, fails
-    /// from now on.
+    /// Destroy the lab. Once it is gone, every other clone and every
+    /// handle from it fails; a destroy that fails leaves them usable, to
+    /// try again.
     pub async fn destroy(self) -> Result<()> {
         let _turn = self.0.write.lock().await;
         let engine = (*self.engine()?).clone();
+        engine.destroy().await?;
         self.0
             .destroyed
             .store(true, std::sync::atomic::Ordering::Release);
-        engine.destroy().await
+        Ok(())
     }
 }
 
@@ -832,7 +858,8 @@ impl std::fmt::Display for Rate {
     }
 }
 
-/// `n` percent.
+/// `n` percent. Netem takes 0 to 100; a value outside (or NaN) is
+/// refused when the impairment is applied.
 pub fn pct(n: f64) -> Percent {
     Percent(n)
 }
@@ -840,17 +867,17 @@ pub fn pct(n: f64) -> Percent {
 pub fn bps(n: u64) -> Rate {
     Rate(n)
 }
-/// `n` kbit/s.
+/// `n` kbit/s (saturating).
 pub fn kbit(n: u64) -> Rate {
-    Rate(n * 1000)
+    Rate(n.saturating_mul(1000))
 }
-/// `n` Mbit/s.
+/// `n` Mbit/s (saturating).
 pub fn mbit(n: u64) -> Rate {
-    Rate(n * 1_000_000)
+    Rate(n.saturating_mul(1_000_000))
 }
-/// `n` Gbit/s.
+/// `n` Gbit/s (saturating).
 pub fn gbit(n: u64) -> Rate {
-    Rate(n * 1_000_000_000)
+    Rate(n.saturating_mul(1_000_000_000))
 }
 /// `n` microseconds.
 pub fn us(n: u64) -> Duration {

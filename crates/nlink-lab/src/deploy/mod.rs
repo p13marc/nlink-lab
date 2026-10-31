@@ -282,7 +282,7 @@ pub struct ApplyReport {
 /// `desired` as it would run in `running`: its `subnet auto/N` networks
 /// given the running lab's subnets
 /// ([`crate::subnet_pool::resolve_auto_subnets`]), and the running lab's
-/// seed when it names none ([`crate::seed::settle_for_apply`]: an apply
+/// seed when it names none ([`crate::seed::settled_for_apply`]: an apply
 /// from the NLL file must not reinstall every netem with a fresh seed, or
 /// none). Borrowed when nothing changes.
 fn with_running_subnets<'a>(
@@ -294,16 +294,16 @@ fn with_running_subnets<'a>(
             .as_deref()
             .is_some_and(|s| crate::subnet_pool::parse_auto_placeholder(s).is_some())
     });
-    let mut seeded = desired.clone();
-    crate::seed::settle_for_apply(&mut seeded, running.topology());
-    let reseeded = seeded.lab.seed != desired.lab.seed;
-    if !has_auto && !reseeded {
+    let seed = crate::seed::settled_for_apply(desired, running.topology());
+    if !has_auto && seed == desired.lab.seed {
         return Ok(std::borrow::Cow::Borrowed(desired));
     }
+    let mut owned = desired.clone();
+    owned.lab.seed = seed;
     if has_auto {
-        crate::subnet_pool::resolve_auto_subnets(running.topology(), &mut seeded)?;
+        crate::subnet_pool::resolve_auto_subnets(running.topology(), &mut owned)?;
     }
-    Ok(std::borrow::Cow::Owned(seeded))
+    Ok(std::borrow::Cow::Owned(owned))
 }
 
 /// Reconcile a running lab to `desired`: `execute(plan(desired) −

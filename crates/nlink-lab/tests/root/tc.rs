@@ -161,8 +161,15 @@ async fn loss_model_reaches_the_kernel_and_drops(lab: RunningLab) {
             .is_some_and(|m| m.starts_with("gemodel")),
         "{parsed:?}"
     );
-    // `impair --show` reads the same over netlink, without `tc` (#179).
-    let read = lab.impair_show_blocking("router:eth0").unwrap();
+    // `impair --show` reads the same over netlink, without `tc` (#179). An
+    // iproute2 older than 6.15 does not print the netem's seed (#337),
+    // which netlink reports: compared only when `tc` showed it.
+    let mut read = lab.impair_show_blocking("router:eth0").unwrap();
+    if parsed.seed.is_none()
+        && let Some(r) = read.as_mut()
+    {
+        r.seed = None;
+    }
     assert_eq!(read.as_ref(), Some(&parsed), "tc said: {}", qd.stdout);
     let ping = lab
         .exec(
@@ -216,7 +223,13 @@ async fn loss_model_reaches_the_kernel_and_drops(lab: RunningLab) {
         .exec("router", "tc", &["qdisc", "show", "dev", "eth0"])
         .unwrap();
     let parsed = nlink_lab::impair_parse::parse_tc_qdisc_show(&qd.stdout);
-    let read = lab.impair_show_blocking("router:eth0").unwrap();
+    let mut read = lab.impair_show_blocking("router:eth0").unwrap();
+    // an older iproute2 prints no seed (#337)
+    if parsed.as_ref().is_some_and(|p| p.seed.is_none())
+        && let Some(r) = read.as_mut()
+    {
+        r.seed = None;
+    }
     assert_eq!(read, parsed, "tc said: {}", qd.stdout);
     assert_eq!(read.and_then(|r| r.rate_bps), Some(10_000_000));
     lab.clear_impairment("router:eth0").await.unwrap();

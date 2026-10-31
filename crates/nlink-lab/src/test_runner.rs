@@ -129,8 +129,9 @@ async fn test_ctx(
     } else {
         crate::parser::parse_file_with_params(path, params)?
     };
-    if opts.seed.is_some() {
-        topology.lab.seed = opts.seed;
+    if let Some(seed) = opts.seed {
+        crate::seed::parse(&seed.to_string()).map_err(crate::Error::invalid_argument)?;
+        topology.lab.seed = Some(seed);
     }
     topology.validate().bail()?;
 

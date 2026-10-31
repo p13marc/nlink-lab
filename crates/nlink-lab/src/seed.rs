@@ -126,7 +126,8 @@ pub fn from_env() -> Result<Option<u64>> {
 /// [`SEED_ENV`]'s, else a fresh one; or none at all on a kernel that does
 /// not honour netem seeds (with a warning when one was asked for).
 pub fn settle_for_deploy(topology: &mut Topology) -> Result<()> {
-    let asked = topology.lab.seed.is_some() || any_impairment_seed(topology);
+    let from_env = from_env()?;
+    let asked = topology.lab.seed.is_some() || from_env.is_some() || any_impairment_seed(topology);
     if !kernel_honours() {
         if asked {
             tracing::warn!(
@@ -139,7 +140,7 @@ pub fn settle_for_deploy(topology: &mut Topology) -> Result<()> {
         return Ok(());
     }
     if topology.lab.seed.is_none() {
-        topology.lab.seed = Some(from_env()?.unwrap_or_else(draw));
+        topology.lab.seed = Some(from_env.unwrap_or_else(draw));
     }
     Ok(())
 }
@@ -148,15 +149,11 @@ pub fn settle_for_deploy(topology: &mut Topology) -> Result<()> {
 /// running lab plans with: its own, else the running lab's. Seeding a lab
 /// that was deployed without one needs the kernel's support, as at
 /// deploy.
-pub fn settle_for_apply(desired: &mut Topology, running: &Topology) {
+pub fn settled_for_apply(desired: &Topology, running: &Topology) -> Option<u64> {
     match (desired.lab.seed, running.lab.seed) {
-        (None, seed) => desired.lab.seed = seed,
-        (Some(_), Some(_)) => {}
-        (Some(_), None) => {
-            if !kernel_honours() {
-                desired.lab.seed = None;
-            }
-        }
+        (None, seed) => seed,
+        (Some(s), Some(_)) => Some(s),
+        (Some(s), None) => kernel_honours().then_some(s),
     }
 }
 
@@ -212,7 +209,11 @@ pub fn kernel_honours() -> bool {
             *ANSWER.get_or_init(|| a)
         }
         Err(e) => {
-            tracing::debug!("netem seed probe failed: {e}");
+            // not cached: the next deploy asks again
+            tracing::warn!(
+                "could not probe whether this kernel honours netem seeds ({e}); this lab \
+                 deploys unseeded"
+            );
             false
         }
     }
@@ -234,8 +235,10 @@ fn write_cache(release: &str, honoured: bool) {
     let Ok(text) = toml::to_string(&doc) else {
         return;
     };
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
+    if let Some(dir) = path.parent()
+        && crate::state::ensure_dir(dir).is_err()
+    {
+        return;
     }
     let tmp = path.with_extension(format!("tmp.{}", std::process::id()));
     if std::fs::write(&tmp, text).is_ok() {
@@ -264,6 +267,8 @@ pub async fn probe() -> Result<bool> {
     const PROBE_SEED: u64 = 0x5eed_1ab5;
     let ns = format!("nlink-lab-seed-probe-{}", std::process::id());
     namespace::create(&ns).map_err(|e| Error::nlink("seed probe: create namespace", e))?;
+    // tagged, so `destroy --orphans` reaps it if this process dies mid-probe
+    let _ = crate::netns_tag::tag(&ns, PROBE_OWNER);
     let result = async {
         let conn: Connection<Route> =
             Connection::new_in(&ns).map_err(|e| Error::nlink("seed probe: connect", e))?;
@@ -286,8 +291,13 @@ pub async fn probe() -> Result<bool> {
     }
     .await;
     let _ = namespace::delete(&ns);
+    crate::netns_tag::untag(&ns);
     result
 }
+
+/// The owner the probe's namespace is tagged with: no lab has this name
+/// (a lab name has no `/`), so the orphan reaper takes a leftover one.
+const PROBE_OWNER: &str = "nlink-lab/seed-probe";
 
 #[cfg(test)]
 mod tests {

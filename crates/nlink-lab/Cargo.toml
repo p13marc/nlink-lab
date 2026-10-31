@@ -57,3 +57,61 @@ netring = { workspace = true }
 tokio = { workspace = true, features = ["test-util", "macros"] }
 libc = { workspace = true }
 tempfile = "3"
+
+# The root suite (#339): one binary per area, run by scripts/root-tests.sh
+# (root-host, root-frr and root-wifi one test at a time, the rest in parallel).
+[[test]]
+name = "root-apply"
+path = "tests/root/apply.rs"
+
+[[test]]
+name = "root-containers"
+path = "tests/root/containers.rs"
+
+[[test]]
+name = "root-firewall"
+path = "tests/root/firewall.rs"
+
+[[test]]
+name = "root-frr"
+path = "tests/root/frr.rs"
+
+[[test]]
+name = "root-host"
+path = "tests/root/host.rs"
+
+[[test]]
+name = "root-lifecycle"
+path = "tests/root/lifecycle.rs"
+
+[[test]]
+name = "root-links"
+path = "tests/root/links.rs"
+
+[[test]]
+name = "root-nat"
+path = "tests/root/nat.rs"
+
+[[test]]
+name = "root-networks"
+path = "tests/root/networks.rs"
+
+[[test]]
+name = "root-processes"
+path = "tests/root/processes.rs"
+
+[[test]]
+name = "root-scenarios"
+path = "tests/root/scenarios.rs"
+
+[[test]]
+name = "root-tc"
+path = "tests/root/tc.rs"
+
+[[test]]
+name = "root-vpn"
+path = "tests/root/vpn.rs"
+
+[[test]]
+name = "root-wifi"
+path = "tests/root/wifi.rs"

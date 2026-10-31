@@ -29,11 +29,14 @@ release-prep VERSION:
 test:
     cargo test -p nlink-lab --lib --test stress --test docs_examples
 
-# Run integration tests (requires root; builds as you, runs the binary as root)
-test-integration:
-    bin=$(cargo test -p nlink-lab --test integration --no-run --message-format=json 2>/dev/null | grep -oP '"executable":"\K[^"]+' | head -1); \
-    test -n "$bin" || { echo "integration test binary not found" >&2; exit 1; }; \
-    sudo -E env "PATH=$PATH:/usr/sbin:/sbin" "$bin" --test-threads=1
+# Run the root suite (requires sudo; builds as you, runs each binary as root):
+# `just test-integration --all-features`, `just test-integration -- partition`
+test-integration *ARGS:
+    scripts/root-tests.sh {{ARGS}}
+
+# Fail if a lab left anything on this host (namespaces, state, locks, …)
+lab-debris:
+    scripts/lab-debris.sh
 
 # Run all tests
 test-all: test test-integration

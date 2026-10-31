@@ -24,7 +24,8 @@ cargo build -p nlink-lab          # Build the library
 cargo build -p nlink-lab-cli      # Build the CLI binary
 cargo build -p nlink-lab-gui      # Build the desktop app (iced)
 cargo test -p nlink-lab --lib     # Run library unit tests
-cargo test                        # Run all tests
+cargo test                        # Run all tests (root tests fail without root; NLINK_LAB_SKIP_ROOT_TESTS=1 skips them)
+just test-integration             # Root suite under sudo: one binary per area, in parallel
 ```
 
 ## Usage

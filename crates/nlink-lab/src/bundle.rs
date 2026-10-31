@@ -83,6 +83,25 @@ pub fn dir_for(lab: &str, default_root: &Path) -> PathBuf {
         .join(lab)
 }
 
+/// Make `dir` an empty directory for a bundle. Only an earlier bundle (a
+/// `summary.txt`) or an empty directory is replaced: `-o .`, or a bundle
+/// dir naming the wrong place, must not wipe what is there.
+fn reset_dir(dir: &Path) -> Result<()> {
+    if dir.exists() {
+        let empty = std::fs::read_dir(dir).is_ok_and(|mut d| d.next().is_none());
+        if !empty && !dir.join("summary.txt").is_file() {
+            return Err(Error::invalid_argument(format!(
+                "{} exists and is not a bundle: give a new directory",
+                dir.display()
+            )));
+        }
+        std::fs::remove_dir_all(dir)
+            .map_err(|e| Error::deploy_failed(format!("{}: {e}", dir.display())))?;
+    }
+    std::fs::create_dir_all(dir)
+        .map_err(|e| Error::deploy_failed(format!("{}: {e}", dir.display())))
+}
+
 /// Writes files under one directory, within the size caps.
 struct Writer {
     dir: PathBuf,
@@ -98,11 +117,19 @@ impl Writer {
                 .push(format!("{rel} (left out: bundle full)"));
             return;
         }
+        const CUT: &[u8] = b"\n[cut: the bundle keeps the first bytes only]\n";
         let room = (self.opts.max_total - self.report.bytes).min(self.opts.max_file);
-        let (data, cut) = if data.len() as u64 > room {
-            (&data[..room as usize], true)
-        } else {
+        // a cut file ends with the marker, within the caps too; with no
+        // room even for that, the file is left out
+        let (data, cut) = if data.len() as u64 <= room {
             (data, false)
+        } else if room >= CUT.len() as u64 {
+            (&data[..(room as usize - CUT.len())], true)
+        } else {
+            self.report
+                .capped
+                .push(format!("{rel} (left out: bundle full)"));
+            return;
         };
         let path = self.dir.join(rel);
         if let Some(parent) = path.parent() {
@@ -111,14 +138,14 @@ impl Writer {
         let written = std::fs::File::create(&path).and_then(|mut f| {
             f.write_all(data)?;
             if cut {
-                f.write_all(b"\n[cut: the bundle keeps the first bytes only]\n")?;
+                f.write_all(CUT)?;
             }
             Ok(())
         });
         match written {
             Ok(()) => {
                 self.report.files += 1;
-                self.report.bytes += data.len() as u64;
+                self.report.bytes += (data.len() + if cut { CUT.len() } else { 0 }) as u64;
                 if cut {
                     self.report.capped.push(format!("{rel} (cut)"));
                 }
@@ -135,14 +162,9 @@ impl Writer {
 }
 
 /// Collect the bundle of `lab` into `dir` (created; an existing bundle
-/// there is replaced).
+/// there is replaced, and anything else there is refused).
 pub async fn collect(lab: &RunningLab, dir: &Path, opts: &BundleOptions) -> Result<BundleReport> {
-    if dir.exists() {
-        std::fs::remove_dir_all(dir)
-            .map_err(|e| Error::deploy_failed(format!("{}: {e}", dir.display())))?;
-    }
-    std::fs::create_dir_all(dir)
-        .map_err(|e| Error::deploy_failed(format!("{}: {e}", dir.display())))?;
+    reset_dir(dir)?;
     let mut w = Writer {
         dir: dir.to_path_buf(),
         opts: opts.clone(),
@@ -386,27 +408,57 @@ mod tests {
         (dir, w)
     }
 
+    /// The cut marker's length.
+    const CUT_LEN: u64 = 46;
+
     #[test]
     fn a_file_over_the_cap_is_cut_with_a_marker() {
-        let (dir, mut w) = writer(10, 1000);
-        w.file("a/b.txt", b"0123456789abcdef");
+        let (dir, mut w) = writer(CUT_LEN + 10, 1000);
+        w.file("a/b.txt", &[b'x'; 100]);
         let text = std::fs::read_to_string(dir.path().join("a/b.txt")).unwrap();
-        assert!(text.starts_with("0123456789\n[cut"), "{text}");
+        assert!(text.starts_with("xxxxxxxxxx\n[cut"), "{text}");
         assert_eq!(w.report.capped, ["a/b.txt (cut)"]);
-        assert_eq!(w.report.bytes, 10);
+        // the marker counts: the file is exactly the cap
+        assert_eq!(w.report.bytes, CUT_LEN + 10);
+        assert_eq!(text.len() as u64, CUT_LEN + 10);
     }
 
     #[test]
     fn past_the_total_the_rest_is_left_out() {
-        let (dir, mut w) = writer(100, 15);
-        w.file("one", b"0123456789");
-        w.file("two", b"0123456789");
+        let (dir, mut w) = writer(1000, 50 + CUT_LEN + 4);
+        w.file("one", &[b'1'; 50]);
+        w.file("two", &[b'2'; 100]);
         w.file("three", b"x");
         assert_eq!(w.report.files, 2);
-        assert_eq!(w.report.bytes, 15);
+        assert_eq!(w.report.bytes, 50 + CUT_LEN + 4, "never past the total");
         assert!(dir.path().join("two").exists(), "cut to what is left");
         assert!(!dir.path().join("three").exists());
         assert!(w.report.capped.iter().any(|c| c.starts_with("three")));
+        // no room even for the marker: left out, not cut
+        let (_d, mut w) = writer(1000, 20);
+        w.file("big", &[b'b'; 100]);
+        assert_eq!((w.report.files, w.report.bytes), (0, 0));
+    }
+
+    #[test]
+    fn only_a_bundle_or_nothing_is_replaced() {
+        let root = tempfile::tempdir().unwrap();
+        let other = root.path().join("other");
+        std::fs::create_dir(&other).unwrap();
+        std::fs::write(other.join("keep.txt"), "mine").unwrap();
+        let e = reset_dir(&other).unwrap_err().to_string();
+        assert!(e.contains("not a bundle"), "{e}");
+        assert!(other.join("keep.txt").exists(), "nothing was wiped");
+        let old = root.path().join("old");
+        std::fs::create_dir(&old).unwrap();
+        std::fs::write(old.join("summary.txt"), "an earlier bundle").unwrap();
+        reset_dir(&old).unwrap();
+        assert!(
+            std::fs::read_dir(&old).unwrap().next().is_none(),
+            "replaced"
+        );
+        reset_dir(&root.path().join("new")).unwrap();
+        assert!(root.path().join("new").is_dir());
     }
 
     #[test]

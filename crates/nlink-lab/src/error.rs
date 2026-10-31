@@ -52,6 +52,16 @@ pub enum Error {
     #[error("node not found: {name}")]
     NodeNotFound { name: String },
 
+    /// A lookup by name found nothing (#328): `what` is `node`,
+    /// `interface` or `network`, and `hint` lists close matches.
+    #[error("lab '{lab}' has no {what} '{name}'{hint}")]
+    Unknown {
+        what: &'static str,
+        name: String,
+        lab: String,
+        hint: String,
+    },
+
     /// Invalid endpoint format.
     #[error("invalid endpoint '{endpoint}': expected 'node:interface' format")]
     InvalidEndpoint { endpoint: String },
@@ -253,7 +263,10 @@ impl Error {
 
     /// Check if this is a "not found" error.
     pub fn is_not_found(&self) -> bool {
-        matches!(self, Self::NotFound { .. } | Self::NodeNotFound { .. })
+        matches!(
+            self,
+            Self::NotFound { .. } | Self::NodeNotFound { .. } | Self::Unknown { .. }
+        )
     }
 
     /// Walk the source chain looking for the first
@@ -331,9 +344,10 @@ impl Error {
             | Error::NllParseAt { .. }
             | Error::NllDiagnostic(_) => ErrorCode::Validation,
             Error::AlreadyExists { .. } => ErrorCode::AlreadyExists,
-            Error::NotFound { .. } | Error::NodeNotFound { .. } | Error::MovedState { .. } => {
-                ErrorCode::NotFound
-            }
+            Error::NotFound { .. }
+            | Error::NodeNotFound { .. }
+            | Error::Unknown { .. }
+            | Error::MovedState { .. } => ErrorCode::NotFound,
             Error::InvalidEndpoint { .. } | Error::InvalidArgument(_) => ErrorCode::InvalidArgument,
             Error::Capture(_) | Error::State { .. } => ErrorCode::Io,
             Error::Timeout(_) | Error::TimedOut(_) => ErrorCode::Timeout,

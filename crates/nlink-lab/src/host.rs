@@ -905,7 +905,7 @@ mod tests {
 
     #[test]
     fn node_link_count_counts_links_members_and_mgmt() {
-        use crate::{Link, Network, Topology};
+        use crate::types::{Link, Network, Topology};
         let mut topo = Topology::default();
         topo.links.push(Link {
             endpoints: ["r1:eth0".into(), "h1:eth0".into()],

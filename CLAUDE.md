@@ -123,7 +123,8 @@ crates/nlink-lab/src/
   bundle.rs         # Failure bundles: logs, status, events, node state, pcaps (#338)
   wifi.rs           # Wi-Fi emulation (hostapd/wpa_supplicant config gen, hwsim radios over netlink)
   deploy/           # Deployer — plan + execute (see "Deployment Sequence")
-  running.rs        # RunningLab — interact with deployed lab
+  running.rs        # RunningLab — interact with deployed lab (the engine under the handles)
+  lab.rs            # Lab / Node / Iface / Network handles + Netem (#328): Arc snapshot, queued writes
   state.rs          # State persistence (/var/lib/nlink-lab/labs or $NLINK_LAB_STATE_DIR, group nlink-lab, schema 2, flock in .locks/; snapshots/<name>/ checkpoints; legacy per-user roots + migrate_lab; context/<uid>)
   events.rs         # Lifecycle event log (events.ndjson per lab; `events` command, backend republish)
   frr.rs            # FRR routing daemons: pathspaces, per-daemon config generation, neighbour resolution

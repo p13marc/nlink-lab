@@ -592,6 +592,15 @@ impl RunningLab {
         }
     }
 
+    /// The lab as its state file has it now, with what only memory holds
+    /// (the deploy's assertion results) carried over: what a handle (#328)
+    /// keeps after a change that failed.
+    pub(crate) fn reloaded(&self) -> Result<RunningLab> {
+        let mut fresh = RunningLab::load(self.name())?;
+        fresh.assertion_results = self.assertion_results.clone();
+        Ok(fresh)
+    }
+
     /// This handle's state is what is on disk now: deploy just wrote it.
     pub(crate) fn mark_saved(&self) {
         *self.baseline.lock().unwrap_or_else(|p| p.into_inner()) = self.snapshot();

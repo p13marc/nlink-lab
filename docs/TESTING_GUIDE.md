@@ -142,24 +142,57 @@ Point the macro at an NLL topology file:
 use nlink_lab::prelude::*;
 
 #[lab_test("examples/simple.nll")]
-async fn test_connectivity(lab: RunningLab) {
-    let out = lab.exec("host", "ping", &["-c1", "-W1", "10.0.0.1"]).unwrap();
+async fn test_connectivity(lab: Lab) {
+    let out = lab.node("host").unwrap().exec("ping", &["-c1", "-W1", "10.0.0.1"]).unwrap();
     assert_eq!(out.exit_code, 0);
 }
 ```
 
-`nlink_lab::prelude::*` brings `lab_test`, `RunningLab`, `Topology`,
-`TopologyBuilder`, `ExecOutput`, `Impairment`, `Error`/`Result` and the
-`feature`/`privileged` gates. Everything a test needs is in the
+`nlink_lab::prelude::*` brings `lab_test`, the lab handles (`Lab`,
+`Node`, `Iface`, `Network`), `Netem` and its units (`ms`, `secs`, `pct`,
+`mbit`, …), `Topology`, `TopologyBuilder`, `ExecOutput`, `Error`/`Result`
+and the `feature`/`privileged` gates. Everything a test needs is in the
 library's stable layer; `nlink_lab::internal` is for nlink-lab's own
 binaries (#331).
+
+### The lab handles
+
+A test that takes `lab: Lab` gets the lab as handles (#328). A name is
+looked up once: `lab.node("host")?`, `node.iface("eth0")?`,
+`lab.endpoint("host:eth0")?`, `lab.network("lan")?`. A typo fails there,
+naming the close matches. The handles are cheap clones, `Send`, `Sync`
+and `'static`, and every method takes `&self`, so one task can change a
+link while another waits:
+
+```rust
+use nlink_lab::prelude::*;
+
+#[lab_test("examples/simple.nll")]
+async fn survives_a_slow_link(lab: Lab) {
+    let host = lab.node("host").unwrap();
+    let eth0 = host.iface("eth0").unwrap();
+    let server = host.spawn(&["my-server", "--port", "8080"]).await.unwrap();
+    eth0.impair(&Netem::new().delay(ms(50)).loss(pct(1.0))).await.unwrap();
+    let cut = eth0.clone();
+    tokio::spawn(async move { cut.partition().await }).await.unwrap().unwrap();
+    eth0.heal().await.unwrap();
+    assert!(host.kill(server).unwrap());
+}
+```
+
+`Node` runs commands and processes (`exec`, `spawn`, `kill`, the
+`wait_for_*`), and reads `addresses`, `routes_to`, `conntrack` and
+`firewall_counters`. `Iface` impairs (`impair`, `impair_dir`,
+`clear_impairment`), partitions and heals, and sets the MTU. `Network`
+holds the per-pair rules (`impair_pair`, `clear_pair`). `lab: RunningLab`
+still works, for now.
 
 ### Builder-based form
 
 Reference a function that returns a `Topology`:
 
 ```rust
-use nlink_lab::{lab_test, TopologyBuilder, RunningLab};
+use nlink_lab::{lab_test, TopologyBuilder, Lab};
 
 fn two_nodes() -> nlink_lab::Topology {
     TopologyBuilder::new("two-nodes")
@@ -170,8 +203,8 @@ fn two_nodes() -> nlink_lab::Topology {
 }
 
 #[lab_test(topology = two_nodes)]
-async fn test_route(lab: RunningLab) {
-    let out = lab.exec("b", "ip", &["route", "show"]).unwrap();
+async fn test_route(lab: Lab) {
+    let out = lab.node("b").unwrap().exec("ip", &["route", "show"]).unwrap();
     assert!(out.stdout.contains("default via 10.0.0.1"));
 }
 ```
@@ -180,13 +213,13 @@ async fn test_route(lab: RunningLab) {
 
 ### Executing commands in nodes
 
-`lab.exec(node, cmd, args)` runs a command inside the node's network namespace
+`lab.node(node).unwrap().exec(cmd, args)` runs a command inside the node's network namespace
 and returns an `ExecOutput` with `stdout`, `stderr`, and `exit_code`:
 
 ```rust
 #[lab_test("examples/simple.nll")]
-async fn verify_address(lab: RunningLab) {
-    let out = lab.exec("router", "ip", &["addr", "show", "eth0"]).unwrap();
+async fn verify_address(lab: Lab) {
+    let out = lab.node("router").unwrap().exec("ip", &["addr", "show", "eth0"]).unwrap();
     assert_eq!(out.exit_code, 0);
     assert!(out.stdout.contains("10.0.0.1/24"));
 }
@@ -196,8 +229,8 @@ async fn verify_address(lab: RunningLab) {
 
 ```rust
 #[lab_test("examples/simple.nll")]
-async fn ping_gateway(lab: RunningLab) {
-    let out = lab.exec("host", "ping", &["-c1", "-W1", "10.0.0.1"]).unwrap();
+async fn ping_gateway(lab: Lab) {
+    let out = lab.node("host").unwrap().exec("ping", &["-c1", "-W1", "10.0.0.1"]).unwrap();
     assert_eq!(
         out.exit_code, 0,
         "ping failed: stdout={} stderr={}",
@@ -210,8 +243,8 @@ async fn ping_gateway(lab: RunningLab) {
 
 ```rust
 #[lab_test("examples/simple.nll")]
-async fn ip_forwarding_enabled(lab: RunningLab) {
-    let out = lab.exec("router", "cat", &["/proc/sys/net/ipv4/ip_forward"]).unwrap();
+async fn ip_forwarding_enabled(lab: Lab) {
+    let out = lab.node("router").unwrap().exec("cat", &["/proc/sys/net/ipv4/ip_forward"]).unwrap();
     assert_eq!(out.stdout.trim(), "1");
 }
 ```
@@ -222,8 +255,8 @@ Use `lab.topology()` to inspect the parsed topology without executing anything:
 
 ```rust
 #[lab_test("examples/simple.nll")]
-async fn topology_shape(lab: RunningLab) {
-    let topo = lab.topology();
+async fn topology_shape(lab: Lab) {
+    let topo = lab.topology().unwrap();
     assert_eq!(topo.nodes.len(), 2);
     assert_eq!(topo.links.len(), 1);
 }
@@ -233,8 +266,8 @@ async fn topology_shape(lab: RunningLab) {
 
 ```rust
 #[lab_test(topology = two_nodes)]
-async fn unreachable_host(lab: RunningLab) {
-    let out = lab.exec("a", "ping", &["-c1", "-W1", "192.168.99.1"]).unwrap();
+async fn unreachable_host(lab: Lab) {
+    let out = lab.node("a").unwrap().exec("ping", &["-c1", "-W1", "192.168.99.1"]).unwrap();
     assert_ne!(out.exit_code, 0, "expected ping to fail");
 }
 ```
@@ -345,7 +378,7 @@ sudo cargo test -p my-crate --test integration
 ```
 
 **Prefer `exec` assertions over topology introspection.** Checking that
-`lab.exec("node", "ip", &["addr"])` returns the expected address is more
+`lab.node("node").unwrap().exec("ip", &["addr"])` returns the expected address is more
 meaningful than checking `lab.topology().links[0].left.addr` -- it proves
 the kernel state matches the intent, not just that the data structure is
 correct.

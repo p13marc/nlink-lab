@@ -77,6 +77,7 @@
 pub mod builder;
 pub mod bundle;
 pub mod error;
+pub mod lab;
 pub mod parser;
 pub mod running;
 pub mod test_helpers;
@@ -175,18 +176,22 @@ mod schema_check_tests;
 
 pub use builder::TopologyBuilder;
 pub use error::{Error, Result};
+pub use lab::{Iface, Lab, Netem, Network, Node};
 /// The daemon API's wire types: what an [`OpCtx`] reports is an
 /// [`api::OpEvent`].
 pub use nlink_lab_shared::api;
 pub use ops::{CancelToken, OpCtx, ProgressSink};
+pub use proc_stat::ProcStat;
 pub use running::{
     ExecChild, ExecMode, ExecOpts, ExecOutput, LogStream, NodeDiagnostic, PreparedExec,
     ProcessInfo, RunningLab, Signal, SpawnOpts, parse_signal,
 };
+pub use state::LabInfo;
+pub use test_runner::AssertionResult;
 pub use types::{
     ContainerRuntime, DnsMode, EndpointRef, ExecConfig, FirewallConfig, FirewallRule, Impairment,
-    InterfaceConfig, InterfaceKind, LabConfig, Link, Network, Node, PortConfig, Profile, RateLimit,
-    RouteConfig, Topology, VlanConfig, VrfConfig, WireguardConfig,
+    InterfaceConfig, InterfaceKind, LabConfig, Link, PortConfig, Profile, RateLimit, RouteConfig,
+    Topology, VlanConfig, VrfConfig, WireguardConfig,
 };
 pub use validator::{
     RuleOptions, Severity, ValidationIssue, ValidationResult, rule_ids, rule_severity,
@@ -210,8 +215,6 @@ pub use events::{LifecycleEvent, LifecycleKind};
 #[doc(hidden)]
 pub use lint::{LINT_RULE_IDS, LintFinding, lint};
 #[doc(hidden)]
-pub use proc_stat::ProcStat;
-#[doc(hidden)]
 pub use types::{mgmt_bridge_name_for, network_peer_name_for};
 #[doc(hidden)]
 pub use watch::{
@@ -225,9 +228,11 @@ pub use nlink_lab_macros::lab_test;
 /// What a lab test needs, in one import: `use nlink_lab::prelude::*;`
 /// (#331). It grows the lab handles when they land (#328).
 pub mod prelude {
+    pub use crate::lab::{bps, gbit, kbit, mbit, ms, pct, secs, us};
     pub use crate::test_helpers::{feature, privileged};
     pub use crate::{
-        Error, ExecOutput, Impairment, Result, RunningLab, Topology, TopologyBuilder, lab_test,
+        Error, ExecOutput, Iface, Impairment, Lab, Netem, Network, Node, Result, RunningLab,
+        Topology, TopologyBuilder, lab_test,
     };
 }
 

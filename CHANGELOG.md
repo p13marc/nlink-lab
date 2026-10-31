@@ -57,6 +57,25 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **A lab operation no longer fails with `Locked` right after another
+  one finished** (#339). A child that another thread forks while a lab's
+  lock is held shares the lock until it execs (`flock` belongs to the open
+  file description; the child's `O_CLOEXEC` copy closes only at `exec`,
+  after it has entered its namespace). Taking the lock again in that
+  window failed although nobody held it: in the daemon, whose jobs for
+  different labs fork on several threads, and in a multi-threaded test.
+  The fail-fast lock (deploy, apply, destroy) now retries for up to 2 s
+  before it reports `Locked`; a real holder holds it far longer.
+
+- **`test_helpers::cleanup_lab` no longer sweeps another lab's
+  namespaces** (#339). It deleted every namespace under the lab's
+  prefix, so a lab named `simple` took `simple-test-…` down with it;
+  it now skips a namespace tagged for another lab, as
+  `destroy --force` does. It also kills what still runs in the
+  namespaces it deletes, and FRR daemons that outlived theirs, and
+  removes the lab's FRR run dirs, cgroup and stale `/etc/netns`
+  overlays. `#[lab_test]`'s cleanup guard is this sweep.
+
 - **A topology's `run … background` reports its exit code** (#320). It
   was started without the reaper `spawn` uses, so when a deployed service
   died, `ps` showed it exited with no code and the `ProcessExited` event
@@ -82,6 +101,18 @@ All notable changes to this project will be documented in this file.
   that exists.
 
 ### Changed
+
+- **The root suite runs in parallel** (#339). `tests/integration.rs`
+  (9 436 lines, 150 tests) is now one test binary per area under
+  `crates/nlink-lab/tests/root/`, and every lab a test deploys has a
+  name of its own. `just test-integration` (`scripts/root-tests.sh`)
+  runs each binary four tests at a time, except the three that touch
+  host-global state; it takes cargo flags (`--all-features`) and,
+  after `--`, test filters. `scripts/lab-debris.sh` (`just
+  lab-debris`) fails on anything a lab left on the host, and the
+  integration lane runs it: namespaces, overlays, tags, runtime and
+  state dirs, lock files, `/etc/hosts` sections, subnet-pool entries
+  and root-namespace mgmt links.
 
 - **`RunningLab::spawn` logs and reports an exit code** (#320). It is now
   `spawn_with_logs` into the lab's log directory: the process's output

@@ -632,6 +632,49 @@ pub fn runtime_dirs(lab: &str, node: &str, pathspace: &str) -> Vec<PathBuf> {
     vec![node_dir(lab, node), run_dir(pathspace), lib_dir(pathspace)]
 }
 
+/// SIGKILL every FRR daemon of `topology`'s nodes, found by its `-N
+/// <pathspace>` argument rather than by namespace: a daemon outlives a
+/// deleted namespace and pins it. For the cleanup paths that have no
+/// state to go on (a test's sweep after a failed deploy). Returns how
+/// many were signalled.
+pub fn kill_daemons(topology: &Topology) -> usize {
+    let wanted: BTreeSet<String> = topology
+        .nodes
+        .keys()
+        .map(|n| pathspace(&topology.namespace_name(n)))
+        .collect();
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return 0;
+    };
+    let mut killed = 0;
+    for e in entries.flatten() {
+        let Ok(pid) = e.file_name().to_string_lossy().parse::<i32>() else {
+            continue;
+        };
+        let Ok(cmdline) = std::fs::read(e.path().join("cmdline")) else {
+            continue;
+        };
+        let args: Vec<&[u8]> = cmdline.split(|&b| b == 0).collect();
+        // an FRR daemon (`/usr/lib/frr/zebra`, …) of one of these pathspaces
+        let daemon = args.first().is_some_and(|a0| {
+            let a0 = String::from_utf8_lossy(a0);
+            let base = a0.rsplit('/').next().unwrap_or("");
+            [Daemon::Zebra, Daemon::Ospfd, Daemon::Bgpd]
+                .iter()
+                .any(|d| d.name() == base)
+        });
+        let ours = daemon
+            && args
+                .windows(2)
+                .any(|w| w[0] == b"-N" && wanted.contains(&*String::from_utf8_lossy(w[1])));
+        // SAFETY: kill(2) on a pid read from /proc; a stale one is ESRCH.
+        if ours && unsafe { libc::kill(pid, libc::SIGKILL) } == 0 {
+            killed += 1;
+        }
+    }
+    killed
+}
+
 /// Remove every FRR runtime directory of a lab (destroy / orphan reap).
 pub fn cleanup(topology: &Topology) {
     for (node_name, node) in &topology.nodes {

@@ -530,14 +530,31 @@ Three layers:
   planner, in the same file as the code (`#[cfg(test)] mod tests`).
   They do not need root. `plan/mod.rs`'s tests assert what a topology
   declares (`stack_of(&plan, "node")`) without a kernel.
-- **Root tests** in `crates/nlink-lab/tests/integration.rs`: a
+- **Root tests** in `crates/nlink-lab/tests/root/<area>.rs`, one test
+  binary per area (`root-links`, `root-firewall`, `root-apply`, …;
+  shared helpers in `tests/root/common/`): a
   `#[lab_test("examples/x.nll")]` (deploys the file, hands the test a
   `RunningLab`, destroys it) or a `#[tokio::test]` that starts with
   `if !privileged("name") { return; }`. Without CAP_NET_ADMIN and
   CAP_SYS_ADMIN they fail loudly, unless `NLINK_LAB_SKIP_ROOT_TESTS=1`
   (set in ci.yml's rootless lanes) makes them skip. `just
-  test-integration` runs them (build as you, run the binary as root);
-  integration.yml runs them in CI.
+  test-integration` (`scripts/root-tests.sh`) builds them as you and
+  runs each binary as root; integration.yml runs it in CI, then
+  `scripts/lab-debris.sh` fails the lane on anything a lab left behind.
+  - **In parallel** (#339): every binary runs four tests at once
+    (`ROOT_TEST_THREADS`), except `root-host`, `root-frr` and
+    `root-wifi`, which touch host-global state (`/etc/hosts`,
+    host-reachable mgmt bridges, the subnet pool, macvlan parents,
+    hwsim radios, FRR's run dirs, process-wide zombie checks) and run
+    one test at a time. A new test that touches the host outside its
+    lab's namespaces belongs in `root-host`.
+  - **Names of their own**: a test's labs must not share a name, or a
+    namespace prefix, with any other test's. `#[lab_test]` suffixes
+    them; a plain test interpolates `format!("<tag>-{}",
+    std::process::id())` with a tag no other test uses, or passes an
+    example through `common::unique`. A unit test in
+    `test_helpers.rs` enforces this. Cleanup sweeps never touch a
+    namespace tagged for another lab.
 - **Examples**: every `examples/**/*.nll` must parse
   (`test_all_nll_examples_parse` in `lower.rs`), plan
   (`every_example_plans` in `plan/mod.rs`), round-trip

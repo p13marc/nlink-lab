@@ -68,16 +68,13 @@ jobs:
       # messages: the human output is coloured under CARGO_TERM_COLOR=always
       # (set by the toolchain action), which made a text grep miss and left
       # `$bin` empty — the cause of the red lane between runs 79 and 81 (#81).
+      # One binary per area (#339): root-host, root-frr and root-wifi one
+      # test at a time, the others four at once. scripts/root-tests.sh
+      # prints each binary's wall time.
       - name: Integration tests
-        run: |
-          bin=$(cargo test -p nlink-lab --test integration --no-run --message-format=json 2>/dev/null | grep -oP '"executable":"\K[^"]+' | head -1)
-          test -n "$bin" || { echo "::error::integration test binary not found"; exit 1; }
-          sudo -E env "PATH=$PATH:/usr/sbin:/sbin" NLINK_LAB_SKIP_ROOT_TESTS= "$bin" --test-threads=1
+        run: scripts/root-tests.sh
       - name: Integration tests (all features)
-        run: |
-          bin=$(cargo test -p nlink-lab --all-features --test integration --no-run --message-format=json 2>/dev/null | grep -oP '"executable":"\K[^"]+' | head -1)
-          test -n "$bin" || { echo "::error::integration test binary (all features) not found"; exit 1; }
-          sudo -E env "PATH=$PATH:/usr/sbin:/sbin" NLINK_LAB_SKIP_ROOT_TESTS= "$bin" --test-threads=1
+        run: scripts/root-tests.sh --all-features
       - name: Daemon end-to-end
         run: |
           bin=$(cargo test -p nlink-labd --test e2e --no-run --message-format=json 2>/dev/null | grep -oP '"executable":"\K[^"]*/deps/e2e-[^"]+' | head -1)
@@ -90,7 +87,4 @@ jobs:
           sudo -E env "PATH=$PATH:/usr/sbin:/sbin" NLINK_LAB_SKIP_ROOT_TESTS= "$bin" --exact daemon_tests::sessions_reach_a_real_lab daemon_tests::workflows_reach_a_real_daemon
       - name: No lab debris left behind
         if: always()
-        run: |
-          sudo ip netns list | tee /dev/stderr | grep -q . && { echo "::error::leftover network namespaces"; exit 1; } || true
-          test -z "$(sudo ls /etc/netns 2>/dev/null)" || { echo "::error::leftover /etc/netns overlays"; sudo ls /etc/netns; exit 1; }
-          test -z "$(sudo ls /run/nlink-lab/netns 2>/dev/null)" || { echo "::error::leftover namespace tags"; sudo ls /run/nlink-lab/netns; exit 1; }
+        run: scripts/lab-debris.sh

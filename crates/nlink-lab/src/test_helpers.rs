@@ -248,11 +248,22 @@ pub async fn cleanup_lab(topology: &Topology) -> CleanupReport {
         }
     }
 
-    // 2. Manual sweep — idempotent, so it always runs.
+    // 2. Manual sweep — idempotent, so it always runs. A namespace under
+    // the prefix that is tagged for another lab is not ours: test labs
+    // run in parallel (#339), and `simple-…` must not take
+    // `simple-test-…` down with it (the rule `host::force_cleanup` keeps).
     let ns_prefix = format!("{prefix}-");
     match namespace::list() {
         Ok(names) => {
-            for ns in names.iter().filter(|n| n.starts_with(&ns_prefix)) {
+            let mine: Vec<String> = names
+                .into_iter()
+                .filter(|n| n.starts_with(&ns_prefix))
+                .filter(|n| crate::netns_tag::lab_of(n).is_none_or(|owner| owner == lab_name))
+                .collect();
+            // FRR daemons (and anything else still running) pin a deleted
+            // namespace until they are killed.
+            crate::host::stop_namespace_processes(&mine).await;
+            for ns in &mine {
                 match namespace::delete(ns) {
                     Ok(()) => {
                         crate::dns::remove_netns_etc(ns);
@@ -263,10 +274,30 @@ pub async fn cleanup_lab(topology: &Topology) -> CleanupReport {
                         .warnings
                         .push(format!("delete namespace '{ns}': {e}")),
                 }
+                let ps = crate::frr::pathspace(ns);
+                let _ = std::fs::remove_dir_all(crate::frr::run_dir(&ps));
+                let _ = std::fs::remove_dir_all(crate::frr::lib_dir(&ps));
             }
+            // …and daemons whose namespace is already gone pin it still.
+            crate::frr::kill_daemons(topology);
         }
         Err(e) => report.warnings.push(format!("list namespaces: {e}")),
     }
+    // `/etc/netns` overlays of this lab's namespaces that are already
+    // gone (not another lab's: the same tag check).
+    if let Ok(entries) = std::fs::read_dir("/etc/netns") {
+        for e in entries.flatten() {
+            let ns = e.file_name().to_string_lossy().into_owned();
+            if ns.starts_with(&ns_prefix)
+                && !namespace::exists(&ns)
+                && crate::netns_tag::lab_of(&ns).is_none_or(|owner| owner == lab_name)
+            {
+                crate::dns::remove_netns_etc(&ns);
+            }
+        }
+    }
+    crate::frr::cleanup(topology);
+    crate::cgroup::remove_lab(&lab_name);
 
     if topology.lab.mgmt_host_reachable {
         match Connection::<Route>::new() {
@@ -647,13 +678,32 @@ mod tests {
         assert!(!feature_required(Some("vrfs"), "vrf"));
     }
 
+    /// The root suite's sources, one test binary per area (#339).
+    fn root_suite() -> Vec<(String, String)> {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/root");
+        let mut files: Vec<(String, String)> = std::fs::read_dir(&dir)
+            .expect("tests/root")
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|x| x == "rs"))
+            .map(|p| {
+                let name = p.file_name().unwrap().to_string_lossy().into_owned();
+                (name, std::fs::read_to_string(&p).unwrap())
+            })
+            .collect();
+        files.sort();
+        assert!(files.len() > 5, "{files:?}");
+        files
+    }
+
     /// Every feature the integration lane requires is one a test gates
     /// on: a name no `feature()` call passes (a typo, a renamed gate)
     /// would silently not be required.
     #[test]
     fn the_integration_lanes_strict_features_are_gated_on() {
         let workflow = include_str!("../../../.forgejo/workflows/integration.yml");
-        let tests = include_str!("../tests/integration.rs");
+        let tests: String = root_suite().into_iter().map(|(_, src)| src).collect();
+        let tests = tests.as_str();
         let list = workflow
             .lines()
             .find_map(|l| l.trim().strip_prefix("NLINK_LAB_STRICT_FEATURES:"))
@@ -689,6 +739,58 @@ mod tests {
             names.extend(list.split(',').filter_map(literal));
         }
         names
+    }
+
+    /// The root binaries run their tests in parallel (#339), so every
+    /// lab a test deploys must have a name no other test uses: an inline
+    /// `lab "…"` interpolates a per-process name, an example deployed
+    /// without `#[lab_test]` goes through `common::unique`, and each
+    /// `format!("<tag>-{}", std::process::id())` tag is used once.
+    ///
+    /// A text check, with known limits: a test's body ends at the first
+    /// `}` in column 0 (rustfmt indents everything nested, and fmt is
+    /// gated in CI), and a literal lab name counts as rewritten only
+    /// through `.replace("<name>", &name)`.
+    #[test]
+    fn root_tests_deploy_labs_under_names_of_their_own() {
+        let mut tags = std::collections::BTreeMap::<String, String>::new();
+        for (file, src) in root_suite() {
+            for (i, line) in src.lines().enumerate() {
+                let at = format!("{file}:{}", i + 1);
+                if let Some(rest) = line.split("lab \"").nth(1) {
+                    // `lab "{lab_name}"`, `lab \"{name}\"`, or a literal that
+                    // a `.replace(…, &name)` right after rewrites
+                    let name = rest.split(['"', '\\']).next().unwrap_or("");
+                    let replaced = src.contains(&format!(".replace(\"{name}\", &name)"));
+                    assert!(
+                        name.contains('{') || replaced || name.is_empty(),
+                        "{at}: lab \"{name}\" is a fixed name; interpolate a per-process one"
+                    );
+                }
+                if let Some(rest) = line.split("format!(\"").nth(1)
+                    && let Some(tag) =
+                        rest.strip_suffix("-{}\", std::process::id())").or_else(|| {
+                            rest.split_once("-{}\", std::process::id())")
+                                .map(|(t, _)| t)
+                        })
+                    && !tag.contains('{')
+                    && let Some(first) = tags.insert(tag.to_string(), at.clone())
+                {
+                    panic!("{at}: the lab tag '{tag}' is also used at {first}");
+                }
+            }
+            // A plain test that parses an example must suffix it.
+            for test in src.split("\n#[tokio::test]").skip(1) {
+                let body = &test[..test.find("\n}\n").unwrap_or(test.len())];
+                if body.contains("/../../examples/") && body.contains("parse_file(") {
+                    assert!(
+                        body.contains("unique(") || body.contains("lab.name ="),
+                        "{file}: a test deploys an example under its own name:\n{}",
+                        &body[..body.len().min(300)]
+                    );
+                }
+            }
+        }
     }
 
     #[test]

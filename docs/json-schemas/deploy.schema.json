@@ -39,6 +39,15 @@
       "type": "integer",
       "format": "uint32",
       "minimum": 0
+    },
+    "seed": {
+      "description": "The seed the lab was deployed with (#337); absent on a kernel\nwithout netem seeds.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
     }
   },
   "required": [

@@ -27,6 +27,9 @@ pub struct ImpairmentSpec {
     pub loss_correlation: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<String>,
+    /// The netem seed, in place of the one the lab's seed derives (#337).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed: Option<String>,
 }
 
 /// Which way an impairment acts on an endpoint's link: out of it (its
@@ -151,6 +154,9 @@ pub struct DeployOptions {
     /// Appended to the lab's name and prefix.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub suffix: Option<String>,
+    /// The lab's seed, in place of the topology's own (#337, API 1.2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed: Option<u64>,
 }
 
 /// Options of an apply.

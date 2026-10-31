@@ -747,6 +747,89 @@ link d:eth1 -- e:eth1 { 10.0.1.1/24 -- 10.0.1.2/24  delay 5ms  rate 1mbit }
         );
     }
 
+    /// A seeded lab seeds every netem from its place in the lab (#337):
+    /// an endpoint's root, a per-pair leaf, and the tree's default leaf.
+    /// An impairment's own `seed` wins; an unseeded lab sends none.
+    #[test]
+    fn a_lab_seed_seeds_every_netem() {
+        use nlink::netlink::tc_spec::QdiscSpec;
+        let src = |seed: &str| {
+            format!(
+                r#"lab "s" {{ {seed} }}
+node a
+node b
+node c
+network lan {{
+  members [a:eth0, b:eth0, c:eth0]
+  subnet 10.50.0.0/24
+  impair a -- b {{ loss 5% }}
+}}
+impair a:eth0 delay 1ms
+node d
+node e
+link d:eth0 -- e:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24  loss 2% }}
+link d:eth1 -- e:eth1 {{ 10.0.1.1/24 -- 10.0.1.2/24  loss 2% seed 99 }}
+"#
+            )
+        };
+        let netem_seeds = |p: &Plan, node: &str| -> Vec<(String, Option<u64>)> {
+            let n = &stack_of(p, node).network;
+            let mut out: Vec<(String, Option<u64>)> = n
+                .qdiscs()
+                .iter()
+                .filter_map(|q| match q.qdisc_type() {
+                    QdiscSpec::Netem(c) => Some((q.dev().to_string(), c.seed)),
+                    _ => None,
+                })
+                .collect();
+            for tree in n.tc_trees() {
+                for leaf in tree.leaves() {
+                    if let QdiscSpec::Netem(c) = &leaf.spec {
+                        out.push((format!("leaf {}", leaf.handle), c.seed));
+                    }
+                }
+            }
+            out.sort();
+            out
+        };
+        let seeded = plan_of(&src("seed 7"));
+        let derive = crate::seed::derive;
+        assert_eq!(
+            netem_seeds(&seeded, "d"),
+            [
+                ("eth0".to_string(), Some(derive(7, "d:eth0"))),
+                ("eth1".to_string(), Some(99)),
+            ]
+        );
+        let leaves = netem_seeds(&seeded, "a");
+        assert_eq!(leaves.len(), 2, "{leaves:?}");
+        let mut want = vec![
+            Some(derive(7, "a:eth0")),
+            Some(derive(
+                7,
+                &crate::seed::pair_key("lan", "a", "b", "a", "eth0"),
+            )),
+        ];
+        let mut got: Vec<Option<u64>> = leaves.iter().map(|(_, s)| *s).collect();
+        want.sort();
+        got.sort();
+        assert_eq!(got, want);
+        // the same lab under another name draws the same numbers
+        assert_eq!(
+            netem_seeds(
+                &plan_of(&src("seed 7").replace("lab \"s\"", "lab \"s-test-1\"")),
+                "d"
+            ),
+            netem_seeds(&seeded, "d")
+        );
+        let unseeded = plan_of(&src(""));
+        assert!(
+            netem_seeds(&unseeded, "d").iter().all(|(_, s)| s.is_none()),
+            "{:?}",
+            netem_seeds(&unseeded, "d")
+        );
+    }
+
     /// A partition is a clsact with a matchall on both hooks (#168): the
     /// interface's root qdisc stays declared. Ingress drops, egress steals
     /// (#347): a drop there would be seen by the sender's own stack.

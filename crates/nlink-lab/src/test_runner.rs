@@ -30,6 +30,9 @@ pub struct TestResult {
     /// The lab left deployed for inspection (`keep_failed`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kept: Option<String>,
+    /// The seed the lab ran with (#337): `test --seed N` replays it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed: Option<u64>,
 }
 
 /// What a test runs besides deploy, `validate` and destroy.
@@ -42,6 +45,8 @@ pub struct TestOptions {
     /// Leave a failed lab deployed, for inspection, instead of destroying
     /// it.
     pub keep_failed: bool,
+    /// The lab's seed, in place of the topology's own (#337).
+    pub seed: Option<u64>,
 }
 
 impl TestResult {
@@ -55,6 +60,7 @@ impl TestResult {
             passed: false,
             error: Some(error.to_string()),
             kept: None,
+            seed: None,
         }
     }
 }
@@ -118,17 +124,22 @@ async fn test_ctx(
     let total_start = Instant::now();
 
     // Parse
-    let topology = if params.is_empty() {
+    let mut topology = if params.is_empty() {
         crate::parser::parse_file(path)?
     } else {
         crate::parser::parse_file_with_params(path, params)?
     };
+    if let Some(seed) = opts.seed {
+        crate::seed::parse(&seed.to_string()).map_err(crate::Error::invalid_argument)?;
+        topology.lab.seed = Some(seed);
+    }
     topology.validate().bail()?;
 
     // Deploy
     let deploy_start = Instant::now();
     let lab = topology.deploy_with(ctx).await?;
     let deploy_ms = deploy_start.elapsed().as_millis() as u64;
+    let seed = lab.topology().lab.seed;
 
     // `deploy()` ran the assertions once already and kept the outcome.
     // Running them again doubled a failing lab's retry budget, and a
@@ -228,6 +239,7 @@ async fn test_ctx(
         passed,
         error,
         kept,
+        seed,
     })
 }
 
@@ -591,6 +603,12 @@ pub fn format_junit(results: &[TestResult]) -> String {
             "  <testsuite name=\"{}\" tests=\"{tests}\" failures=\"{failures}\" errors=\"{errors}\" time=\"{time_secs:.3}\">\n",
             escape_xml(&result.file)
         ));
+        // the seed the lab ran with: `test --seed N` replays its losses
+        if let Some(seed) = result.seed {
+            xml.push_str(&format!(
+                "    <properties>\n      <property name=\"seed\" value=\"{seed}\"/>\n    </properties>\n"
+            ));
+        }
         // A file that did not parse, validate, deploy or destroy: it was
         // missing from the report, which then read as all green (#208).
         if let Some(err) = &result.error {
@@ -642,6 +660,9 @@ pub fn format_tap(results: &[TestResult]) -> String {
 
     let mut n = 0;
     for result in results {
+        if let Some(seed) = result.seed {
+            out.push_str(&format!("# {}: seed {seed}\n", tap_text(&result.file)));
+        }
         if let Some(err) = &result.error {
             n += 1;
             out.push_str(&format!("not ok {n} - {}\n", tap_text(&result.file)));
@@ -754,6 +775,7 @@ mod tests {
                 passed: false,
                 error: None,
                 kept: None,
+                seed: None,
             },
         ];
         let tap = format_tap(&results);
@@ -802,6 +824,7 @@ mod tests {
             passed: true,
             error: None,
             kept: None,
+            seed: None,
         }];
         let xml = format_junit(&results);
         assert!(xml.contains("<testsuite name=\"test.nll\" tests=\"1\" failures=\"0\""));
@@ -824,6 +847,7 @@ mod tests {
             passed: false,
             error: None,
             kept: None,
+            seed: None,
         }];
         let xml = format_junit(&results);
         assert!(xml.contains("failures=\"1\""));
@@ -853,6 +877,7 @@ mod tests {
             passed: false,
             error: None,
             kept: None,
+            seed: None,
         }];
         let tap = format_tap(&results);
         assert!(tap.starts_with("TAP version 13\n1..2\n"));
@@ -1006,6 +1031,7 @@ validate {
             passed: true,
             error: None,
             kept: None,
+            seed: None,
         }];
         let tap = format_tap(&results);
         assert!(tap.contains("1..0"));

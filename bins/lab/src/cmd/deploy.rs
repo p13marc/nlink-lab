@@ -22,6 +22,10 @@ pub struct DeployReport {
     pub assertions: Vec<nlink_lab::test_runner::AssertionResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assertions_failed: Option<bool>,
+    /// The seed the lab was deployed with (#337); absent on a kernel
+    /// without netem seeds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed: Option<u64>,
 }
 
 #[derive(clap::Args)]
@@ -59,6 +63,13 @@ pub struct Args {
     #[arg(long)]
     pub unique: bool,
 
+    /// The lab's seed, in place of the topology's `seed`: every netem
+    /// derives its seed from it, so a redeploy with the same seed loses
+    /// and corrupts the same packets of the same traffic. Without one, a
+    /// seed is drawn and `status` shows it.
+    #[arg(long, value_name = "N", value_parser = crate::args::seed)]
+    pub seed: Option<u64>,
+
     /// With an archive: deploy its rendered topology instead of parsing
     /// its NLL (an archive made by a newer nlink-lab).
     #[arg(long)]
@@ -76,6 +87,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         suffix,
         unique,
         no_reparse,
+        seed,
     } = args;
     let suffix = if unique {
         Some(std::process::id().to_string())
@@ -94,6 +106,9 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         }
         if skip_validate {
             topo.assertions.clear();
+        }
+        if seed.is_some() {
+            topo.lab.seed = seed;
         }
         topo
     };
@@ -179,6 +194,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             duration_ms: elapsed.as_millis() as u64,
             assertions_failed: (!lab.assertion_results().is_empty()).then_some(assertions_failed),
             assertions: lab.assertion_results().to_vec(),
+            seed: lab.topology().lab.seed,
         };
         crate::output::emit_json(ctx, &report)?;
     } else {
@@ -189,6 +205,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             elapsed
         );
         print_deploy_summary(&topo);
+        if let Some(seed) = lab.topology().lab.seed
+            && !ctx.quiet
+        {
+            println!("  seed {seed} (deploy --seed {seed} loses the same packets again)");
+        }
 
         if !ctx.quiet {
             let first_node = topo

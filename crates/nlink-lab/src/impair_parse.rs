@@ -35,6 +35,9 @@ pub struct ImpairShow {
     /// Rate in bits per second, if `rate X` appeared.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rate_bps: Option<u64>,
+    /// The netem's seed, as the kernel reports it back (#337).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed: Option<u64>,
 }
 
 /// An endpoint's impairment as installed (`impair --show --json`). `ImpairShow`'s
@@ -119,8 +122,10 @@ pub fn impair_show_from(qdisc: &nlink::netlink::messages::TcMessage) -> Option<I
         loss_pct: None,
         loss_model: None,
         rate_bps: None,
+        seed: None,
     };
     if let Some(QdiscOptions::Netem(netem)) = qdisc.options() {
+        show.seed = netem.seed();
         let ms = |d: std::time::Duration| d.as_secs_f64() * 1000.0;
         show.delay_ms = netem.delay().map(ms);
         show.jitter_ms = netem.jitter().map(ms);
@@ -204,6 +209,7 @@ fn parse_root_qdisc(kind: &str, tokens: &[&str]) -> ImpairShow {
         loss_pct: None,
         loss_model: None,
         rate_bps: None,
+        seed: None,
     };
     let mut i = 0;
     while i < tokens.len() {
@@ -251,6 +257,13 @@ fn parse_root_qdisc(kind: &str, tokens: &[&str]) -> ImpairShow {
             "rate" => {
                 if let Some(r) = tokens.get(i + 1).and_then(|s| parse_rate_bps(s)) {
                     out.rate_bps = Some(r);
+                    i += 2;
+                    continue;
+                }
+            }
+            "seed" => {
+                if let Some(s) = tokens.get(i + 1).and_then(|s| s.parse().ok()) {
+                    out.seed = Some(s);
                     i += 2;
                     continue;
                 }
@@ -325,6 +338,11 @@ mod tests {
         assert_eq!(out.loss_pct, None);
         assert_eq!(out.delay_ms, Some(20.0));
         assert!(out.rate_bps.is_some(), "parsing resumes after the model");
+        assert_eq!(
+            out.seed,
+            Some(2928661007094348000),
+            "the seed iproute2 prints"
+        );
     }
 
     #[test]

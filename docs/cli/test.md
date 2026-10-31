@@ -35,6 +35,9 @@ Options:
       --keep
           Leave a lab whose test failed deployed, for inspection (destroy it with `nlink-lab destroy LAB`)
 
+      --seed <N>
+          Deploy every lab with this seed, in place of its topology's `seed`: the seed a failed run reported replays its packet losses
+
   -h, --help
           Print help
 ```

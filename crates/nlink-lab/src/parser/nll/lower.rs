@@ -2711,6 +2711,7 @@ fn interpolate_impair_props(
         delay_correlation: iv(&p.delay_correlation, vars),
         loss_correlation: iv(&p.loss_correlation, vars),
         limit: iv(&p.limit, vars),
+        seed: iv(&p.seed, vars),
         loss_model: p.loss_model.as_ref().map(|m| ast::LossModelProps {
             kind: m.kind.clone(),
             values: m.values.iter().map(|v| v.interp(vars)).collect(),
@@ -3163,6 +3164,11 @@ fn lower_lab(lab: &ast::LabDecl) -> Result<types::LabConfig> {
         }
     };
     let frr = lab.frr.as_ref().map(lower_frr).transpose()?;
+    let seed = lab
+        .seed
+        .as_ref()
+        .map(|s| s.to_value().map(|s| s.0))
+        .transpose()?;
     Ok(types::LabConfig {
         name: lab.name.clone(),
         description: lab.description.clone(),
@@ -3176,6 +3182,7 @@ fn lower_lab(lab: &ast::LabDecl) -> Result<types::LabConfig> {
         dns,
         routing,
         frr,
+        seed,
     })
 }
 
@@ -4022,6 +4029,7 @@ fn lower_impair_props(props: &ast::ImpairProps) -> Result<types::Impairment> {
         delay_correlation: t(&props.delay_correlation)?,
         loss_correlation: t(&props.loss_correlation)?,
         limit: t(&props.limit)?,
+        seed: t(&props.seed)?,
     })
 }
 
@@ -7020,6 +7028,33 @@ node hub { vrf red table 10 { interfaces [for i in 1..${n} : eth${i}] } }
         assert!(err.to_string().contains("must be literal"), "{err}");
     }
 
+    /// `seed` on the lab and on an impairment (#337), with `${…}` and
+    /// the range the state can store.
+    #[test]
+    fn seeds_lower_on_the_lab_and_on_impairments() {
+        let topo = parse_and_lower(
+            r#"lab "t" { seed 42 }
+let s = 7
+node a
+node b
+link a:eth0 -- b:eth0 {
+  10.0.0.1/24 -- 10.0.0.2/24
+  loss 1% seed ${s}
+}
+impair b:eth0 corrupt 1% seed 8
+"#,
+        );
+        assert_eq!(topo.lab.seed, Some(42));
+        assert_eq!(topo.impairments["a:eth0"].seed.as_deref(), Some("7"));
+        assert_eq!(topo.impairments["b:eth0"].seed.as_deref(), Some("8"));
+        assert!(!topo.validate().has_errors());
+        let src = "lab \"t\" { seed 9223372036854775808 }\nnode a\n";
+        let (msg, _) = parse_err_span(src);
+        assert!(msg.contains("seed"), "{msg}");
+        let bad = "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  loss 1% seed x }\n";
+        assert!(crate::parser::parse(bad).is_err());
+    }
+
     #[test]
     fn test_netem_extras_lower_and_render() {
         let topo = parse_and_lower(
@@ -7047,7 +7082,7 @@ link a:eth0 -- b:eth0 {
         );
         let back = crate::parser::parse(&rendered).unwrap();
         assert_eq!(back.impairments["a:eth0"], *imp);
-        assert!(crate::deploy::plan::qdisc::build_netem(imp).is_ok());
+        assert!(crate::deploy::plan::qdisc::build_netem(imp, None).is_ok());
         assert!(!topo.validate().has_errors());
         // `limit 0` is a parse error now (issue #71), pointing at the `0`.
         let src = "lab \"t\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  limit 0 }\n";
@@ -7096,7 +7131,7 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24  loss 1% }
         assert_eq!(back.impairments["a:eth0"], *ge);
         assert_eq!(back.impairments["b:eth0"], *gi);
 
-        let netem = crate::deploy::plan::qdisc::build_netem(ge).unwrap();
+        let netem = crate::deploy::plan::qdisc::build_netem(ge, None).unwrap();
         match netem.loss_model {
             Some(NetemLossModel::GilbertElliot { p, r, h, k1, .. }) => {
                 assert!((p - 1.0).abs() < 1e-9 && (r - 30.0).abs() < 1e-9);
@@ -7108,7 +7143,7 @@ link b:eth1 -- c:eth0 { 10.0.1.1/24 -- 10.0.1.2/24  loss 1% }
             other => panic!("expected Gilbert-Elliot, got {other:?}"),
         }
         assert!(netem.loss.is_zero(), "a model is not also random loss");
-        match crate::deploy::plan::qdisc::build_netem(gi)
+        match crate::deploy::plan::qdisc::build_netem(gi, None)
             .unwrap()
             .loss_model
         {

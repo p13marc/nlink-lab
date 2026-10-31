@@ -286,6 +286,28 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         });
     }
 
+    // Netem seeds (#337): what a deploy found the last time it probed
+    // this kernel; root probes now when nothing is cached yet.
+    let release = nlink_lab::seed::kernel_release();
+    let honoured = nlink_lab::seed::read_cache(&release)
+        .or_else(|| nlink_lab::privileges::has_privileges().then(nlink_lab::seed::kernel_honours));
+    checks.push(Check {
+        name: "netem seeds",
+        status: match honoured {
+            Some(true) => Status::Ok,
+            Some(false) => Status::Warn,
+            None => Status::Info,
+        },
+        detail: match honoured {
+            Some(true) => format!("honoured by Linux {release}: seeded loss repeats"),
+            Some(false) => format!(
+                "ignored by Linux {release}: labs deploy unseeded, so their loss and \
+                 corruption do not repeat (needs a kernel with TCA_NETEM_PRNG_SEED)"
+            ),
+            None => "not probed yet (a deploy, or doctor as root, probes the kernel)".into(),
+        },
+    });
+
     let (cg_status, cg_detail) = if !nlink_lab::cgroup::available() {
         (
             Status::Info,

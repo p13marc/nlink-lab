@@ -92,6 +92,7 @@ module.exports = grammar({
         seq("mgmt", choice($.cidr, $.ipv6_cidr), optional("host-reachable")),
         seq("dns", choice("hosts", "off")),
         seq("routing", choice("auto", "manual", seq("frr", optional($.frr_block)))),
+        seq("seed", $._value),
       ),
 
     // ── Profile ─────────────────────────────────────
@@ -557,6 +558,7 @@ module.exports = grammar({
             seq("delay-correlation", $._value),
             seq("loss-correlation", $._value),
             seq("limit", $._value),
+            seq("seed", $._value),
           ),
         ),
       ),

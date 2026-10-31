@@ -4370,6 +4370,13 @@
             "string",
             "null"
           ]
+        },
+        "seed": {
+          "description": "The seed of this netem's random numbers (`seed 42`), in place of\nthe one derived from the lab's seed (#337). It makes the loss and\ncorruption decisions repeat; see [`LabConfig::seed`].",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [

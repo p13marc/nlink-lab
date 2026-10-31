@@ -164,6 +164,9 @@ Options:
       --unique
           Auto-generate unique lab name suffix (appends PID)
 
+      --seed <N>
+          The lab's seed, in place of the topology's `seed`: every netem derives its seed from it, so a redeploy with the same seed loses and corrupts the same packets of the same traffic. Without one, a seed is drawn and `status` shows it
+
       --no-reparse
           With an archive: deploy its rendered topology instead of parsing its NLL (an archive made by a newer nlink-lab)
 

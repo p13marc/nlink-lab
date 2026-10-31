@@ -23,12 +23,14 @@ sends) and [`api-server.v1`](json-schemas/api-server.v1.schema.json)
 
 ## Version
 
-`API_VERSION` is <!-- count:api-version -->1.1<!-- /count -->, exchanged once when a connection opens. A daemon
+`API_VERSION` is <!-- count:api-version -->1.2<!-- /count -->, exchanged once when a connection opens. A daemon
 refuses a client of another major version, and a client one of another
 major. A minor version only adds methods and fields, announced as
 `features`; old clients ignore what they do not know. 1.1 added
 `conntrack` and `flush_conntrack` (feature `conntrack`, #303), and
-`keep_conntrack` in an apply's options.
+`keep_conntrack` in an apply's options. 1.2 added `seed` in a deploy's
+options and in an impairment (feature `seed`, #337): a 1.1 daemon would
+ignore them and seed nothing.
 
 ## Roles
 

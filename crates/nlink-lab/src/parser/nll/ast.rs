@@ -8,7 +8,9 @@
 
 use std::time::Duration;
 
-pub use super::value::{Cpu, IpOrCidr, NllValue, Packets, Percent, Rate, RouteDest, Size, Val};
+pub use super::value::{
+    Cpu, IpOrCidr, NllValue, Packets, Percent, Rate, RouteDest, Seed, Size, Val,
+};
 
 /// A complete NLL file.
 #[derive(Debug)]
@@ -49,6 +51,8 @@ pub struct LabDecl {
     pub routing: Option<String>,
     /// `routing frr { … }` lab-wide defaults.
     pub frr: Option<FrrDef>,
+    /// `seed N`: the lab seed every netem seed derives from (#337).
+    pub seed: Option<Val<Seed>>,
 }
 
 /// `frr { ospf { … } bgp { … } }` (#65).
@@ -595,6 +599,8 @@ pub struct ImpairProps {
     pub delay_correlation: Option<Val<Percent>>,
     pub loss_correlation: Option<Val<Percent>>,
     pub limit: Option<Val<Packets>>,
+    /// `seed N`: this netem's own seed, in place of the derived one (#337).
+    pub seed: Option<Val<Seed>>,
     /// `loss gemodel …` / `loss state …`: a netem loss model in place of
     /// the percent in [`loss`](Self::loss) (#153). At most one of the two
     /// is set.
@@ -638,6 +644,7 @@ impl ImpairProps {
         overlay(&mut self.delay_correlation, other.delay_correlation);
         overlay(&mut self.loss_correlation, other.loss_correlation);
         overlay(&mut self.limit, other.limit);
+        overlay(&mut self.seed, other.seed);
     }
 }
 

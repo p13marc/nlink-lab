@@ -403,6 +403,7 @@ pub const BLOCK_KEYWORDS: &[(&str, &[&str])] = &[
             "limit",
             "delay-correlation",
             "loss-correlation",
+            "seed",
             "mtu",
         ],
     ),
@@ -421,6 +422,7 @@ pub const BLOCK_KEYWORDS: &[(&str, &[&str])] = &[
             "dns",
             "mgmt",
             "routing",
+            "seed",
         ],
     ),
     (

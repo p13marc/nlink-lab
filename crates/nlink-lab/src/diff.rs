@@ -119,6 +119,7 @@ fn impairment_summary(imp: &Impairment) -> String {
         ("delay-correlation", &imp.delay_correlation),
         ("loss-correlation", &imp.loss_correlation),
         ("limit", &imp.limit),
+        ("seed", &imp.seed),
     ];
     let parts: Vec<String> = fields
         .iter()

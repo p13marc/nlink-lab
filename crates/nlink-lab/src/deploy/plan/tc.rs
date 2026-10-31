@@ -81,15 +81,19 @@ pub(crate) fn declare_node_tc(
             cfg = cfg.qdisc(&iface, |q| q.spec(QdiscSpec::Clsact));
         }
 
+        let seed_key = crate::seed::endpoint_key(node_name, &iface);
         if let Some(mut impairer) = per_pair.remove(&iface) {
             if let Some(imp) = impairment {
-                impairer = impairer.default_impairment(PeerImpairment::new(build_netem(imp)?));
+                let seed = crate::seed::netem_seed(topology, imp, &seed_key)?;
+                impairer =
+                    impairer.default_impairment(PeerImpairment::new(build_netem(imp, seed)?));
             }
             cfg = impairer
                 .declare(cfg)
                 .map_err(|e| Error::nlink(format!("per-pair impairments on '{ep}'"), e))?;
         } else if let Some(imp) = impairment {
-            let netem = build_netem(imp)?;
+            let seed = crate::seed::netem_seed(topology, imp, &seed_key)?;
+            let netem = build_netem(imp, seed)?;
             cfg = cfg.qdisc(&iface, |q| q.spec(netem));
         } else if let Some(qdisc) = topology.qdiscs.get(&ep) {
             let spec = build_qdisc(qdisc)?;
@@ -215,7 +219,9 @@ fn per_pair_sources(
                     rule.src, rule.dst, rule.dst
                 )));
             };
-            let mut peer = PeerImpairment::new(build_netem(&rule.impairment)?);
+            let key = crate::seed::pair_key(net_name, &rule.src, &rule.dst, node_name, iface);
+            let seed = crate::seed::netem_seed(topology, &rule.impairment, &key)?;
+            let mut peer = PeerImpairment::new(build_netem(&rule.impairment, seed)?);
             if let Some(rc) = &rule.rate_cap {
                 let bits = parse_rate_bps(rc).map_err(|e| {
                     Error::deploy_failed(format!(

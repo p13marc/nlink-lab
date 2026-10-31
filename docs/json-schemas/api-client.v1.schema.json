@@ -1930,6 +1930,15 @@
           "type": "boolean",
           "default": false
         },
+        "seed": {
+          "description": "The lab's seed, in place of the topology's own (#337, API 1.2).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
         "skip_assertions": {
           "description": "Skip the `validate { … }` assertions.",
           "type": "boolean",
@@ -2022,6 +2031,13 @@
           ]
         },
         "reorder": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seed": {
+          "description": "The netem seed, in place of the one the lab's seed derives (#337).",
           "type": [
             "string",
             "null"

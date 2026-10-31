@@ -69,6 +69,15 @@
       "format": "uint32",
       "minimum": 0
     },
+    "seed": {
+      "description": "The seed every netem seed derives from (#337): pass it back with\n`deploy --seed` to lose the same packets again. Absent for a lab\ndeployed without one (before 0.16, or on a kernel without netem\nseeds).",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
     "source": {
       "anyOf": [
         {
@@ -208,6 +217,13 @@
         },
         "reorder": {
           "description": "Packet reordering (e.g., \"0.5%\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seed": {
+          "description": "The seed of this netem's random numbers (`seed 42`), in place of\nthe one derived from the lab's seed (#337). It makes the loss and\ncorruption decisions repeat; see [`LabConfig::seed`].",
           "type": [
             "string",
             "null"

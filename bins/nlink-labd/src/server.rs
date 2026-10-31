@@ -44,6 +44,8 @@ const FEATURES: &[&str] = &[
     "sessions",
     // `conntrack`, `flush_conntrack` (API 1.1, #303)
     "conntrack",
+    // a deploy's `seed`, an impairment's `seed` (API 1.2, #337)
+    "seed",
 ];
 
 /// What a running call receives from its client.

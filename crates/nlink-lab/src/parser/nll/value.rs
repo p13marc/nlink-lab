@@ -222,6 +222,20 @@ impl NllValue for Packets {
     }
 }
 
+/// A netem seed (`seed 42`, #337): an integer in `0..=i64::MAX`, which
+/// is what the state's TOML can store.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Seed(pub u64);
+
+impl NllValue for Seed {
+    const WHAT: &'static str = "seed (an integer, 0 to 9223372036854775807)";
+    fn parse_nll(s: &str) -> Result<Self> {
+        crate::seed::parse(s)
+            .map(Seed)
+            .map_err(Error::invalid_topology)
+    }
+}
+
 /// A CPU share in cores (`0.5`, `2`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cpu(pub f64);

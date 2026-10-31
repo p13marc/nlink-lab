@@ -819,18 +819,31 @@ async fn spawn(
     if let Some(spec) = wait {
         crate::wait::WaitCondition::from_spec(spec, Some(0))?;
     }
-    let env_refs: Vec<(&str, &str)> = env.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
-    let args: Vec<&str> = argv.iter().map(String::as_str).collect();
-    let workdir = workdir.map(Path::new);
-    let pid = running.spawn_with_logs_with_opts(
-        node,
-        &args,
-        crate::running::SpawnOpts {
-            log_dir: None,
-            workdir,
-            env: &env_refs,
-        },
-    )?;
+    // `spawn` waits for the lab's lock by sleeping its thread (#332): off
+    // the runtime's, so a holder on this runtime can finish meanwhile
+    let (node_name, argv, env, workdir) = (
+        node.to_string(),
+        argv.to_vec(),
+        env.to_vec(),
+        workdir.map(std::path::PathBuf::from),
+    );
+    let (running, pid) = tokio::task::spawn_blocking(move || {
+        let env_refs: Vec<(&str, &str)> =
+            env.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        let args: Vec<&str> = argv.iter().map(String::as_str).collect();
+        let pid = running.spawn_with_logs_with_opts(
+            &node_name,
+            &args,
+            crate::running::SpawnOpts {
+                log_dir: None,
+                workdir: workdir.as_deref(),
+                env: &env_refs,
+            },
+        )?;
+        Ok::<_, Error>((running, pid))
+    })
+    .await
+    .map_err(|e| Error::Runtime(format!("spawn: {e}")))??;
     if let Some(spec) = wait {
         let conditions = crate::wait::WaitCondition::from_spec(spec, Some(pid))?;
         if !conditions.is_empty() {

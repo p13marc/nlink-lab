@@ -100,7 +100,13 @@ fn save(registry: &Registry) -> Result<()> {
     let text = toml::to_string(registry)
         .map_err(|e| Error::deploy_failed(format!("host registry: {e}")))?;
     let tmp = path().with_extension(format!("tmp.{}", std::process::id()));
-    std::fs::write(&tmp, text)
+    let write = || -> std::io::Result<()> {
+        use std::io::Write as _;
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(text.as_bytes())?;
+        f.sync_all()
+    };
+    write()
         .and_then(|()| std::fs::rename(&tmp, path()))
         .map_err(|e| Error::deploy_failed(format!("{}: {e}", path().display())))
 }

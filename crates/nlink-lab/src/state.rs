@@ -909,9 +909,9 @@ impl std::fmt::Display for LockHolder {
     }
 }
 
-/// The record in a lab's lock file, when one was written. It may name a
-/// holder that has since let go: only a failed attempt at the lock says
-/// that someone holds it.
+/// The record in a lab's lock file, while a holder that wrote one has it:
+/// the record goes when its lock is released. A holder that took the
+/// plain [`lock`] writes none.
 pub fn lock_holder(name: &str) -> Option<LockHolder> {
     let text = std::fs::read_to_string(lock_path(name)).ok()?;
     serde_json::from_str(text.lines().next()?).ok()
@@ -1111,8 +1111,11 @@ impl LabLock {
         };
         if let Ok(mut line) = serde_json::to_vec(&holder) {
             line.push(b'\n');
-            let _ = self.file.set_len(0);
+            // written, then cut to length: a waiter reading the first
+            // line meanwhile sees this record or the one before it, never
+            // an empty file
             let _ = self.file.write_at(&line, 0);
+            let _ = self.file.set_len(line.len() as u64);
         }
     }
 
@@ -1133,6 +1136,14 @@ impl LabLock {
         // unlink — never before, or a waiter could take the dead inode
         // and believe it holds the lock.
         drop(self);
+    }
+}
+
+impl Drop for LabLock {
+    /// Clear the holder record while the lock is still held, so a waiter
+    /// that gives up later does not name a holder that has let go.
+    fn drop(&mut self) {
+        let _ = self.file.set_len(0);
     }
 }
 

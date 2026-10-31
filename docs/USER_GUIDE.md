@@ -1178,6 +1178,76 @@ nlink-lab ps -L ospf-demo                             # zebra/ospfd are tracked 
 Logs are in `/run/nlink-lab/frr/<lab>/<node>/`; `apply` restarts a
 router's daemons only when its generated configuration changed.
 
+### 22. Foreign Nodes (experimental)
+
+A lab can link to a node it did not make: a network namespace another
+tool created, a container containerlab or podman runs, or a VM's tap
+(#344). nlink-lab makes the lab's end of each link and never creates,
+stops or deletes the target.
+
+```nll
+lab "mixed"
+
+node r { forward ipv4 }
+node fw   kind foreign { netns "/run/netns/other" }       # a path, or a name under /run/netns
+node ceos kind foreign {
+  container "clab-site-ceos1"                             # found by the runtime, by name
+  manage addresses                                        # configure its side's addresses and routes
+  manage tc                                               # and the impairments declared on its side
+}
+node vm1  kind foreign { tap "vnet3" }                    # a tap in the host's namespace
+
+link r:eth0 -- fw:eth0   { 10.0.0.1/24 -- 10.0.0.2/24  -> delay 20ms }
+link r:eth1 -- ceos:eth1 { 10.0.1.1/24 -- 10.0.1.2/24  <- delay 5ms }
+link r:eth2 -- vm1:nic   { 10.0.2.1/24 -- 10.0.2.2/24 }
+```
+
+- **Links.** For a netns or a container, the lab's end is a veth whose
+  other end is moved into the target, named as the link says (`fw:eth0`).
+  For a tap, the tap is not moved. It joins a bridge the lab makes in the
+  host's namespace (`nt…`), and each link to it is a veth whose far end
+  joins that bridge. A tap takes point-to-point links only, and one that
+  already has a master (libvirt's `virbr0`) is refused. With libvirt, use
+  an unmanaged `<interface type='ethernet'>` with `<target dev='vnet3'
+  managed='no'/>`.
+- **What the lab changes inside one: nothing, unless asked.**
+  - `manage addresses` sets the addresses and routes declared on its
+    side. Without it, an address written on its side is a warning
+    (`foreign-address-unmanaged`), for you to set there.
+  - `manage tc` puts the impairments declared on its side inside it.
+    Without it they are refused (`foreign-unmanaged-tc`), and a link's
+    impairment goes on the lab's end, as egress toward it (`->` from the
+    lab side).
+  - A tap takes neither: its other end is a VM's own network stack.
+  - A managed node is only ever added to. What the target has of its
+    own is never purged, by `apply` either.
+- **Refused on a foreign node** (`foreign-unsupported-property`):
+  `image`, profiles, `run`/`exec`, sysctls, firewall, `nat`, FRR, Wi-Fi,
+  VRFs, WireGuard, macvlan/ipvlan, bond/vlan/vxlan interfaces,
+  `cpu`/`memory`, healthchecks, `startup-delay` and `depends-on`. Also
+  refused: a link between two foreign nodes (`foreign-link-needs-lab-side`),
+  and a netns named under the lab's prefix (`foreign-name-under-prefix`),
+  which a cleanup of the lab would sweep.
+- **Deploy** checks every target before its first op, so a failed check
+  leaves nothing behind. It fails on a target that is missing
+  (`foreign-target-missing`), on a tap that already has a master, and on
+  an interface name the target already uses.
+- **Destroy** deletes the lab's ends, which takes their peers in the
+  target along, and the tap's bridge, which releases the tap. The
+  netns, the container and the tap stay as they were. Foreign
+  namespaces carry no ownership tag, so `destroy --orphans` never
+  touches them. It reaps a tap bridge that no lab claims.
+- **Commands.**
+  - `exec` and `shell` run in a foreign netns (`setns`) or container (the
+    runtime's `exec`).
+  - `spawn`, `ps NODE` and `node restart` are refused: those processes
+    are not the lab's.
+  - A runtime `impair` on its side needs `manage tc`.
+  - `status` shows the kind `foreign` and the target.
+- Nothing about a foreign node is stored: its namespace is found again
+  from the topology each time. A container is found by name, so one
+  that restarted is followed.
+
 ---
 
 ## Editing NLL

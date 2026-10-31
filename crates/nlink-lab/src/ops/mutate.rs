@@ -166,6 +166,14 @@ pub struct Restarted {
 /// `docker restart` recreates it, so every veth the deployer moved in is
 /// gone (#31), and so are its sysctls and `run` commands.
 pub async fn restart_node(running: &mut RunningLab, node: &str, ctx: &OpCtx) -> Result<Restarted> {
+    if running
+        .topology()
+        .nodes
+        .get(node)
+        .is_some_and(|n| n.is_foreign())
+    {
+        return Err(crate::foreign::refuse(node, "restart"));
+    }
     let container = running.container_for(node).cloned().ok_or_else(|| {
         if running.topology().nodes.contains_key(node) {
             Error::invalid_argument(format!(

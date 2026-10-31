@@ -65,6 +65,14 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let running = nlink_lab::RunningLab::load(&lab)?;
     if let Some(node) = &node {
         crate::cmd::common::require_node(&running, node)?;
+        if running
+            .topology()
+            .nodes
+            .get(node)
+            .is_some_and(|n| n.is_foreign())
+        {
+            return Err(nlink_lab::foreign::refuse(node, "track processes"));
+        }
     }
     let mut processes = if alive_only {
         running.process_status_alive_only()

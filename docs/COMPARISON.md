@@ -72,7 +72,7 @@ because the comparison is honest about both wins and losses.
 | DSL features | static YAML + Go templates | NLL: loops, imports, parametric, glob, arithmetic |
 | Deploy speed | seconds (Docker pull + boot) | sub-second |
 | CI footprint | Docker daemon | namespace + `CAP_NET_ADMIN`+`CAP_SYS_ADMIN` |
-| Topology validation | YAML-schema via clab | <!-- count:validator-rules -->83<!-- /count -->-rule pre-deploy validator (stable rule ids) with miette source spans, plus `lint` |
+| Topology validation | YAML-schema via clab | <!-- count:validator-rules -->89<!-- /count -->-rule pre-deploy validator (stable rule ids) with miette source spans, plus `lint` |
 | Packet capture | external (`tcpdump` exec) | built-in `capture` (zero-copy via netring, BPF filter) |
 | Healthcheck-gated startup | ✅ Docker healthchecks | ✅ `depends-on` + healthcheck polling (containers and processes) |
 | Performance benchmarks in topology | ⚠️ external | ✅ `benchmark` block with `assert avg below 50ms` |

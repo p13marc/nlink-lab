@@ -112,7 +112,7 @@ crates/nlink-lab/src/
       value.rs      # Val<T>: typed + spanned literals/deferred values (Duration, Percent, Rate, Size, …)
       lower.rs      # AST → Topology (imports, loops, variables, lowering)
   error.rs          # Error types (includes NllDiagnostic for miette)
-  validator.rs      # Topology validation (<!-- count:validator-rules -->83<!-- /count --> rules with stable ids, see RULE_IDS)
+  validator.rs      # Topology validation (<!-- count:validator-rules -->89<!-- /count --> rules with stable ids, see RULE_IDS)
   render.rs         # Topology → NLL serializer (for `render` command)
   dns.rs            # DNS /etc/hosts generation, injection, removal
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
@@ -127,6 +127,7 @@ crates/nlink-lab/src/
   state.rs          # State persistence (/var/lib/nlink-lab/labs or $NLINK_LAB_STATE_DIR, group nlink-lab, schema 2, flock in .locks/; snapshots/<name>/ checkpoints; legacy per-user roots + migrate_lab; context/<uid>)
   events.rs         # Lifecycle event log (events.ndjson per lab; `events` command, backend republish)
   frr.rs            # FRR routing daemons: pathspaces, per-daemon config generation, neighbour resolution
+  foreign.rs        # foreign nodes (#344): resolve a netns/container/tap target, deploy preflight, tap bridge
   netns_tag.rs      # Ownership tag on namespaces nlink-lab created (orphan reaper trusts only these)
   builder.rs        # Rust builder DSL
   ops/              # OpCtx: progress (OpEvent) + cancellation of deploy/apply/destroy/…;

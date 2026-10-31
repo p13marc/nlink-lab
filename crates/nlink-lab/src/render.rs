@@ -890,6 +890,22 @@ fn render_node(out: &mut String, name: &str, node: &Node) -> Result<()> {
     }
 
     let mut body = String::new();
+    if let Some(f) = &node.foreign {
+        out.push_str(" kind foreign");
+        writeln!(
+            body,
+            "  {} {}",
+            f.target.keyword(),
+            nll_string(f.target.name())?
+        )
+        .unwrap();
+        if f.manage_addresses {
+            body.push_str("  manage addresses\n");
+        }
+        if f.manage_tc {
+            body.push_str("  manage tc\n");
+        }
+    }
     render_node_body(&mut body, node)?;
 
     if body.is_empty() {

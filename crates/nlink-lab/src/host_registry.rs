@@ -34,17 +34,21 @@ pub struct Claims {
 }
 
 impl Claims {
-    /// What `topology` claims when deployed: nothing unless its mgmt
-    /// network is host-reachable.
+    /// What `topology` claims when deployed: a host-reachable mgmt
+    /// network's subnet and bridge, and its foreign taps' bridges (#344).
+    /// `None` when it takes nothing in the host's namespace.
     pub fn of(topology: &Topology) -> Option<Self> {
-        if !topology.lab.mgmt_host_reachable {
-            return None;
+        let mgmt = topology
+            .lab
+            .mgmt_subnet
+            .clone()
+            .filter(|_| topology.lab.mgmt_host_reachable);
+        let mut bridges = Vec::new();
+        if mgmt.is_some() {
+            bridges.push(topology.lab.mgmt_bridge_name());
         }
-        let mgmt = topology.lab.mgmt_subnet.clone()?;
-        Some(Self {
-            mgmt: Some(mgmt),
-            bridges: vec![topology.lab.mgmt_bridge_name()],
-        })
+        bridges.extend(crate::foreign::tap_bridges(topology));
+        (mgmt.is_some() || !bridges.is_empty()).then_some(Self { mgmt, bridges })
     }
 }
 

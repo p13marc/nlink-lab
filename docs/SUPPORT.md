@@ -24,7 +24,7 @@ release.
 |------|-------|
 | **Core** | The NLL language; `deploy`, `apply`, `destroy`, `verify`; `exec`, `spawn` and the rest of running things in a node; `impair` and `--partition`; the library's stable layer (being curated, #331); `#[lab_test]`; the state layout (`/var/lib/nlink-lab`, schema-versioned) |
 | **Supported** | Firewall, NAT and conntrack; FRR (OSPF, BGP); WireGuard, VRF, VXLAN, bonds, VLANs, macvlan/ipvlan; container nodes; `capture`; scenarios; benchmarks; snapshots and archives; `nlink-labd` and its API (unix socket, ssh `dial-stdio`, the Zenoh bridge); `top`; `lsp`, `fmt`, `lint`; the tree-sitter, VS Code and Zed grammars |
-| **Experimental** | The desktop app (`nlink-lab-gui`); Wi-Fi emulation (it needs `mac80211_hwsim`, which the CI runner cannot load) |
+| **Experimental** | The desktop app (`nlink-lab-gui`); Wi-Fi emulation (it needs `mac80211_hwsim`, which the CI runner cannot load); foreign nodes (`kind foreign`, #344) |
 
 ## Commands
 

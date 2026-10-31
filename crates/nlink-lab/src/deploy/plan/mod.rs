@@ -77,7 +77,11 @@ fn with_mgmt_network(topology: &Topology) -> Result<std::borrow::Cow<'_, Topolog
         subnet: Some(subnet.clone()),
         ..Default::default()
     };
-    for (idx, node) in topology.nodes.keys().enumerate() {
+    for (idx, (node, n)) in topology.nodes.iter().enumerate() {
+        // not into another tool's node (#344); the others keep their numbers
+        if n.is_foreign() {
+            continue;
+        }
         let ep = format!("{node}:mgmt0");
         net.members.push(ep.clone());
         net.ports.insert(
@@ -129,6 +133,39 @@ pub fn plan(topology: &Topology, inputs: &PlanInputs) -> Result<Plan> {
     // ── per-node declarative stack ──
     let auto_routes = network::auto_routes_for(declared);
     for (node_name, node) in &topology.nodes {
+        if let Some(f) = &node.foreign {
+            // only what it asked nlink-lab to manage, and never a purge:
+            // the rest of it is another tool's (#344)
+            if !f.manage_addresses && !f.manage_tc {
+                continue;
+            }
+            let net = if f.manage_addresses {
+                network::topology_to_network_config(
+                    node_name,
+                    node,
+                    topology,
+                    auto_routes.get(node_name),
+                )?
+            } else {
+                nlink::netlink::config::NetworkConfig::new()
+            };
+            let net = if f.manage_tc {
+                tc::declare_node_tc(net, node_name, topology, &inputs.partitions)?
+            } else {
+                net
+            };
+            ops.push(Op::Stack {
+                node: node_name.clone(),
+                cfg: Box::new(StackConfig {
+                    network: net,
+                    firewall: None,
+                    nat: None,
+                    #[cfg(feature = "wireguard")]
+                    wireguard: None,
+                }),
+            });
+            continue;
+        }
         let net = network::topology_to_network_config(
             node_name,
             node,

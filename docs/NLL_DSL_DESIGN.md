@@ -847,6 +847,28 @@ Rules: `frr-requires-routing-frr`, `frr-container-node`,
 IS-IS and FRR inside container nodes are out of scope. See
 `examples/frr-ospf.nll` and `examples/frr-bgp.nll`.
 
+### 19. Foreign Nodes
+
+```nll-ignore
+node NAME kind foreign {
+  netns "PATH-OR-NAME"        # or: container "NAME"  |  tap "IFNAME"
+  manage addresses            # optional: its side's addresses and routes
+  manage tc                   # optional: the impairments on its side
+}
+```
+
+A node nlink-lab links to but did not make (#344). `kind foreign` comes
+after the name (and before the block, which it needs). The block names
+exactly one target: a netns path, or a name under `/run/netns`; a
+container, by the name its runtime knows; or a tap in the host's
+namespace. Besides `manage`, it takes routes, which need `manage
+addresses`. Links to it are written as to any node. A tap takes only
+point-to-point links, and no `manage`. Rules: `foreign-unsupported-property`,
+`foreign-link-needs-lab-side`, `foreign-tap-link-only`,
+`foreign-unmanaged-tc`, `foreign-name-under-prefix`; warning
+`foreign-address-unmanaged`; at deploy, `foreign-target-missing`. The
+user guide's "Foreign Nodes" section has the rest.
+
 ## Examples
 
 ### 1. Simple (2 nodes)

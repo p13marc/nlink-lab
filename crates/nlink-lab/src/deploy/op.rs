@@ -21,6 +21,9 @@ pub enum NsRef {
     Named { name: String },
     /// A container node: its network namespace is `/proc/<pid>/ns/net`.
     Container { id: String, pid: u32 },
+    /// A foreign node's namespace, by its path (#344): one another tool
+    /// made, never deleted.
+    Path { path: std::path::PathBuf },
 }
 
 impl NsRef {
@@ -30,6 +33,7 @@ impl NsRef {
             NsRef::Root => NamespaceSpec::Default,
             NsRef::Named { name } => NamespaceSpec::Named(name),
             NsRef::Container { pid, .. } => NamespaceSpec::Pid(*pid),
+            NsRef::Path { path } => NamespaceSpec::Path(path),
         }
     }
 
@@ -75,6 +79,7 @@ impl NsRef {
             NsRef::Root => namespace::open_path("/proc/self/ns/net"),
             NsRef::Named { name } => namespace::open(name),
             NsRef::Container { pid, .. } => namespace::open_pid(*pid),
+            NsRef::Path { path } => namespace::open_path(path),
         }
     }
 
@@ -87,6 +92,7 @@ impl NsRef {
             NsRef::Root => Netns::current(),
             NsRef::Named { name } => Netns::open(name),
             NsRef::Container { pid, .. } => Netns::from_pid(*pid),
+            NsRef::Path { path } => Netns::from_path(path),
         }
     }
 
@@ -96,6 +102,7 @@ impl NsRef {
             NsRef::Root => "/proc/self/ns/net".into(),
             NsRef::Named { name } => std::path::Path::new(namespace::NETNS_RUN_DIR).join(name),
             NsRef::Container { pid, .. } => format!("/proc/{pid}/ns/net").into(),
+            NsRef::Path { path } => path.clone(),
         }
     }
 
@@ -271,6 +278,14 @@ pub enum Op {
         pull: Option<String>,
         opts: Box<CreateOpts>,
     },
+    /// Find a foreign node's target (#344): a netns by path, another
+    /// tool's container by name, or a tap, which joins `bridge`, made for
+    /// it in the host's namespace. Nothing of the target is created.
+    AttachForeign {
+        node: String,
+        target: crate::types::ForeignTarget,
+        bridge: Option<String>,
+    },
     /// A `mac80211_hwsim` radio for Wi-Fi interface `iface` of `node`
     /// (#176). Made over netlink in `maker`'s namespace — the same for
     /// every radio of the lab, so they share its netgroup and hear one
@@ -319,6 +334,14 @@ pub enum Op {
     CreateVeth {
         a: EndpointRef,
         b: EndpointRef,
+        mtu: Option<u32>,
+    },
+    /// A link to a foreign tap node (#344): a veth from `a` whose other
+    /// end, `port`, joins the tap's `bridge` in the host's namespace.
+    CreateTapVeth {
+        a: EndpointRef,
+        port: String,
+        bridge: String,
         mtu: Option<u32>,
     },
     CreateMacvlan {
@@ -380,6 +403,12 @@ pub enum Op {
         node: String,
         ns: String,
     },
+    /// A foreign node leaves the lab: only its tap bridge, if any, goes
+    /// (#344); its target stays as it is.
+    DetachForeign {
+        node: String,
+        bridge: Option<String>,
+    },
     RemoveContainer {
         node: String,
         id: String,
@@ -433,7 +462,9 @@ impl Op {
         match self {
             CreateNamespace { .. }
             | CreateContainer { .. }
+            | AttachForeign { .. }
             | DeleteNamespace { .. }
+            | DetachForeign { .. }
             | RemoveContainer { .. } => Stage::Namespaces,
             CreateRadio { .. } | DeleteRadio { .. } => Stage::Hwsim,
             CreateMgmtBridge { .. } | CreateMgmtVeth { .. } | DeleteHostLink { .. } => {
@@ -443,7 +474,7 @@ impl Op {
             | CreateBridge { .. }
             | DeleteBridge { .. }
             | CreateNetworkVeth { .. } => Stage::Networks,
-            CreateVeth { .. } | DeleteLink { .. } => Stage::Links,
+            CreateVeth { .. } | CreateTapVeth { .. } | DeleteLink { .. } => Stage::Links,
             CreateMacvlan { .. } | CreateIpvlan { .. } => Stage::HostLinks,
             LinksUp { .. } => Stage::LinksUp,
             Sysctls { .. } => Stage::Sysctls,
@@ -468,6 +499,7 @@ impl Op {
             CreateContainer { node, .. } | RemoveContainer { node, .. } => {
                 format!("container:{node}")
             }
+            AttachForeign { node, .. } | DetachForeign { node, .. } => format!("foreign:{node}"),
             CreateRadio { node, iface, .. } | DeleteRadio { node, iface, .. } => {
                 format!("radio:{node}:{iface}")
             }
@@ -481,7 +513,9 @@ impl Op {
             CreateNetworkVeth { node, iface, .. } | DeleteLink { node, iface } => {
                 format!("link:{node}:{iface}")
             }
-            CreateVeth { a, .. } => format!("link:{}:{}", a.node, a.iface),
+            CreateVeth { a, .. } | CreateTapVeth { a, .. } => {
+                format!("link:{}:{}", a.node, a.iface)
+            }
             CreateMacvlan { node, cfg } => format!("link:{node}:{}", cfg.name),
             CreateIpvlan { node, cfg } => format!("link:{node}:{}", cfg.name),
             LinksUp { node, .. } => format!("linksup:{node}"),
@@ -519,6 +553,10 @@ impl Op {
                 node: node.clone(),
                 id: name.clone(),
             },
+            AttachForeign { node, bridge, .. } => DetachForeign {
+                node: node.clone(),
+                bridge: bridge.clone(),
+            },
             CreateMgmtBridge { name, .. } => DeleteHostLink { name: name.clone() },
             CreateBridge { ns, name, .. } => DeleteBridge {
                 ns: ns.clone(),
@@ -546,7 +584,7 @@ impl Op {
                 node: node.clone(),
                 iface: iface.clone(),
             },
-            CreateVeth { a, .. } => DeleteLink {
+            CreateVeth { a, .. } | CreateTapVeth { a, .. } => DeleteLink {
                 node: a.node.clone(),
                 iface: a.iface.clone(),
             },
@@ -576,6 +614,7 @@ impl Op {
         use Op::*;
         match self {
             CreateVeth { a, b, .. } => a.node == node || b.node == node,
+            CreateTapVeth { a, .. } => a.node == node,
             CreateNetworkVeth { node: n, .. }
             | CreateMgmtVeth { node: n, .. }
             | CreateMacvlan { node: n, .. }
@@ -594,6 +633,7 @@ impl Op {
         matches!(
             self,
             DeleteNamespace { .. }
+                | DetachForeign { .. }
                 | RemoveContainer { .. }
                 | DeleteLink { .. }
                 | DeleteHostLink { .. }
@@ -613,6 +653,19 @@ impl Op {
         match self {
             CreateNamespace { node, ns } => format!("create namespace {ns} for {node}"),
             CreateContainer { node, image, .. } => format!("create container for {node} ({image})"),
+            AttachForeign {
+                node,
+                target,
+                bridge,
+            } => match bridge {
+                Some(b) => format!("foreign {node}: {target}, on bridge {b}"),
+                None => format!("foreign {node}: {target}"),
+            },
+            CreateTapVeth {
+                a, port, bridge, ..
+            } => {
+                format!("veth {}:{} ↔ {port} on {bridge}", a.node, a.iface)
+            }
             CreateRadio {
                 node,
                 iface,
@@ -674,6 +727,10 @@ impl Op {
             KillFrrDaemons { node, .. } => format!("{node}: stop frr daemons"),
             WifiDaemon { node, wifi } => format!("{node}: wifi {} ({:?})", wifi.name, wifi.mode),
             DeleteNamespace { ns, .. } => format!("delete namespace {ns}"),
+            DetachForeign { node, bridge } => match bridge {
+                Some(b) => format!("foreign {node} leaves: delete bridge {b}"),
+                None => format!("foreign {node} leaves"),
+            },
             RemoveContainer { node, .. } => format!("remove container of {node}"),
             DeleteLink { node, iface } => format!("delete link {node}:{iface}"),
             DeleteHostLink { name } => format!("delete host link {name}"),

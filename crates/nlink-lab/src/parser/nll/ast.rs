@@ -309,6 +309,9 @@ pub struct NodeDef {
     pub overlay: Option<String>,
     pub depends_on: Vec<String>,
     pub props: Vec<NodeProp>,
+    /// `kind foreign { netns|container|tap "…"  manage addresses|tc }`
+    /// (#344).
+    pub foreign: Option<crate::types::Foreign>,
 }
 
 /// IP version for forward shorthand.

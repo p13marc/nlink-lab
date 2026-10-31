@@ -58,7 +58,16 @@ pub(super) struct ApplyEnv {
 impl ApplyEnv {
     /// Empty environment for a fresh deploy.
     pub fn for_deploy(topology: &Topology) -> Result<Self> {
-        let runtime = if topology.nodes.values().any(|n| n.image.is_some()) {
+        let foreign_container = |n: &crate::types::Node| {
+            n.foreign
+                .as_ref()
+                .is_some_and(|f| matches!(f.target, crate::types::ForeignTarget::Container(_)))
+        };
+        let runtime = if topology
+            .nodes
+            .values()
+            .any(|n| n.image.is_some() || foreign_container(n))
+        {
             let rt_config = topology.lab.runtime.clone().unwrap_or_default();
             Some(Runtime::new(&rt_config)?)
         } else {
@@ -113,6 +122,22 @@ impl ApplyEnv {
                     pid: c.pid,
                 },
             );
+        }
+        // the running lab's foreign nodes, found again (#344)
+        for name in running
+            .topology()
+            .nodes
+            .iter()
+            .filter(|(_, n)| n.is_foreign())
+            .map(|(name, _)| name)
+        {
+            match running.foreign_ns(name) {
+                Some(Ok(ns)) => {
+                    env.ns.insert(name.clone(), ns);
+                }
+                Some(Err(e)) => tracing::warn!("{e}"),
+                None => {}
+            }
         }
         env.pids = running.pids().to_vec();
         env.starttimes = running.starttimes().clone();
@@ -360,6 +385,39 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
             env.namespace_names.insert(node.clone(), ns.clone());
             env.ns
                 .insert(node.clone(), NsRef::Named { name: ns.clone() });
+        }
+        Op::AttachForeign { node, bridge, .. } => {
+            let foreign = env
+                .topology
+                .nodes
+                .get(node)
+                .and_then(|n| n.foreign.clone())
+                .ok_or_else(|| Error::NodeNotFound { name: node.clone() })?;
+            let ns =
+                crate::foreign::resolve(node, &foreign, env.runtime.as_ref().map(Runtime::binary))?;
+            if let (crate::types::ForeignTarget::Tap(tap), Some(bridge)) = (&foreign.target, bridge)
+            {
+                ApplyEnv::root()?
+                    .add_link(nlink::netlink::link::BridgeLink::new(bridge))
+                    .await
+                    .map_err(|e| {
+                        Error::nlink(format!("create bridge {bridge} for tap {tap}"), e)
+                    })?;
+                // deleting the bridge releases the tap, and never deletes it
+                journal.record(Undo::DeleteHostLink {
+                    name: bridge.clone(),
+                });
+                crate::foreign::enslave_tap(tap, bridge).await?;
+            }
+            env.ns.insert(node.clone(), ns);
+        }
+        Op::DetachForeign { node, bridge } => {
+            if let Some(bridge) = bridge
+                && let Err(e) = ApplyEnv::root()?.del_link_if_exists(bridge.as_str()).await
+            {
+                tracing::warn!("delete bridge {bridge}: {e}");
+            }
+            env.ns.remove(node);
         }
         Op::CreateContainer {
             node,
@@ -629,6 +687,39 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
                 iface: a.iface.clone(),
             });
         }
+        Op::CreateTapVeth {
+            a,
+            port,
+            bridge,
+            mtu,
+        } => {
+            let host_fd = NsRef::Root
+                .open_fd()
+                .map_err(|e| Error::nlink("open the host's namespace", e))?;
+            let conn_a = env.route(&a.node)?;
+            let mut veth =
+                nlink::netlink::link::VethLink::new(&a.iface, port).peer_netns_fd(&host_fd);
+            if let Some(mtu) = mtu {
+                veth = veth.mtu(*mtu);
+            }
+            conn_a.add_link(veth).await.map_err(|e| {
+                Error::deploy_failed(format!(
+                    "failed to create veth pair {}:{} <-> {port}: {e}",
+                    a.node, a.iface
+                ))
+            })?;
+            journal.record(Undo::DeleteLink {
+                ns: env.handle(&a.node)?.clone(),
+                iface: a.iface.clone(),
+            });
+            let host = ApplyEnv::root()?;
+            host.set_link_master(port.as_str(), bridge.as_str())
+                .await
+                .map_err(|e| Error::nlink(format!("put {port} on {bridge}"), e))?;
+            host.set_link_up(port.as_str())
+                .await
+                .map_err(|e| Error::nlink(format!("bring up {port}"), e))?;
+        }
         Op::CreateMacvlan { node, cfg } => {
             use nlink::netlink::link::{MacvlanLink, MacvlanMode as M};
             let mode = match cfg.mode {
@@ -716,8 +807,11 @@ async fn execute_one(op: &Op, env: &mut ApplyEnv, journal: &mut Journal) -> Resu
         }
         Op::Stack { node, cfg } => {
             let handle = env.handle(node)?.clone();
+            // a foreign node's stack only adds: what else it has is not
+            // the lab's (#344)
+            let foreign = env.topology.nodes.get(node).is_some_and(|n| n.is_foreign());
             let plan = super::network_plan_options(
-                env.purge,
+                env.purge && !foreign,
                 env.previous_vrf_tables.get(node).map_or(&[], Vec::as_slice),
                 env.previous_network.get(node),
             );

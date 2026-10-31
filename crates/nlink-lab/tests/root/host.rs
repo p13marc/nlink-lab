@@ -863,3 +863,309 @@ async fn eight_host_reachable_dns_labs_deploy_in_parallel() {
         std::mem::forget(g);
     }
 }
+
+// ─── #344: foreign nodes ───
+
+/// A command run as root on the host, its stdout; `None` when it failed.
+fn host(cmd: &str, args: &[&str]) -> Option<String> {
+    let out = std::process::Command::new(cmd)
+        .args(args)
+        .env("PATH", "/usr/sbin:/usr/bin:/sbin:/bin")
+        .output()
+        .ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// What a foreign-node test made itself, removed when it ends.
+struct ForeignTargets {
+    netns: Vec<String>,
+    links: Vec<String>,
+    containers: Vec<String>,
+}
+
+impl Drop for ForeignTargets {
+    fn drop(&mut self) {
+        for c in &self.containers {
+            let _ = host("podman", &["rm", "-f", "-t", "0", c]);
+        }
+        for l in &self.links {
+            let _ = host("ip", &["link", "del", l]);
+        }
+        for n in &self.netns {
+            let _ = host("ip", &["netns", "del", n]);
+        }
+    }
+}
+
+/// Attach to persistent tap `name` (`ip tuntap add`), as a VM's hypervisor
+/// would: with no one attached a tap has no carrier, and a bridge sends it
+/// nothing.
+fn attach_tap(name: &str) -> std::fs::File {
+    use std::os::fd::AsRawFd;
+    #[repr(C)]
+    struct IfReq {
+        name: [u8; libc::IFNAMSIZ],
+        flags: libc::c_short,
+        _pad: [u8; 22],
+    }
+    const TUNSETIFF: libc::c_ulong = 0x4004_54ca;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/net/tun")
+        .expect("/dev/net/tun");
+    let mut req = IfReq {
+        name: [0; libc::IFNAMSIZ],
+        flags: (libc::IFF_TAP | libc::IFF_NO_PI) as libc::c_short,
+        _pad: [0; 22],
+    };
+    req.name[..name.len()].copy_from_slice(name.as_bytes());
+    // SAFETY: TUNSETIFF reads and writes an ifreq, which `req` is laid out as.
+    let rc = unsafe { libc::ioctl(file.as_raw_fd(), TUNSETIFF as _, &mut req) };
+    assert_eq!(
+        rc,
+        0,
+        "TUNSETIFF {name}: {}",
+        std::io::Error::last_os_error()
+    );
+    file
+}
+
+/// Whether an ARP request for `ip` arrives on the tap `file` within 5 s.
+fn tap_hears_arp_for(file: &std::fs::File, ip: std::net::Ipv4Addr) -> bool {
+    use std::io::Read as _;
+    use std::os::fd::AsRawFd;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut buf = [0u8; 2048];
+    let mut file = file;
+    while std::time::Instant::now() < deadline {
+        let mut pfd = libc::pollfd {
+            fd: file.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        // SAFETY: one valid pollfd.
+        if unsafe { libc::poll(&mut pfd, 1, 200) } <= 0 {
+            continue;
+        }
+        let Ok(n) = file.read(&mut buf) else { continue };
+        // Ethernet II: ethertype at 12, ARP target address at 14 + 24
+        if n >= 42 && buf[12..14] == [0x08, 0x06] && buf[38..42] == ip.octets() {
+            return true;
+        }
+    }
+    false
+}
+
+/// #344: a namespace node is linked to a netns `ip netns add` made, to a
+/// tap (`ip tuntap add`, attached as a VM would be) and, with podman, to a
+/// container another tool runs. Traffic passes and is impaired, `spawn`
+/// is refused, and `destroy` leaves the netns, the tap and the container
+/// as they were, without the lab's ends.
+#[tokio::test]
+async fn foreign_nodes_are_linked_and_left_as_they_were() {
+    let test = "foreign_nodes_are_linked_and_left_as_they_were";
+    if !privileged(test) {
+        return;
+    }
+    let pid = std::process::id();
+    let (ns, tap, ctr) = (format!("xf{pid}"), format!("xt{pid}"), format!("xc{pid}"));
+    let podman = feature(test, "podman-alpine", has_local_image("alpine:latest"));
+    let mut made = ForeignTargets {
+        netns: vec![ns.clone()],
+        links: vec![tap.clone()],
+        containers: Vec::new(),
+    };
+    host("ip", &["netns", "add", &ns]).expect("ip netns add");
+    host("ip", &["tuntap", "add", "dev", &tap, "mode", "tap"]).expect("ip tuntap add");
+    let (ctr_node, ctr_link) = if podman {
+        made.containers.push(ctr.clone());
+        host(
+            "podman",
+            &[
+                "run",
+                "-d",
+                "--name",
+                &ctr,
+                "--network",
+                "none",
+                "alpine:latest",
+                "sleep",
+                "infinity",
+            ],
+        )
+        .expect("podman run");
+        (
+            format!(r#"node c kind foreign {{ container "{ctr}"  manage addresses  manage tc }}"#),
+            "link r:eth2 -- c:eth0 { 10.0.2.1/24 -- 10.0.2.2/24  <- delay 20ms }".to_string(),
+        )
+    } else {
+        Default::default()
+    };
+    let mut topo = nlink_lab::parser::parse(&format!(
+        r#"lab "foreign-{pid}" {{ runtime "podman" }}
+node r
+node fw kind foreign {{ netns "{ns}"  manage addresses }}
+node vm kind foreign {{ tap "{tap}" }}
+{ctr_node}
+link fw:eth0 -- r:eth0 {{ 10.0.0.2/24 -- 10.0.0.1/24  <- delay 30ms }}
+link r:eth1 -- vm:nic {{ 10.0.1.1/24 -- 10.0.1.2/24 }}
+{ctr_link}
+"#
+    ))
+    .unwrap();
+    unique(&mut topo, test);
+    let bridge = topo.lab.tap_bridge_name("vm");
+    let mut lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+
+    // the netns: its address is the lab's to set (`manage addresses`), the
+    // delay is on the lab's end, and `exec` runs in it
+    let rtt = avg_rtt_ms(&lab, "r", "10.0.0.2");
+    assert!(rtt >= 30.0, "rtt {rtt} ms to the netns, 30 ms delay");
+    let addrs = lab.exec("fw", "ip", &["-br", "addr"]).unwrap().stdout;
+    assert!(addrs.contains("10.0.0.2/24"), "{addrs}");
+    let err = lab.spawn("fw", &["sleep", "30"]).unwrap_err().to_string();
+    assert!(err.contains("foreign"), "{err}");
+
+    // the tap: on the lab's bridge, and the lab's frames reach the "VM"
+    let master = std::fs::read_link(format!("/sys/class/net/{tap}/master")).unwrap();
+    assert_eq!(master.file_name().unwrap().to_str().unwrap(), bridge);
+    let vm = attach_tap(&tap);
+    let ping = std::thread::spawn({
+        let name = lab.name().to_string();
+        move || {
+            let lab = RunningLab::load(&name).unwrap();
+            lab.exec(
+                "r",
+                "ping",
+                &["-c", "4", "-i", "0.5", "-W", "1", "10.0.1.2"],
+            )
+        }
+    });
+    assert!(
+        tap_hears_arp_for(&vm, "10.0.1.2".parse().unwrap()),
+        "no ARP request from the lab reached the tap"
+    );
+    let _ = ping.join();
+
+    // the container: its side's address and delay are the lab's to set
+    if podman {
+        let rtt = avg_rtt_ms(&lab, "r", "10.0.2.2");
+        assert!(
+            rtt >= 20.0,
+            "rtt {rtt} ms to the container, 20 ms delay inside it"
+        );
+    }
+
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+    drop(vm);
+
+    // the targets are as they were, without the lab's ends
+    assert!(
+        std::path::Path::new(&format!("/run/netns/{ns}")).exists(),
+        "the netns was deleted"
+    );
+    assert!(
+        host("ip", &["-n", &ns, "link", "show", "eth0"]).is_none(),
+        "the lab's end stayed in the netns"
+    );
+    assert!(
+        std::path::Path::new(&format!("/sys/class/net/{tap}")).exists(),
+        "the tap was deleted"
+    );
+    assert!(
+        !std::path::Path::new(&format!("/sys/class/net/{tap}/master")).exists(),
+        "the tap is still enslaved"
+    );
+    assert!(
+        !std::path::Path::new(&format!("/sys/class/net/{bridge}")).exists(),
+        "the lab's bridge stayed"
+    );
+    if podman {
+        let running = host("podman", &["inspect", "-f", "{{.State.Running}}", &ctr]);
+        assert_eq!(
+            running.as_deref().map(str::trim),
+            Some("true"),
+            "the container stopped"
+        );
+        let pid: u32 = host("podman", &["inspect", "-f", "{{.State.Pid}}", &ctr])
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        assert!(
+            host(
+                "nsenter",
+                &["-t", &pid.to_string(), "-n", "ip", "link", "show", "eth0"]
+            )
+            .is_none(),
+            "the lab's end stayed in the container"
+        );
+    }
+    drop(made);
+}
+
+/// #344: what a deploy needs of its foreign targets is checked before its
+/// first op, and a failed check leaves nothing: a missing netns, a tap a
+/// bridge already has, an interface name the netns already uses.
+#[tokio::test]
+async fn a_foreign_target_that_cannot_be_used_fails_before_anything_is_made() {
+    let test = "a_foreign_target_that_cannot_be_used_fails_before_anything_is_made";
+    if !privileged(test) {
+        return;
+    }
+    let pid = std::process::id();
+    let (ns, tap, br) = (format!("xg{pid}"), format!("xu{pid}"), format!("xb{pid}"));
+    let _made = ForeignTargets {
+        netns: vec![ns.clone()],
+        links: vec![tap.clone(), br.clone()],
+        containers: Vec::new(),
+    };
+    host("ip", &["netns", "add", &ns]).expect("ip netns add");
+    host("ip", &["-n", &ns, "link", "add", "eth0", "type", "dummy"]).expect("dummy");
+    host("ip", &["tuntap", "add", "dev", &tap, "mode", "tap"]).expect("ip tuntap add");
+    host("ip", &["link", "add", &br, "type", "bridge"]).expect("bridge");
+    host("ip", &["link", "set", &tap, "master", &br]).expect("enslave");
+    let cases = [
+        (
+            format!(r#"node x kind foreign {{ netns "xnone{pid}" }}"#),
+            "foreign-target-missing",
+        ),
+        (
+            format!(r#"node x kind foreign {{ tap "{tap}" }}"#),
+            "already has a master",
+        ),
+        (
+            format!(r#"node x kind foreign {{ netns "{ns}" }}"#),
+            "already has an interface 'eth0'",
+        ),
+    ];
+    for (i, (node, says)) in cases.iter().enumerate() {
+        let mut topo = nlink_lab::parser::parse(&format!(
+            "lab \"fpre-{pid}\"\nnode r\n{node}\nlink r:eth0 -- x:eth0\n"
+        ))
+        .unwrap();
+        unique(&mut topo, &format!("{test}-{i}"));
+        let name = topo.lab.name.clone();
+        let _guard = LabCleanup { name: name.clone() };
+        let err = match topo.deploy().await {
+            Ok(_) => panic!("case {i}: the deploy succeeded"),
+            Err(e) => e.to_string(),
+        };
+        assert!(err.contains(says), "case {i}: {err}");
+        assert!(!nlink_lab::state::exists(&name), "case {i}: state left");
+        assert!(
+            !std::path::Path::new(&format!("/run/netns/{}-r", topo.lab.prefix())).exists(),
+            "case {i}: the lab's namespace was made"
+        );
+    }
+    // the bridge still has its tap
+    let master = std::fs::read_link(format!("/sys/class/net/{tap}/master")).unwrap();
+    assert_eq!(master.file_name().unwrap().to_str().unwrap(), br);
+}

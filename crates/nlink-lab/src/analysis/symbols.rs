@@ -384,6 +384,11 @@ pub const BLOCK_KEYWORDS: &[(&str, &[&str])] = &[
             "lo",
             "interface",
             "mtu",
+            "kind",
+            "netns",
+            "container",
+            "tap",
+            "manage",
         ],
     ),
     (

@@ -23,7 +23,15 @@ pub(crate) fn plan_topology(topology: &Topology, dns_extra_hosts: &[String]) -> 
     for node_name in super::process::topo_sort_nodes(&topology.nodes) {
         let node = &topology.nodes[&node_name];
         let node_name = &node_name;
-        if let Some(image) = &node.image {
+        if let Some(f) = &node.foreign {
+            // another tool's: found, never made (#344)
+            ops.push(Op::AttachForeign {
+                node: node_name.clone(),
+                target: f.target.clone(),
+                bridge: matches!(f.target, crate::types::ForeignTarget::Tap(_))
+                    .then(|| topology.lab.tap_bridge_name(node_name)),
+            });
+        } else if let Some(image) = &node.image {
             ops.push(Op::CreateContainer {
                 node: node_name.clone(),
                 name: format!("{}-{}", topology.lab.prefix(), node_name),
@@ -80,6 +88,9 @@ pub(crate) fn plan_topology(topology: &Topology, dns_extra_hosts: &[String]) -> 
             prefix: mgmt.prefix,
         });
         for (idx, node_name) in topology.nodes.keys().enumerate() {
+            if topology.nodes[node_name].is_foreign() {
+                continue;
+            }
             ops.push(Op::CreateMgmtVeth {
                 node: node_name.clone(),
                 peer: topology.lab.mgmt_peer_name(idx),
@@ -136,6 +147,7 @@ pub(crate) fn plan_topology(topology: &Topology, dns_extra_hosts: &[String]) -> 
     }
 
     // ── point-to-point links ──
+    let mut tap_links: BTreeMap<String, usize> = BTreeMap::new();
     for link in &topology.links {
         let a = EndpointRef::parse(&link.endpoints[0]).ok_or_else(|| Error::InvalidEndpoint {
             endpoint: link.endpoints[0].clone(),
@@ -147,6 +159,27 @@ pub(crate) fn plan_topology(topology: &Topology, dns_extra_hosts: &[String]) -> 
             if !topology.nodes.contains_key(n) {
                 return Err(Error::NodeNotFound { name: n.clone() });
             }
+        }
+        // The lab's end is the one made, and the one an undo deletes by
+        // name: never a foreign node's (#344).
+        let foreign = |n: &str| topology.nodes[n].foreign.as_ref();
+        let (a, b) = if foreign(&a.node).is_some() {
+            (b, a)
+        } else {
+            (a, b)
+        };
+        if let Some(f) = foreign(&b.node)
+            && matches!(f.target, crate::types::ForeignTarget::Tap(_))
+        {
+            let k = *tap_links.entry(b.node.clone()).or_insert(0usize);
+            tap_links.insert(b.node.clone(), k + 1);
+            ops.push(Op::CreateTapVeth {
+                a,
+                port: topology.lab.tap_port_name(&b.node, k),
+                bridge: topology.lab.tap_bridge_name(&b.node),
+                mtu: link.mtu,
+            });
+            continue;
         }
         ops.push(Op::CreateVeth {
             a,
@@ -173,7 +206,17 @@ pub(crate) fn plan_topology(topology: &Topology, dns_extra_hosts: &[String]) -> 
 
     // ── bring nlink-lab-created interfaces up ──
     for (node_name, node) in &topology.nodes {
-        let mut ifaces: Vec<String> = vec!["lo".to_string()];
+        // a foreign node: only the ends nlink-lab made in it; a tap's
+        // are in the host's namespace, up when made (#344)
+        let foreign = node.foreign.as_ref();
+        if foreign.is_some_and(|f| matches!(f.target, crate::types::ForeignTarget::Tap(_))) {
+            continue;
+        }
+        let mut ifaces: Vec<String> = if foreign.is_some() {
+            Vec::new()
+        } else {
+            vec!["lo".to_string()]
+        };
         for link in &topology.links {
             for ep_str in &link.endpoints {
                 if let Some(ep) = EndpointRef::parse(ep_str)
@@ -192,7 +235,10 @@ pub(crate) fn plan_topology(topology: &Topology, dns_extra_hosts: &[String]) -> 
                 }
             }
         }
-        if topology.lab.mgmt_host_reachable && topology.lab.mgmt_subnet.is_some() {
+        if topology.lab.mgmt_host_reachable
+            && topology.lab.mgmt_subnet.is_some()
+            && foreign.is_none()
+        {
             ifaces.push("mgmt0".to_string());
         }
         ifaces.extend(node.macvlans.iter().map(|m| m.name.clone()));
@@ -212,6 +258,9 @@ pub(crate) fn plan_topology(topology: &Topology, dns_extra_hosts: &[String]) -> 
         ifaces.retain(|i| !bond_members.contains(i));
         ifaces.sort();
         ifaces.dedup();
+        if ifaces.is_empty() {
+            continue;
+        }
         ops.push(Op::LinksUp {
             node: node_name.clone(),
             ifaces,
@@ -219,7 +268,7 @@ pub(crate) fn plan_topology(topology: &Topology, dns_extra_hosts: &[String]) -> 
     }
 
     // ── sysctls ──
-    for (node_name, node) in &topology.nodes {
+    for (node_name, node) in topology.nodes.iter().filter(|(_, n)| !n.is_foreign()) {
         let mut entries: BTreeMap<String, String> = topology.effective_sysctls(node);
         // A declared link's own keys ride on its declaration in `Stack`
         // (#160): the link does not exist yet here.
@@ -240,7 +289,7 @@ pub(crate) fn plan_topology(topology: &Topology, dns_extra_hosts: &[String]) -> 
             lab: topology.lab.name.clone(),
         });
         for (node_name, node) in &topology.nodes {
-            if node.image.is_none() {
+            if node.image.is_none() && !node.is_foreign() {
                 ops.push(Op::DnsNetnsEtc {
                     node: node_name.clone(),
                     ns: topology.namespace_name(node_name),

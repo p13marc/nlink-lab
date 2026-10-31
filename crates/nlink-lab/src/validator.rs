@@ -108,6 +108,11 @@ pub const RULE_IDS: &[&str] = &[
     "benchmark-metric",
     "interface-one-master",
     "wireguard-key",
+    "foreign-unsupported-property",
+    "foreign-link-needs-lab-side",
+    "foreign-tap-link-only",
+    "foreign-unmanaged-tc",
+    "foreign-name-under-prefix",
     // Warning-level
     "frr-requires-forwarding",
     "mgmt-subnet-not-network-address",
@@ -123,6 +128,7 @@ pub const RULE_IDS: &[&str] = &[
     "firewall-classify-no-effect",
     "wireguard-route-peer",
     "sysctl-host-global",
+    "foreign-address-unmanaged",
 ];
 
 /// All rule identifiers this validator can emit (for `validate --list-rules`).
@@ -148,6 +154,7 @@ const WARNING_RULE_IDS: &[&str] = &[
     "firewall-classify-no-effect",
     "wireguard-route-peer",
     "sysctl-host-global",
+    "foreign-address-unmanaged",
 ];
 
 /// Default severity of a rule, `None` for an unknown id.
@@ -452,6 +459,7 @@ impl Topology {
         validate_test_refs(self, &interfaces, &mut issues);
         validate_benchmarks(self, &mut issues);
         validate_container_fields(self, &mut issues);
+        validate_foreign_nodes(self, &mut issues);
 
         // Warning-level rules
         validate_unique_ips(self, &mut issues);
@@ -3690,6 +3698,224 @@ fn check_argv(cmd: &[String], location: &str, issues: &mut Vec<ValidationIssue>)
 }
 
 /// Container field validation: cmd/env/volumes require image.
+/// Foreign nodes (#344): nlink-lab links to them and changes nothing else
+/// in them, so what it would have to run, create or configure inside one
+/// is refused, and what it would configure only on request is checked
+/// against `manage addresses` / `manage tc`.
+fn validate_foreign_nodes(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
+    use crate::types::ForeignTarget;
+    let foreign = |n: &str| topology.nodes.get(n).and_then(|n| n.foreign.as_ref());
+    let lab_prefix = format!("{}-", topology.lab.prefix());
+    for (name, node) in &topology.nodes {
+        let Some(f) = &node.foreign else { continue };
+        let at = format!("nodes.{name}");
+        let has_kind = node.interfaces.values().any(|i| i.kind.is_some());
+        let unsupported: &[(&str, bool)] = &[
+            ("an `image`", node.image.is_some()),
+            ("profiles", !node.profiles.is_empty()),
+            ("`run`/`exec`", !node.exec.is_empty()),
+            ("sysctls", !node.sysctls.is_empty()),
+            ("a firewall", node.firewall.is_some()),
+            ("`nat`", node.nat.is_some()),
+            ("FRR routing", node.frr.is_some()),
+            ("Wi-Fi", !node.wifi.is_empty()),
+            ("VRFs", !node.vrfs.is_empty()),
+            ("WireGuard", !node.wireguard.is_empty()),
+            (
+                "macvlan/ipvlan",
+                !node.macvlans.is_empty() || !node.ipvlans.is_empty(),
+            ),
+            ("bond/vlan/vxlan interfaces", has_kind),
+            (
+                "`cpu`/`memory`",
+                node.cpu.is_some() || node.memory.is_some(),
+            ),
+            ("a healthcheck", node.healthcheck.is_some()),
+            ("`startup-delay`", node.startup_delay.is_some()),
+            ("`depends-on`", !node.depends_on.is_empty()),
+        ];
+        for (what, present) in unsupported {
+            if *present {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "foreign-unsupported-property",
+                    message: format!(
+                        "foreign node '{name}' cannot have {what}: nlink-lab does not run or \
+                         configure anything inside a node it did not create"
+                    ),
+                    location: Some(at.clone()),
+                });
+            }
+        }
+        if !node.routes.is_empty() && !f.manage_addresses {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "foreign-unsupported-property",
+                message: format!("foreign node '{name}' has routes but no `manage addresses`"),
+                location: Some(format!("{at}.routes")),
+            });
+        }
+        if let ForeignTarget::Tap(_) = f.target
+            && (f.manage_addresses || f.manage_tc)
+        {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "foreign-tap-link-only",
+                message: format!(
+                    "foreign tap '{name}' cannot take `manage`: its other end is a VM's own \
+                     network stack"
+                ),
+                location: Some(at.clone()),
+            });
+        }
+        if let ForeignTarget::Netns(_) = f.target
+            && let Some(path) = f.target.netns_path()
+            && path.parent() == Some(std::path::Path::new("/run/netns"))
+            && path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with(&lab_prefix))
+        {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "foreign-name-under-prefix",
+                message: format!(
+                    "foreign node '{name}': netns {} is named under the lab's prefix \
+                     '{lab_prefix}', which a cleanup of this lab sweeps",
+                    path.display()
+                ),
+                location: Some(at.clone()),
+            });
+        }
+    }
+
+    // links: one lab side each; a foreign side's TC needs `manage tc`
+    for (i, link) in topology.links.iter().enumerate() {
+        let eps: Vec<Option<EndpointRef>> = link
+            .endpoints
+            .iter()
+            .map(|e| EndpointRef::parse(e))
+            .collect();
+        let sides: Vec<Option<&crate::types::Foreign>> = eps
+            .iter()
+            .map(|e| e.as_ref().and_then(|e| foreign(&e.node)))
+            .collect();
+        if sides.iter().all(Option::is_some) {
+            issues.push(ValidationIssue {
+                severity: Severity::Error,
+                rule: "foreign-link-needs-lab-side",
+                message: format!(
+                    "link {} -- {} joins two foreign nodes: nlink-lab creates a link from a \
+                     node of its own",
+                    link.endpoints[0], link.endpoints[1]
+                ),
+                location: Some(format!("links[{i}]")),
+            });
+        }
+    }
+    for (net_name, network) in &topology.networks {
+        for member in &network.members {
+            if let Some(ep) = EndpointRef::parse(member)
+                && let Some(f) = foreign(&ep.node)
+                && matches!(f.target, ForeignTarget::Tap(_))
+            {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "foreign-tap-link-only",
+                    message: format!(
+                        "foreign tap '{}' cannot join network '{net_name}': a tap takes \
+                         point-to-point links only",
+                        ep.node
+                    ),
+                    location: Some(format!("networks.{net_name}.members")),
+                });
+            }
+        }
+        for rule in &network.impairments {
+            if foreign(&rule.src).is_some_and(|f| !f.manage_tc) {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "foreign-unmanaged-tc",
+                    message: format!(
+                        "network '{net_name}': the impairment from foreign node '{}' would go \
+                         inside it; add `manage tc` to it, or impair the other way",
+                        rule.src
+                    ),
+                    location: Some(format!("networks.{net_name}.impairments")),
+                });
+            }
+        }
+    }
+    let tc_maps: [(&str, Vec<&String>); 3] = [
+        ("an impairment", topology.impairments.keys().collect()),
+        ("a rate limit", topology.rate_limits.keys().collect()),
+        ("a qdisc", topology.qdiscs.keys().collect()),
+    ];
+    for (what, keys) in tc_maps {
+        for key in keys {
+            if let Some(ep) = EndpointRef::parse(key)
+                && foreign(&ep.node).is_some_and(|f| !f.manage_tc)
+            {
+                issues.push(ValidationIssue {
+                    severity: Severity::Error,
+                    rule: "foreign-unmanaged-tc",
+                    message: format!(
+                        "{what} on {key} would go inside foreign node '{}': add `manage tc` to \
+                         it, or put it on the lab side of the link (`->` from there)",
+                        ep.node
+                    ),
+                    location: Some(format!("impairments.{key}")),
+                });
+            }
+        }
+    }
+
+    // addresses on a foreign side are only configured when managed
+    let mut unmanaged: Vec<(String, String, String)> = Vec::new();
+    for link in &topology.links {
+        if let Some(addrs) = &link.addresses {
+            for (ep, addr) in link.endpoints.iter().zip(addrs) {
+                if let Some(e) = EndpointRef::parse(ep)
+                    && foreign(&e.node).is_some_and(|f| !f.manage_addresses)
+                {
+                    unmanaged.push((e.node, e.iface, addr.clone()));
+                }
+            }
+        }
+    }
+    for (name, node) in &topology.nodes {
+        if node.foreign.as_ref().is_some_and(|f| !f.manage_addresses) {
+            for (iface, cfg) in &node.interfaces {
+                for addr in &cfg.addresses {
+                    unmanaged.push((name.clone(), iface.clone(), addr.clone()));
+                }
+            }
+        }
+    }
+    for network in topology.networks.values() {
+        for (key, port) in &network.ports {
+            if let Some(e) = EndpointRef::parse(key)
+                && foreign(&e.node).is_some_and(|f| !f.manage_addresses)
+            {
+                for addr in &port.addresses {
+                    unmanaged.push((e.node.clone(), e.iface.clone(), addr.clone()));
+                }
+            }
+        }
+    }
+    for (node, iface, addr) in unmanaged {
+        issues.push(ValidationIssue {
+            severity: Severity::Warning,
+            rule: "foreign-address-unmanaged",
+            message: format!(
+                "{addr} on {node}:{iface} is not configured: '{node}' is foreign; configure it \
+                 there, or add `manage addresses`"
+            ),
+            location: Some(format!("nodes.{node}")),
+        });
+    }
+}
+
 fn validate_container_fields(topology: &Topology, issues: &mut Vec<ValidationIssue>) {
     for (node_name, node) in &topology.nodes {
         if node.image.is_none() {

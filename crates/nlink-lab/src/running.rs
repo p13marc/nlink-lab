@@ -147,6 +147,18 @@ fn merge_pids(fresh: &mut Vec<(String, u32)>, base: &[(String, u32)], mine: &[(S
     }
 }
 
+/// `map[key]` as `from` has it (present or absent).
+fn restore_entry<V: Clone>(map: &mut BTreeMap<String, V>, from: &BTreeMap<String, V>, key: &str) {
+    match from.get(key) {
+        Some(v) => {
+            map.insert(key.to_string(), v.clone());
+        }
+        None => {
+            map.remove(key);
+        }
+    }
+}
+
 /// `fresh` (the state file) with this handle's changes since `base`
 /// applied: what [`RunningLab::save_merged`] writes and
 /// [`RunningLab::refresh`] takes in.
@@ -2102,6 +2114,254 @@ impl RunningLab {
                 impairment: Box::new(impairment.clone()),
             },
         );
+        Ok(())
+    }
+
+    /// Set (or, with `None`, remove) a network's per-pair impairment from
+    /// `src` to `dst`, and converge `src`'s node only (#340): what a
+    /// replay's ticks need, without planning the whole lab as an `apply`
+    /// does. `rate_cap` is the rule's HTB cap; `None` keeps none.
+    pub async fn set_pair_impairment(
+        &mut self,
+        network: &str,
+        src: &str,
+        dst: &str,
+        impairment: Option<&crate::types::Impairment>,
+        rate_cap: Option<&str>,
+    ) -> Result<()> {
+        let m = self.begin("impair-pair").await?;
+        self.set_pair_locked(network, src, dst, impairment, rate_cap)
+            .await?;
+        self.commit(m)
+    }
+
+    async fn set_pair_locked(
+        &mut self,
+        network: &str,
+        src: &str,
+        dst: &str,
+        impairment: Option<&crate::types::Impairment>,
+        rate_cap: Option<&str>,
+    ) -> Result<()> {
+        let net = self
+            .topology
+            .networks
+            .get(network)
+            .ok_or_else(|| Error::invalid_argument(format!("no network '{network}'")))?;
+        let member = |node: &str| {
+            net.members
+                .iter()
+                .any(|m| EndpointRef::parse(m).is_some_and(|e| e.node == node))
+        };
+        for node in [src, dst] {
+            if !member(node) {
+                return Err(Error::invalid_argument(format!(
+                    "'{node}' is not a member of network '{network}'"
+                )));
+            }
+        }
+        let handle = self
+            .ns_resolver_of(src)
+            .ok_or_else(|| Error::NodeNotFound {
+                name: src.to_string(),
+            })?;
+        let saved = self.topology.networks[network].impairments.clone();
+        let before = crate::deploy::live_view(self);
+        let rules = &mut self
+            .topology
+            .networks
+            .get_mut(network)
+            .expect("looked up above")
+            .impairments;
+        rules.retain(|r| !(r.src == src && r.dst == dst));
+        if let Some(imp) = impairment {
+            rules.push(crate::types::NetworkImpairment {
+                src: src.to_string(),
+                dst: dst.to_string(),
+                impairment: imp.clone(),
+                rate_cap: rate_cap.map(str::to_string),
+            });
+        }
+        let after = crate::deploy::live_view(self);
+        if let Err(e) = crate::deploy::reconcile_node_tc(
+            &handle,
+            src,
+            (&before.0, &before.1),
+            (&after.0, &after.1),
+        )
+        .await
+        {
+            self.topology
+                .networks
+                .get_mut(network)
+                .expect("looked up above")
+                .impairments = saved;
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// The endpoints an impairment `dir` of `endpoint` goes on: itself,
+    /// its link's other end, or both.
+    fn directed_endpoints(
+        &self,
+        endpoint: &str,
+        dir: crate::api::Direction,
+    ) -> Result<Vec<String>> {
+        use crate::api::Direction;
+        Ok(match dir {
+            Direction::Out => vec![endpoint.to_string()],
+            Direction::In => vec![self.peer_endpoint(endpoint)?],
+            Direction::Both => vec![endpoint.to_string(), self.peer_endpoint(endpoint)?],
+        })
+    }
+
+    /// What `target` has now: where a replay starts from (#340).
+    pub(crate) fn replay_base(
+        &self,
+        target: &crate::replay::ReplayTarget,
+    ) -> crate::types::Impairment {
+        use crate::replay::ReplayTarget;
+        match target {
+            ReplayTarget::Endpoint { endpoint, .. } => self
+                .live_impairments
+                .get(endpoint)
+                .or_else(|| self.topology.impairments.get(endpoint))
+                .cloned()
+                .unwrap_or_default(),
+            ReplayTarget::Pair { network, src, dst } => self
+                .topology
+                .networks
+                .get(network)
+                .and_then(|n| {
+                    n.impairments
+                        .iter()
+                        .find(|r| r.src == *src && r.dst == *dst)
+                })
+                .map(|r| r.impairment.clone())
+                .unwrap_or_default(),
+        }
+    }
+
+    /// One tick of a replay (#340): `target` gets `imp`, in the kernel and
+    /// in this handle, under the lab's lock; nothing is saved, and no
+    /// event is logged. A pair rule with a `rate-cap` takes the trace's
+    /// rate as its cap.
+    pub(crate) async fn replay_tick(
+        &mut self,
+        target: &crate::replay::ReplayTarget,
+        imp: &crate::types::Impairment,
+    ) -> Result<()> {
+        use crate::replay::ReplayTarget;
+        let m = self.begin("replay").await?;
+        match target {
+            ReplayTarget::Endpoint { endpoint, dir } => {
+                for ep in self.directed_endpoints(endpoint, *dir)? {
+                    let value = imp.clone();
+                    self.change_tc(&ep, |lab| {
+                        if lab.saved_impairments.contains_key(&ep) {
+                            lab.saved_impairments.insert(ep.clone(), value.clone());
+                        }
+                        lab.live_impairments.insert(ep.clone(), value);
+                    })
+                    .await?;
+                }
+            }
+            ReplayTarget::Pair { network, src, dst } => {
+                let cap = self
+                    .topology
+                    .networks
+                    .get(network)
+                    .and_then(|n| {
+                        n.impairments
+                            .iter()
+                            .find(|r| r.src == *src && r.dst == *dst)
+                    })
+                    .and_then(|r| r.rate_cap.clone());
+                let mut imp = imp.clone();
+                let cap = match (cap, imp.rate.take()) {
+                    (Some(_), Some(rate)) => Some(rate),
+                    (cap, rate) => {
+                        imp.rate = rate;
+                        cap
+                    }
+                };
+                self.set_pair_locked(network, src, dst, Some(&imp), cap.as_deref())
+                    .await?;
+            }
+        }
+        drop(m);
+        Ok(())
+    }
+
+    /// End a replay (#340): with `keep` what it last set is saved (a
+    /// `keep` scenario); otherwise `target` goes back to what the state
+    /// file has, which the ticks never wrote.
+    pub(crate) async fn replay_end(
+        &mut self,
+        target: &crate::replay::ReplayTarget,
+        keep: bool,
+    ) -> Result<()> {
+        use crate::replay::ReplayTarget;
+        let m = self.begin("replay").await?;
+        if keep {
+            return self.commit(m);
+        }
+        let base = self
+            .baseline
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
+        let before = crate::deploy::live_view(self);
+        let nodes: Vec<String> = match target {
+            ReplayTarget::Endpoint { endpoint, dir } => {
+                let eps = self.directed_endpoints(endpoint, *dir)?;
+                for ep in &eps {
+                    restore_entry(&mut self.live_impairments, &base.live_impairments, ep);
+                    restore_entry(&mut self.saved_impairments, &base.saved_impairments, ep);
+                }
+                eps.iter()
+                    .filter_map(|ep| EndpointRef::parse(ep).map(|e| e.node))
+                    .collect()
+            }
+            ReplayTarget::Pair { network, src, dst } => {
+                // only the replayed rule goes back, in its place: another
+                // rule of the network is not the replay's
+                let file: Topology = serde_json::from_str(&base.topology)
+                    .map_err(|e| Error::deploy_failed(format!("the state's topology: {e}")))?;
+                let is_it = |i: &crate::types::NetworkImpairment| i.src == *src && i.dst == *dst;
+                let was = file
+                    .networks
+                    .get(network)
+                    .and_then(|n| n.impairments.iter().find(|i| is_it(i)).cloned());
+                if let Some(now) = self.topology.networks.get_mut(network) {
+                    match (now.impairments.iter().position(is_it), was) {
+                        (Some(at), Some(was)) => now.impairments[at] = was,
+                        (Some(at), None) => {
+                            now.impairments.remove(at);
+                        }
+                        (None, Some(was)) => now.impairments.push(was),
+                        (None, None) => {}
+                    }
+                }
+                vec![src.clone()]
+            }
+        };
+        let after = crate::deploy::live_view(self);
+        for node in &nodes {
+            let handle = self
+                .ns_resolver_of(node)
+                .ok_or_else(|| Error::NodeNotFound { name: node.clone() })?;
+            crate::deploy::reconcile_node_tc(
+                &handle,
+                node,
+                (&before.0, &before.1),
+                (&after.0, &after.1),
+            )
+            .await?;
+        }
+        // the file already says this
+        drop(m);
         Ok(())
     }
 

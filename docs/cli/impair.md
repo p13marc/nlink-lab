@@ -81,6 +81,17 @@ Options:
       --rate-cap <RATE_CAP>
           With --pair: an HTB rate cap on top of the netem (`10mbit`)
 
+      --replay <FILE>
+          Play a recorded trace on the endpoint (in --dir), or on --pair: a CSV with a time column and delay, jitter, loss and rate columns (`t_s,delay_ms,jitter_ms,loss_pct,rate_kbit`). Runs until the trace ends (or Ctrl-C), then puts the impairment back
+
+      --step <DURATION>
+          With --replay: how often the trace's values are applied
+          
+          [default: 100ms]
+
+      --loop
+          With --replay: start the trace over at its end, until Ctrl-C
+
   -h, --help
           Print help (see a summary with '-h')
 ```

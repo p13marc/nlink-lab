@@ -3265,6 +3265,81 @@
     }
   },
   {
+    "type": "replay_option",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "cidr",
+          "named": true
+        },
+        {
+          "type": "duration",
+          "named": true
+        },
+        {
+          "type": "float",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "function_cidr",
+          "named": true
+        },
+        {
+          "type": "glob",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "ipv4_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_address",
+          "named": true
+        },
+        {
+          "type": "ipv6_cidr",
+          "named": true
+        },
+        {
+          "type": "percent",
+          "named": true
+        },
+        {
+          "type": "rate",
+          "named": true
+        },
+        {
+          "type": "size",
+          "named": true
+        },
+        {
+          "type": "string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "route_destination",
     "named": true,
     "fields": {},
@@ -3490,6 +3565,10 @@
         },
         {
           "type": "rate",
+          "named": true
+        },
+        {
+          "type": "replay_option",
           "named": true
         },
         {
@@ -4285,6 +4364,10 @@
     "named": false
   },
   {
+    "type": "dir",
+    "named": false
+  },
+  {
     "type": "direction",
     "named": false
   },
@@ -4622,6 +4705,10 @@
     "named": false
   },
   {
+    "type": "loop",
+    "named": false
+  },
+  {
     "type": "loss",
     "named": false
   },
@@ -4731,6 +4818,10 @@
   },
   {
     "type": "ospf",
+    "named": false
+  },
+  {
+    "type": "out",
     "named": false
   },
   {
@@ -4886,6 +4977,10 @@
     "named": false
   },
   {
+    "type": "replay",
+    "named": false
+  },
+  {
     "type": "restore",
     "named": false
   },
@@ -4991,6 +5086,10 @@
   },
   {
     "type": "status",
+    "named": false
+  },
+  {
+    "type": "step",
     "named": false
   },
   {

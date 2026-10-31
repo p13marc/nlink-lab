@@ -1986,6 +1986,45 @@ fn render_scenarios(out: &mut String, topo: &Topology) -> Result<()> {
                         }
                         out.push_str(" }\n");
                     }
+                    ScenarioAction::Replay {
+                        target,
+                        file,
+                        step_ms,
+                        looped,
+                    } => {
+                        use crate::replay::ReplayTarget;
+                        use nlink_lab_shared::api::Direction;
+                        let mut opts = Vec::new();
+                        if *looped {
+                            opts.push("loop".to_string());
+                        }
+                        if *step_ms != crate::types::DEFAULT_REPLAY_STEP_MS {
+                            opts.push(format!("step {step_ms}ms"));
+                        }
+                        match target {
+                            ReplayTarget::Endpoint { endpoint, dir } => {
+                                match dir {
+                                    Direction::Out => {}
+                                    Direction::In => opts.push("dir in".into()),
+                                    Direction::Both => opts.push("dir both".into()),
+                                }
+                                write!(out, "    replay {}", nll_endpoint(endpoint)?).unwrap();
+                            }
+                            ReplayTarget::Pair { network, src, dst } => write!(
+                                out,
+                                "    replay {} {} -- {}",
+                                nll_name(network)?,
+                                nll_name(src)?,
+                                nll_name(dst)?
+                            )
+                            .unwrap(),
+                        }
+                        write!(out, " {}", nll_string(file)?).unwrap();
+                        if !opts.is_empty() {
+                            write!(out, " {{ {} }}", opts.join(" ")).unwrap();
+                        }
+                        out.push('\n');
+                    }
                 }
             }
             out.push_str("  }\n");
@@ -2230,6 +2269,55 @@ link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24  loss 1% seed 3 }
             Some("3"),
             "{rendered}"
         );
+    }
+
+    #[test]
+    fn replays_round_trip() {
+        let (_, rendered, reparsed) = roundtrip(
+            r#"lab "r"
+
+node a
+node b
+node c
+link a:eth0 -- b:eth0 { 10.0.0.1/24 -- 10.0.0.2/24 }
+network net {
+  members [a:eth1, b:eth1, c:eth0]
+  subnet 10.0.5.0/24
+}
+
+scenario "s" {
+  at 0s {
+    replay a:eth0 "t.csv" { loop step 250ms dir both }
+    replay net a -- b "t.csv"
+  }
+}
+"#,
+        );
+        assert!(
+            rendered.contains(r#"replay a:eth0 "t.csv" { loop step 250ms dir both }"#),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains(r#"replay net a -- b "t.csv""#),
+            "{rendered}"
+        );
+        let actions = &reparsed.scenarios[0].steps[0].actions;
+        assert!(matches!(
+            &actions[0],
+            ScenarioAction::Replay {
+                step_ms: 250,
+                looped: true,
+                ..
+            }
+        ));
+        assert!(matches!(
+            &actions[1],
+            ScenarioAction::Replay {
+                step_ms: crate::types::DEFAULT_REPLAY_STEP_MS,
+                looped: false,
+                ..
+            }
+        ));
     }
 
     #[test]

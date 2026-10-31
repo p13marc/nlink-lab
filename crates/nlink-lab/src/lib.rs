@@ -95,6 +95,7 @@ pub mod privileges;
 pub mod proc_stat;
 pub mod pty;
 pub mod render;
+pub mod replay;
 pub mod running;
 pub mod scenario;
 #[cfg(test)]
@@ -107,6 +108,7 @@ pub mod subnet_pool;
 pub mod templates;
 pub mod test_helpers;
 pub mod test_runner;
+pub mod trace;
 pub mod types;
 pub mod validator;
 pub mod wait;

@@ -4418,6 +4418,50 @@ fn parse_scenario(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ScenarioDe
                     let rule = parse_network_impair(tokens, pos)?;
                     actions.push(ast::ScenarioActionDef::PairImpair { network, rule });
                 }
+            } else if eat_kw(tokens, pos, "replay") {
+                // `replay NODE:IFACE "file" { … }` or a network's pair
+                // `replay NETWORK SRC -- DST "file" { … }` (#340)
+                let target = if matches!(at(tokens, *pos + 1), Some(Token::Colon)) {
+                    let (node, iface) = parse_endpoint(tokens, pos)?;
+                    ast::ReplayTargetDef::Endpoint(format!("{node}:{iface}"))
+                } else {
+                    let network = parse_name(tokens, pos)?;
+                    let src = parse_name(tokens, pos)?;
+                    expect(tokens, pos, &Token::DashDash)?;
+                    let dst = parse_name(tokens, pos)?;
+                    ast::ReplayTargetDef::Pair { network, src, dst }
+                };
+                let file = expect_string(tokens, pos)?;
+                let (mut step, mut looped, mut dir) = (None, false, None);
+                if eat(tokens, pos, &Token::LBrace) {
+                    loop {
+                        skip_newlines(tokens, pos);
+                        if eat(tokens, pos, &Token::RBrace) {
+                            break;
+                        }
+                        if eat_kw(tokens, pos, "loop") {
+                            looped = true;
+                        } else if eat_kw(tokens, pos, "step") {
+                            step = Some(expect_duration(tokens, pos)?);
+                        } else if eat_kw(tokens, pos, "dir") {
+                            dir = Some(expect_ident(tokens, pos)?);
+                        } else {
+                            return Err(err(
+                                tokens,
+                                *pos,
+                                "expected `loop`, `step DURATION` or `dir out|in|both` in a replay"
+                                    .into(),
+                            ));
+                        }
+                    }
+                }
+                actions.push(ast::ScenarioActionDef::Replay {
+                    target,
+                    file,
+                    step,
+                    looped,
+                    dir,
+                });
             } else if eat_kw(tokens, pos, "partition") {
                 let (node, iface) = parse_endpoint(tokens, pos)?;
                 let both = eat_kw(tokens, pos, "both");
@@ -4439,8 +4483,8 @@ fn parse_scenario(tokens: &[Spanned], pos: &mut usize) -> Result<ast::ScenarioDe
                             tokens,
                             *pos,
                             format!(
-                                "expected scenario action (down, up, clear, impair, partition, heal, validate, \
-                                 exec, log), found {other}"
+                                "expected scenario action (down, up, clear, impair, partition, heal, replay, \
+                                 validate, exec, log), found {other}"
                             ),
                         ));
                     }

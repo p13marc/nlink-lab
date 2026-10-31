@@ -850,6 +850,26 @@ pub enum ScenarioActionDef {
         network: String,
         rule: NetworkImpairDef,
     },
+    /// `replay NODE:IFACE "file" [{ loop step D dir out|in|both }]`, or
+    /// `replay NETWORK SRC -- DST "file" [{ … }]` (#340).
+    Replay {
+        target: ReplayTargetDef,
+        file: String,
+        step: Option<Val<Duration>>,
+        looped: bool,
+        dir: Option<String>,
+    },
+}
+
+/// What a `replay` plays on (#340).
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReplayTargetDef {
+    Endpoint(String),
+    Pair {
+        network: String,
+        src: String,
+        dst: String,
+    },
 }
 
 /// Variable binding.

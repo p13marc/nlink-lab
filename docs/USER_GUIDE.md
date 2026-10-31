@@ -432,6 +432,41 @@ scenario "wan-faults" {
   `both` also does the other end of its point-to-point link.
 - `impair NETWORK SRC -- DST { delay 200ms }` sets a per-pair impairment
   on a bridge network SRC and DST are members of, as `impair --pair` does.
+- `replay EP "trace.csv" { loop  step 100ms  dir both }` and `replay
+  NETWORK SRC -- DST "trace.csv"` play a recorded link (#340), below.
+
+**Replaying a recorded link.** A trace is a CSV whose header names each
+column with its unit, the time first:
+
+```text
+# an LTE commute
+t_s,delay_ms,jitter_ms,loss_pct,rate_kbit
+0,40,5,0.1,20000
+1,55,8,0.5,12000
+2,,,2,
+```
+
+`t` takes `_ms`, `_s` or `_us`; `delay` and `jitter` `_us`, `_ms` or `_s`;
+`loss` `_pct`; `rate` `_bps`, `_kbit`, `_mbit` or `_gbit`. A column the
+trace lacks, or a cell left empty, keeps the impairment's current value;
+between two rows each column is interpolated linearly, and after the
+last row it stays. `replay` starts the trace beside the rest of the
+scenario: every `step` (default 100ms) the values at that moment become
+the endpoint's impairment (in `dir`, as `impair --dir`), or the pair
+rule's, applying only what changed. On a pair rule with a `rate-cap`, the
+trace's rate sets the cap. `loop` starts the trace over at its end; a
+trace that runs out holds its last row until the scenario ends. When the
+scenario ends the replayed impairments are put back (or kept, with
+`keep`). In a seeded lab every applied value gets a netem seed of its
+own, so a replay's losses repeat too. The path is relative to the NLL
+file. The ticks change the kernel without rewriting the lab's state, so
+while a replay runs another change to the same node (an `impair` from a
+terminal) undoes the replayed value until the next tick.
+`examples/scenario-replay.nll` plays `examples/traces/lte-synthetic.csv`.
+
+`nlink-lab impair EP --replay trace.csv [--step 100ms] [--loop] [--dir
+…]` (or `--pair SRC DST --replay …`) plays one by hand, in the
+foreground, until it ends or Ctrl-C, then puts the impairment back.
 
 A `heal` restores the path, not every packet: a neighbour (ARP) entry
 whose probes went into the black hole can take a second or two to give

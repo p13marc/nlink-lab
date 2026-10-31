@@ -1656,8 +1656,13 @@ action         = "down" endpoint | "up" endpoint | "clear" endpoint
                | "impair" endpoint impair_props
                | "impair" IDENT IDENT "--" IDENT "{" (impair_props | "rate-cap" RATE)* "}"
                | ("partition" | "heal") endpoint "both"?
+               | "replay" (endpoint | IDENT IDENT "--" IDENT) STRING replay_opts?
                | "validate" "{" assertion* "}"
                | "exec" IDENT STRING+ | "log" STRING
+replay_opts    = "{" ("loop" | "step" DURATION | "dir" ("out" | "in" | "both"))* "}"
+                 (* #340: STRING is a CSV trace, relative to the file;
+                    it plays beside the other steps, every `step`
+                    (default 100ms), until the scenario ends *)
 
 # ── Benchmark ───────────────────────────────────
 benchmark      = "benchmark" STRING "{" bench_test* "}"

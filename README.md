@@ -124,7 +124,7 @@ side-by-side examples, and migration notes — lives at
 - [Testing guide](docs/TESTING_GUIDE.md) — the `#[lab_test]` macro and integration-test patterns.
 - [Harness guide](docs/HARNESS_GUIDE.md) — building Rust test harnesses: spawn ordering, capture endpoint selection, failure-mode debugging, parallel-lab concurrency.
 - [Live views and the GUI](docs/GUI.md) — the daemon, `nlink-lab top`, the experimental desktop app.
-- [Examples](examples/) — <!-- count:examples-all -->56<!-- /count --> NLL files (<!-- count:examples -->47<!-- /count --> in `examples/`, the rest in `cookbook/` and `imports/`), every one parse-tested in CI.
+- [Examples](examples/) — <!-- count:examples-all -->57<!-- /count --> NLL files (<!-- count:examples -->48<!-- /count --> in `examples/`, the rest in `cookbook/` and `imports/`), every one parse-tested in CI.
 
 **When something breaks, or you want to change it**
 

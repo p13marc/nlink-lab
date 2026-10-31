@@ -78,15 +78,16 @@ async fn scenario_ctx(
     ctx: &crate::ops::OpCtx,
 ) -> Result<ScenarioResult> {
     let start = std::time::Instant::now();
-    let mut undo = Undo::of(lab);
+    let mut undo = Undo::of(lab, scenario.keep);
     let mut step_results = Vec::new();
     let ran = run_steps(lab, scenario, ctx, start, &mut undo, &mut step_results).await;
 
-    let cleanup = if scenario.keep {
-        Vec::new()
-    } else {
-        undo.put_back(lab).await
-    };
+    // the replays end with the scenario: each saves what it set (`keep`)
+    // or puts its target back (#340)
+    let mut cleanup = undo.stop_replays().await;
+    if !scenario.keep {
+        cleanup.extend(undo.put_back(lab).await);
+    }
     let elapsed = start.elapsed().as_millis() as u64;
     for action in &cleanup {
         // also when the scenario was cancelled: then no result carries it
@@ -158,6 +159,12 @@ async fn run_steps(
 /// it was before the first touch, and the interfaces it took down and
 /// did not bring back. `exec` steps are not undone.
 struct Undo {
+    /// The scenario says `keep`.
+    keep: bool,
+    /// The replays it started, running until it ends (#340), and the
+    /// handle they share.
+    replays: Vec<Replaying>,
+    replay_lab: Option<std::sync::Arc<tokio::sync::Mutex<RunningLab>>>,
     tc: RuntimeTc,
     /// The endpoints whose impairment or partition it changed: only they
     /// are put back, so an operator's `impair` elsewhere during the
@@ -165,6 +172,13 @@ struct Undo {
     touched: BTreeSet<String>,
     pairs: Vec<PairWas>,
     down: BTreeSet<String>,
+}
+
+/// A replay a scenario started (#340): stopped, and awaited, when it ends.
+struct Replaying {
+    description: String,
+    stop: tokio::sync::oneshot::Sender<()>,
+    task: tokio::task::JoinHandle<Result<u64>>,
 }
 
 /// A network's pair rule `src → dst` before the scenario changed it
@@ -177,8 +191,11 @@ struct PairWas {
 }
 
 impl Undo {
-    fn of(lab: &RunningLab) -> Self {
+    fn of(lab: &RunningLab, keep: bool) -> Self {
         Self {
+            keep,
+            replays: Vec::new(),
+            replay_lab: None,
             tc: lab.runtime_tc(),
             touched: BTreeSet::new(),
             pairs: Vec::new(),
@@ -235,6 +252,80 @@ impl Undo {
         if let ScenarioAction::Up(ep) = action {
             self.down.remove(ep);
         }
+    }
+
+    /// Start playing a trace on `target`, beside the rest of the scenario,
+    /// on a handle of its own (#340).
+    fn start_replay(
+        &mut self,
+        lab: &RunningLab,
+        target: &crate::replay::ReplayTarget,
+        file: &str,
+        step_ms: u64,
+        looped: bool,
+    ) -> ActionResult {
+        let path = match &lab.topology().source_dir {
+            Some(dir) => std::path::Path::new(dir).join(file),
+            None => std::path::PathBuf::from(file),
+        };
+        let description = format!(
+            "replay {target} {file} (every {step_ms}ms{})",
+            if looped { ", looped" } else { "" }
+        );
+        let trace = match crate::trace::Trace::load(&path) {
+            Ok(t) => t,
+            Err(e) => return ActionResult::failed(description, e),
+        };
+        let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+        let handle = self
+            .replay_lab
+            .get_or_insert_with(|| std::sync::Arc::new(tokio::sync::Mutex::new(lab.clone())))
+            .clone();
+        let (target, keep) = (target.clone(), self.keep);
+        let task = tokio::spawn(async move {
+            crate::replay::replay(
+                &handle,
+                &target,
+                &trace,
+                crate::replay::Playback {
+                    step: std::time::Duration::from_millis(step_ms),
+                    looped,
+                    hold: true,
+                    keep,
+                },
+                async {
+                    let _ = stopped.await;
+                },
+            )
+            .await
+        });
+        self.replays.push(Replaying {
+            description: description.clone(),
+            stop,
+            task,
+        });
+        ActionResult::ok(description)
+    }
+
+    /// End every replay, and say how each went.
+    async fn stop_replays(&mut self) -> Vec<ActionResult> {
+        let mut out = Vec::new();
+        for r in std::mem::take(&mut self.replays) {
+            let _ = r.stop.send(());
+            let what = if self.keep { "kept" } else { "put back" };
+            out.push(match r.task.await {
+                Ok(Ok(changes)) => ActionResult::ok(format!(
+                    "cleanup: {}: {changes} change(s), {what}",
+                    r.description
+                )),
+                Ok(Err(e)) => ActionResult::failed(format!("cleanup: {}", r.description), e),
+                Err(e) => ActionResult::failed(
+                    format!("cleanup: {}", r.description),
+                    crate::Error::Runtime(format!("the replay task: {e}")),
+                ),
+            });
+        }
+        out
     }
 
     /// Put the lab back: the interfaces up, the pair rules as they were
@@ -327,7 +418,15 @@ async fn execute_step(
 
     for action in &step.actions {
         undo.note(lab, action);
-        let result = execute_action(lab, action).await;
+        let result = match action {
+            ScenarioAction::Replay {
+                target,
+                file,
+                step_ms,
+                looped,
+            } => undo.start_replay(lab, target, file, *step_ms, *looped),
+            _ => execute_action(lab, action).await,
+        };
         if result.ok {
             undo.done(action);
         }
@@ -352,6 +451,11 @@ async fn execute_step(
 
 async fn execute_action(lab: &mut RunningLab, action: &ScenarioAction) -> ActionResult {
     match action {
+        // started by `execute_step` beside the steps, not run here
+        ScenarioAction::Replay { target, file, .. } => ActionResult::failed(
+            format!("replay {target} {file}"),
+            "a replay runs beside the steps (Undo::start_replay)",
+        ),
         ScenarioAction::Down(endpoint) => {
             let desc = format!("down {endpoint}");
             match set_link_state(lab, endpoint, false).await {

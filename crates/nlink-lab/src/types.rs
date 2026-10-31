@@ -249,6 +249,25 @@ pub enum ScenarioAction {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         rate_cap: Option<String>,
     },
+    /// Play a recorded trace (a CSV of delay, jitter, loss and rate over
+    /// time) on an endpoint or a per-pair impairment, while the rest of
+    /// the scenario runs (#340). `file` is relative to the topology's
+    /// file.
+    Replay {
+        target: crate::replay::ReplayTarget,
+        file: String,
+        #[serde(default = "default_replay_step_ms")]
+        step_ms: u64,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        looped: bool,
+    },
+}
+
+/// How often a replay applies its trace, unless it says `step` (#340).
+pub const DEFAULT_REPLAY_STEP_MS: u64 = 100;
+
+fn default_replay_step_ms() -> u64 {
+    DEFAULT_REPLAY_STEP_MS
 }
 
 /// Post-deploy reachability assertion.

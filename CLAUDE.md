@@ -112,7 +112,7 @@ crates/nlink-lab/src/
       value.rs      # Val<T>: typed + spanned literals/deferred values (Duration, Percent, Rate, Size, …)
       lower.rs      # AST → Topology (imports, loops, variables, lowering)
   error.rs          # Error types (includes NllDiagnostic for miette)
-  validator.rs      # Topology validation (<!-- count:validator-rules -->82<!-- /count --> rules with stable ids, see RULE_IDS)
+  validator.rs      # Topology validation (<!-- count:validator-rules -->83<!-- /count --> rules with stable ids, see RULE_IDS)
   render.rs         # Topology → NLL serializer (for `render` command)
   dns.rs            # DNS /etc/hosts generation, injection, removal
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
@@ -250,7 +250,7 @@ bins/gui/src/       # nlink-lab-gui, the desktop app (iced 0.14, experimental):
 bins/gui/tests/packaging.rs    # desktop entry / metainfo / manifest / release agree
 
 examples/
-  *.nll             # NLL topology examples (<!-- count:examples -->47<!-- /count --> here; <!-- count:examples-all -->56<!-- /count --> incl. cookbook/ and imports/)
+  *.nll             # NLL topology examples (<!-- count:examples -->48<!-- /count --> here; <!-- count:examples-all -->57<!-- /count --> incl. cookbook/ and imports/)
   imports/          # Import composition and parametric module examples
 ```
 

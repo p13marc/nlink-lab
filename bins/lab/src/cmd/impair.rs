@@ -86,6 +86,21 @@ pub struct Args {
     /// With --pair: an HTB rate cap on top of the netem (`10mbit`).
     #[arg(long, requires = "pair")]
     pub rate_cap: Option<String>,
+
+    /// Play a recorded trace on the endpoint (in --dir), or on --pair: a
+    /// CSV with a time column and delay, jitter, loss and rate columns
+    /// (`t_s,delay_ms,jitter_ms,loss_pct,rate_kbit`). Runs until the
+    /// trace ends (or Ctrl-C), then puts the impairment back.
+    #[arg(long, value_name = "FILE", conflicts_with_all = ["show", "clear", "partition", "heal"])]
+    pub replay: Option<std::path::PathBuf>,
+
+    /// With --replay: how often the trace's values are applied.
+    #[arg(long, value_name = "DURATION", requires = "replay", default_value = "100ms", value_parser = crate::args::duration)]
+    pub step: std::time::Duration,
+
+    /// With --replay: start the trace over at its end, until Ctrl-C.
+    #[arg(long = "loop", requires = "replay")]
+    pub looped: bool,
 }
 
 /// The impairment `words` spell, warned about like the validator would.
@@ -153,6 +168,54 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                     crate::util::impair_show_line(entry.as_ref())
                 );
             }
+        }
+        return Ok(());
+    }
+
+    if let Some(file) = &args.replay {
+        let target = match args.pair.as_slice() {
+            [src, dst] => nlink_lab::replay::ReplayTarget::Pair {
+                network: match &args.network {
+                    Some(n) => n.clone(),
+                    None => pair_network(running.topology(), src, dst)?,
+                },
+                src: src.clone(),
+                dst: dst.clone(),
+            },
+            _ => nlink_lab::replay::ReplayTarget::Endpoint {
+                endpoint: args.endpoint.clone().ok_or_else(|| {
+                    nlink_lab::Error::invalid_argument("--replay plays on an endpoint or --pair")
+                })?,
+                dir: args.dir.into(),
+            },
+        };
+        let trace = nlink_lab::trace::Trace::load(file)?;
+        if !ctx.quiet {
+            eprintln!(
+                "replaying {} on {target} every {:?}{}; Ctrl-C ends it",
+                file.display(),
+                args.step,
+                if args.looped { ", looped" } else { "" }
+            );
+        }
+        let running = tokio::sync::Mutex::new(running);
+        let changes = nlink_lab::replay::replay(
+            &running,
+            &target,
+            &trace,
+            nlink_lab::replay::Playback {
+                step: args.step,
+                looped: args.looped,
+                hold: false,
+                keep: false,
+            },
+            async {
+                let _ = tokio::signal::ctrl_c().await;
+            },
+        )
+        .await?;
+        if !ctx.quiet {
+            eprintln!("{changes} change(s); {target} is back as it was");
         }
         return Ok(());
     }

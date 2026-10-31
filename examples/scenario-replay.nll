@@ -1,0 +1,41 @@
+# Scenario: replay a recorded link (#340).
+#
+# A client on a mobile uplink: its link to the gateway plays a trace of
+# an LTE commute (traces/lte-synthetic.csv: delay, jitter, loss and rate,
+# one row per second, interpolated every 100 ms), while a per-pair rule
+# on the office network replays the same trace between two hosts. The
+# lab is put back when the scenario ends. Run it with:
+#   sudo nlink-lab scenario -L replay commute
+# or play the trace by hand, until it ends or Ctrl-C:
+#   sudo nlink-lab impair -L replay client:eth0 --replay examples/traces/lte-synthetic.csv
+
+lab "replay" { seed 42 }
+
+profile router { forward ipv4 }
+
+node gw : router
+node client { route default via ${gw.eth0} }
+node h1
+node h2
+
+link gw:eth0 -- client:eth0 { subnet 10.0.1.0/24 }
+
+network office {
+  members [gw:eth1, h1:eth0, h2:eth0]
+  subnet 10.0.2.0/24
+  impair h1 -- h2 { delay 1ms }
+}
+
+scenario "commute" {
+  at 0s {
+    log "the commute starts"
+    replay client:eth0 "traces/lte-synthetic.csv" { step 100ms dir both }
+    replay office h1 -- h2 "traces/lte-synthetic.csv" { loop }
+  }
+  at 30s {
+    validate { reach client gw }
+  }
+  at 60s {
+    log "the commute ends"
+  }
+}

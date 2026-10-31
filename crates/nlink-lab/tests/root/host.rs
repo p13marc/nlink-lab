@@ -1143,14 +1143,13 @@ async fn a_foreign_target_that_cannot_be_used_fails_before_anything_is_made() {
         containers: Vec::new(),
     };
     host("ip", &["netns", "add", &ns]).expect("ip netns add");
-    // a veth: the CI runner cannot load the dummy module
-    host(
-        "ip",
-        &[
-            "-n", &ns, "link", "add", "eth0", "type", "veth", "peer", "name", "eth0p",
-        ],
-    )
-    .expect("a veth named eth0 in the netns");
+    // a veth named eth0 in the netns, made over netlink: the CI runner
+    // cannot load the dummy module, and its `ip -n` fails
+    let conn: nlink::Connection<nlink::Route> =
+        nlink::Connection::new_in(ns.as_str()).expect("a connection into the netns");
+    conn.add_link(nlink::netlink::link::VethLink::new("eth0", "eth0p"))
+        .await
+        .expect("a veth named eth0 in the netns");
     // a container without /dev/net/tun (the CI runner) makes no tap
     let tun = feature(test, "tun", std::path::Path::new("/dev/net/tun").exists());
     if tun {

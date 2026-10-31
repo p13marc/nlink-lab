@@ -8,9 +8,9 @@
 
 mod common;
 use common::*;
-use nlink_lab::Lab;
 use nlink_lab::lab_test;
 use nlink_lab::test_helpers::{feature, privileged};
+use nlink_lab::{Lab, RunningLab};
 
 /// Pids of zombie children of *this* process — what issue #30's second
 /// half is about: nlink-lab must never own a child it does not reap.
@@ -666,4 +666,200 @@ async fn cancel_during_a_healthcheck_rolls_back() {
         .join(".locks")
         .join(format!("{name}.lock"));
     assert!(!lock.exists(), "{} left", lock.display());
+}
+
+/// One mutation per lab at a time, from any process (#332). Two CLIs
+/// change the impairments of two interfaces of one node, at the same
+/// time, 20 rounds. Each change plans the node's whole traffic control
+/// from the state it read: unlocked, one could reinstall the other's
+/// interface as it was, or save its state after the other's kernel
+/// change. After every round the kernel's netem is what the state says,
+/// on both interfaces, and at the end `verify` finds no drift.
+#[tokio::test]
+async fn concurrent_impairs_from_two_processes_leave_the_kernel_and_the_state_agreeing() {
+    use std::sync::{Arc, Barrier};
+    let test = "concurrent_impairs_from_two_processes_leave_the_kernel_and_the_state_agreeing";
+    if !privileged(test) {
+        return;
+    }
+    let lab_name = format!("cimp-{}", std::process::id());
+    let topo = nlink_lab::parser::parse(&format!(
+        "lab \"{lab_name}\"\nnode a\nnode b\nnode c\n\
+         link a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24  delay 1ms }}\n\
+         link a:eth1 -- c:eth0 {{ 10.0.1.1/24 -- 10.0.1.2/24  delay 1ms }}\n"
+    ))
+    .unwrap();
+    let lab = topo.deploy().await.expect("deploy failed");
+    let _guard = LabCleanup {
+        name: lab.name().to_string(),
+    };
+    const ROUNDS: u32 = 20;
+    let cli = cli_binary();
+    let barrier = Arc::new(Barrier::new(3));
+    let run = |iface: &'static str, offset: u32| {
+        let (cli, lab_name, barrier) = (cli.clone(), lab_name.clone(), barrier.clone());
+        std::thread::spawn(move || {
+            for i in 0..ROUNDS {
+                barrier.wait();
+                let out = std::process::Command::new(&cli)
+                    .args(["impair", "-L", &lab_name, iface, "delay"])
+                    .arg(format!("{}ms", offset + i))
+                    .output()
+                    .unwrap();
+                assert!(
+                    out.status.success(),
+                    "impair {iface}: {}",
+                    String::from_utf8_lossy(&out.stderr)
+                );
+                barrier.wait();
+            }
+        })
+    };
+    let (one, two) = (run("a:eth0", 10), run("a:eth1", 100));
+    let agree = |round: u32| {
+        let lab = RunningLab::load(&lab_name).unwrap();
+        for ep in ["a:eth0", "a:eth1"] {
+            let want = lab.live_impairments()[ep].delay.clone().unwrap();
+            let want_ms: f64 = want.trim_end_matches("ms").parse().unwrap();
+            let shown = lab.impair_show_blocking(ep).unwrap().unwrap();
+            assert_eq!(
+                shown.delay_ms,
+                Some(want_ms),
+                "round {round}, {ep}: kernel {shown:?}, state {want}"
+            );
+        }
+    };
+    for round in 0..ROUNDS {
+        barrier.wait(); // both start
+        barrier.wait(); // both done
+        agree(round);
+    }
+    one.join().unwrap();
+    two.join().unwrap();
+
+    let verify = std::process::Command::new(&cli)
+        .args(["verify", "-L", &lab_name])
+        .output()
+        .unwrap();
+    assert!(
+        verify.status.success(),
+        "drift after concurrent impairs:\n{}{}",
+        String::from_utf8_lossy(&verify.stdout),
+        String::from_utf8_lossy(&verify.stderr)
+    );
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+}
+
+/// Two labs cannot both put a host-reachable mgmt subnet on the host when
+/// the subnets overlap (#332): the second deploy fails before its first op
+/// with `mgmt-subnet-overlap`, naming the first lab, and leaves nothing.
+#[tokio::test]
+async fn an_overlapping_host_reachable_mgmt_subnet_is_refused() {
+    if !privileged("an_overlapping_host_reachable_mgmt_subnet_is_refused") {
+        return;
+    }
+    let (first, second) = (
+        format!("mgov1-{}", std::process::id()),
+        format!("mgov2-{}", std::process::id()),
+    );
+    let src = |name: &str, mgmt: &str| {
+        nlink_lab::parser::parse(&format!(
+            "lab \"{name}\" {{ mgmt {mgmt} host-reachable }}\nnode a\n"
+        ))
+        .unwrap()
+    };
+    let lab = src(&first, "172.31.250.0/24")
+        .deploy()
+        .await
+        .expect("deploy failed");
+    let _guard = LabCleanup {
+        name: first.clone(),
+    };
+    let _guard2 = LabCleanup {
+        name: second.clone(),
+    };
+    let err = src(&second, "172.31.250.128/25")
+        .deploy()
+        .await
+        .err()
+        .expect("an overlapping mgmt subnet must be refused");
+    let msg = err.to_string();
+    assert!(msg.contains("mgmt-subnet-overlap"), "{msg}");
+    assert!(msg.contains(&first), "{msg}");
+    assert!(!nlink_lab::state::exists(&second));
+    let ns = std::process::Command::new("ip")
+        .args(["netns", "list"])
+        .output()
+        .unwrap();
+    assert!(
+        !String::from_utf8_lossy(&ns.stdout).contains(&second),
+        "nothing of the refused lab"
+    );
+    assert!(
+        !nlink_lab::host_registry::all()
+            .unwrap()
+            .contains_key(&second),
+        "and no claim"
+    );
+    // the first one's claim goes with it
+    std::mem::forget(_guard);
+    lab.destroy().await.expect("destroy failed");
+    assert!(
+        !nlink_lab::host_registry::all()
+            .unwrap()
+            .contains_key(&first)
+    );
+}
+
+/// Eight labs with `dns hosts` and a host-reachable mgmt network deploy at
+/// once, and destroy cleanly (#332): the host-global pieces they share
+/// (`/etc/hosts`, the host registry, the subnet pool) take turns.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn eight_host_reachable_dns_labs_deploy_in_parallel() {
+    if !privileged("eight_host_reachable_dns_labs_deploy_in_parallel") {
+        return;
+    }
+    let names: Vec<String> = (0..8)
+        .map(|i| format!("par{i}-{}", std::process::id()))
+        .collect();
+    let _guards: Vec<LabCleanup> = names
+        .iter()
+        .map(|n| LabCleanup { name: n.clone() })
+        .collect();
+    let deploys = names.iter().enumerate().map(|(i, name)| {
+        let topo = nlink_lab::parser::parse(&format!(
+            "lab \"{name}\" {{ dns hosts\n  mgmt 172.31.{}.0/24 host-reachable }}\nnode a\nnode b\nlink a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}\n",
+            240 + i
+        ))
+        .unwrap();
+        tokio::spawn(async move { topo.deploy().await })
+    });
+    let mut labs = Vec::new();
+    for d in deploys.collect::<Vec<_>>() {
+        labs.push(d.await.unwrap().expect("a parallel deploy failed"));
+    }
+    let hosts = std::fs::read_to_string("/etc/hosts").unwrap();
+    for name in &names {
+        assert!(
+            hosts.contains(&format!("NLINK-LAB-{name}-START")),
+            "{name}'s /etc/hosts section"
+        );
+    }
+    let destroys: Vec<_> = labs
+        .into_iter()
+        .map(|lab| tokio::spawn(async move { lab.destroy().await }))
+        .collect();
+    for d in destroys {
+        d.await.unwrap().expect("a parallel destroy failed");
+    }
+    let hosts = std::fs::read_to_string("/etc/hosts").unwrap();
+    let claims = nlink_lab::host_registry::all().unwrap();
+    for name in &names {
+        assert!(!hosts.contains(&format!("NLINK-LAB-{name}-")), "{name}");
+        assert!(!claims.contains_key(name), "{name}'s claim released");
+    }
+    for g in _guards {
+        std::mem::forget(g);
+    }
 }

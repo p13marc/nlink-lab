@@ -22,6 +22,10 @@ pub enum Undo {
     FreeSubnets {
         lab: String,
     },
+    /// What the lab claimed in the host namespace (#332).
+    ReleaseHostClaims {
+        lab: String,
+    },
     DeleteNamespace {
         ns: String,
     },
@@ -186,6 +190,9 @@ impl Journal {
                 Undo::FreeSubnets { lab } => {
                     let _ = crate::subnet_pool::free_for_lab(lab);
                 }
+                Undo::ReleaseHostClaims { lab } => {
+                    let _ = crate::host_registry::release(lab);
+                }
                 Undo::DeleteNamespace { ns } => {
                     crate::dns::remove_netns_etc(ns);
                     if namespace::exists(ns)
@@ -257,6 +264,9 @@ impl Drop for Journal {
             match undo {
                 Undo::FreeSubnets { lab } => {
                     let _ = crate::subnet_pool::free_for_lab(lab);
+                }
+                Undo::ReleaseHostClaims { lab } => {
+                    let _ = crate::host_registry::release(lab);
                 }
                 Undo::DeleteNamespace { ns } => {
                     crate::dns::remove_netns_etc(ns);

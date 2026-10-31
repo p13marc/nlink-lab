@@ -2,7 +2,7 @@
 # lab-debris.sh: fail if a lab left anything on this host after the root
 # suite (#339): namespaces, /etc/netns overlays, ownership tags, runtime
 # dirs, /etc/hosts sections, state dirs, lock files, subnet-pool entries,
-# root-namespace mgmt bridges and veths. Run as a user with sudo, after
+# host registry claims, root-namespace mgmt bridges and veths. Run as a user with sudo, after
 # every lab is destroyed. IGNORE_NETNS is an extended regex of namespace
 # names that are not nlink-lab's (another tool's test namespaces).
 set -uo pipefail
@@ -30,6 +30,10 @@ locks=$(sudo ls -A "$root/labs/.locks" 2>/dev/null)
 if sudo test -f "$root/subnet-pool.json"; then
     pool=$(sudo cat "$root/subnet-pool.json" | tr -d ' \n' | grep -oP '"in_use":\{\K[^}]+')
     [ -z "$pool" ] || report "subnet-pool allocations" "$pool"
+fi
+if sudo test -f "$root/host/allocations.toml"; then
+    claims=$(sudo grep -E '^\[labs\.' "$root/host/allocations.toml")
+    [ -z "$claims" ] || report "host registry claims" "$claims"
 fi
 links=$(ip -o link show | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -E '^(nl|nm|np)[0-9a-f]{8}' || true)
 [ -z "$links" ] || report "root-namespace mgmt links" "$links"

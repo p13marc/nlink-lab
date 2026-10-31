@@ -231,6 +231,9 @@ pub fn host_resources(running: &RunningLab) -> serde_json::Value {
     }
     serde_json::json!({
         "mgmt_bridge": crate::types::mgmt_bridge_name_for(running.name()),
+        // what it claims in the host namespace (#332), with its mgmt subnet
+        "mgmt_subnet": topo.lab.mgmt_subnet,
+        "mgmt_host_reachable": topo.lab.mgmt_host_reachable,
         "subnets": subnets.into_iter().collect::<Vec<_>>(),
     })
 }

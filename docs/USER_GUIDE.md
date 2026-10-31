@@ -99,6 +99,12 @@ binary from `just install-caps`). Reading it takes membership in the
 `nlink-lab` group, so `ls`, `status`, `ip`, `logs` and `snapshot ls` work
 without sudo for its members (see [INSTALL.md](INSTALL.md)).
 
+One change to a lab runs at a time, whoever makes it (#332): a second
+`impair` from another terminal, or one the daemon runs, waits for the
+first. It waits up to `NLINK_LAB_LOCK_TIMEOUT` (default `30s`), then
+fails with "lab 'x' is busy: held for apply by pid 1234 …", naming what
+holds it.
+
 The ping succeeds because the deploy planned the veth pair, the
 addresses and the route, then executed those stages in order —
 links, then addresses and routes (the `Stack` stage), then

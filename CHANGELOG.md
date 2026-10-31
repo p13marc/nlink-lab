@@ -38,6 +38,16 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Host-reachable mgmt subnets are claimed across labs** (#332). A
+  `mgmt … host-reachable` lab puts a bridge, an address and a route on
+  the host itself; a second lab whose host-reachable mgmt subnet overlaps
+  another lab's is now refused before its first op, with
+  `mgmt-subnet-overlap` naming that lab. The claims live in
+  `<state>/host/allocations.toml`; destroy, a failed deploy and `destroy
+  --orphans` release them, `doctor` reports claims of labs that are gone
+  and `doctor --fix` rebuilds the registry from the running labs.
+  `status --json`'s `host_resources` now carries the mgmt subnet.
+
 - **Reproducible loss: a lab seed** (#337). `lab "x" { seed N }`,
   `deploy --seed N`, `test --seed N`, `#[lab_test(seed = N)]` or
   `NLINK_LAB_SEED=N` give a lab its seed, and every netem qdisc's seed is
@@ -118,6 +128,22 @@ All notable changes to this project will be documented in this file.
   that exists.
 
 ### Changed
+
+- **One mutation per lab at a time, from any process** (#332).
+  `impair`, `partition`, `heal`, a link's MTU, `spawn`, a conntrack flush
+  and a scenario's link `down`/`up` now take the lab's lock, re-read its
+  state, change the kernel, save, and let go. They changed the kernel
+  unlocked and only locked to save, so two CLIs, a CLI and the daemon, or
+  a scenario and `top` could interleave: each change plans the node's
+  whole traffic control from the state it read, and one could reinstall
+  what the other had just set (a root test now changes two interfaces of
+  one node from two processes for 20 rounds and checks kernel and state
+  after each). A mutation waits for the lock up to
+  `NLINK_LAB_LOCK_TIMEOUT` (default 30 s; `45s`, `2m` or seconds), then
+  fails with `Busy`, which names the holder: the lock file now records
+  its pid, uid, operation and start time. `save_state` no longer waits
+  for ever either. A scenario puts back only the endpoints it touched,
+  so an operator's `impair` elsewhere during it stays.
 
 - **The root suite runs in parallel** (#339). `tests/integration.rs`
   (9 436 lines, 150 tests) is now one test binary per area under

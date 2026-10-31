@@ -128,7 +128,6 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         env: &env_refs,
     };
     let pid = running.spawn_with_logs_with_opts(&node, &args, opts)?;
-    running.save_state()?;
 
     if ctx.json {
         println!(

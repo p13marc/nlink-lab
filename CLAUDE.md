@@ -117,6 +117,7 @@ crates/nlink-lab/src/
   dns.rs            # DNS /etc/hosts generation, injection, removal
   test_runner.rs    # CI test runner (deploy→validate→destroy) with JUnit/TAP output
   scenario.rs       # Timed scenario execution engine (fault injection + validation)
+  seed.rs           # Netem seeds: the lab seed, derive(), the kernel probe (#337)
   benchmark.rs      # Benchmark execution engine (ping/iperf3 with metric assertions)
   capture.rs        # Packet capture using netring (pcap output, BPF filters)
   wifi.rs           # Wi-Fi emulation (hostapd/wpa_supplicant config gen, hwsim radios over netlink)
@@ -134,6 +135,7 @@ crates/nlink-lab/src/
                     #   bundle, apply, check, restore, impair, spawn, restart, … —
                     #   what the daemon's jobs run and the CLI shares)
   host.rs           # orphan/stale detection + reaper (tag-gated), reported as Cleanups
+  host_registry.rs  # what labs claim in the host namespace (host-reachable mgmt subnets) (#332)
   metrics.rs        # MetricsCollector: interface rates/states, top TCP flows, process exits
   logs.rs           # process log tail / cat / follow
   edit.rs           # Edit model: live topology edits (nodes, links, impairments, qdiscs, pairs, MTU)

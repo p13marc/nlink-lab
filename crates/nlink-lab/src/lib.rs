@@ -78,6 +78,7 @@ pub mod fmt;
 pub mod frr;
 pub mod helpers;
 pub mod host;
+pub mod host_registry;
 pub mod impair_parse;
 pub mod ipfunc;
 pub mod ipmap;

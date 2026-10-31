@@ -21,7 +21,7 @@ impl Host {
     fn lab(&self, name: &str) -> &Self {
         let dir = self.root.path().join("labs").join(name);
         std::fs::create_dir_all(&dir).unwrap();
-        let state = nlink_lab::state::LabState::new(name, "2026-10-17T12:00:00Z");
+        let state = nlink_lab::internal::state::LabState::new(name, "2026-10-17T12:00:00Z");
         std::fs::write(
             dir.join("state.json"),
             serde_json::to_string_pretty(&state).unwrap(),

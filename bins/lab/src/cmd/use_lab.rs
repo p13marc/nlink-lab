@@ -60,18 +60,18 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         .filter(|l| !l.is_empty())
         .map(|l| format!("NLINK_LAB={l} overrides it in this shell"));
     let report = if args.clear {
-        nlink_lab::state::context_set(uid, None)?;
+        nlink_lab::internal::state::context_set(uid, None)?;
         UseReport {
             lab: None,
             from: None,
             note: None,
         }
     } else if let Some(lab) = args.lab {
-        nlink_lab::state::validate_lab_name(&lab)?;
-        if !nlink_lab::state::exists(&lab) {
+        nlink_lab::internal::state::validate_lab_name(&lab)?;
+        if !nlink_lab::internal::state::exists(&lab) {
             return Err(nlink_lab::Error::NotFound { name: lab });
         }
-        nlink_lab::state::context_set(uid, Some(&lab))?;
+        nlink_lab::internal::state::context_set(uid, Some(&lab))?;
         UseReport {
             lab: Some(lab),
             from: Some(LabFrom::Context),

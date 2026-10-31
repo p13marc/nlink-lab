@@ -110,7 +110,10 @@ pub(crate) fn counts(root: &Path) -> std::collections::BTreeMap<&'static str, St
         ("validator-rules", rules.len().to_string()),
         ("validator-errors", (rules.len() - warnings).to_string()),
         ("validator-warnings", warnings.to_string()),
-        ("lint-rules", nlink_lab::LINT_RULE_IDS.len().to_string()),
+        (
+            "lint-rules",
+            nlink_lab::internal::LINT_RULE_IDS.len().to_string(),
+        ),
         ("examples", count_nll(&examples, false).to_string()),
         ("examples-all", count_nll(&examples, true).to_string()),
         ("api-version", nlink_lab::api::api_version_string()),

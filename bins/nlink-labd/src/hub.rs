@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use nlink_lab::CancelToken;
-use nlink_lab::ops::view;
+use nlink_lab::internal::ops::view;
 use nlink_lab_shared::api::{
     ApiError, ErrorCode, LabSummary, Notification, Response, StreamItem, Topic,
 };
@@ -274,8 +274,8 @@ impl Hub {
             ));
         }
         if let Some(lab) = &lab {
-            nlink_lab::state::validate_lab_name(lab).map_err(|e| e.to_api())?;
-            if !nlink_lab::state::exists(lab) {
+            nlink_lab::internal::state::validate_lab_name(lab).map_err(|e| e.to_api())?;
+            if !nlink_lab::internal::state::exists(lab) {
                 return Err(nlink_lab::Error::NotFound { name: lab.clone() }.to_api());
             }
         }
@@ -515,8 +515,8 @@ fn watch_drift(lab: String, tx: broadcast::Sender<Arc<Note>>, stop: Arc<AtomicBo
         let Ok(running) = nlink_lab::RunningLab::load(&lab) else {
             return;
         };
-        let opts = nlink_lab::WatchOpts::default();
-        let (mut rx, tasks) = match nlink_lab::watch_stream(&running, &opts) {
+        let opts = nlink_lab::internal::WatchOpts::default();
+        let (mut rx, tasks) = match nlink_lab::internal::watch_stream(&running, &opts) {
             Ok(Some(stream)) => stream,
             Ok(None) => return,
             Err(e) => {
@@ -576,8 +576,9 @@ fn collect(
             let tick = Instant::now();
             match nlink_lab::RunningLab::load(&lab) {
                 Ok(running) => {
-                    let c = collector
-                        .get_or_insert_with(|| nlink_lab::metrics::MetricsCollector::new(&running));
+                    let c = collector.get_or_insert_with(|| {
+                        nlink_lab::internal::metrics::MetricsCollector::new(&running)
+                    });
                     match c.snapshot(&running).await {
                         Ok((snapshot, events)) => {
                             latest.lock().unwrap().insert(lab.clone(), snapshot.clone());
@@ -606,7 +607,7 @@ fn collect(
                         Err(e) => tracing::debug!("metrics of '{lab}': {e}"),
                     }
                 }
-                Err(_) if !nlink_lab::state::exists(&lab) => return,
+                Err(_) if !nlink_lab::internal::state::exists(&lab) => return,
                 Err(e) => tracing::debug!("metrics of '{lab}': {e}"),
             }
             let every = *interval.lock().unwrap();
@@ -637,7 +638,7 @@ fn scan(
     cursors.retain(|lab, _| summaries.iter().any(|s| s.lab == *lab));
     let mut events = Vec::new();
     for s in &summaries {
-        let meta = std::fs::metadata(nlink_lab::events::events_path(&s.lab)).ok();
+        let meta = std::fs::metadata(nlink_lab::internal::events::events_path(&s.lab)).ok();
         let (ino, len) = meta.map_or((0, 0), |m| (m.ino(), m.len()));
         let cursor = cursors.entry(s.lab.clone()).or_insert(Cursor {
             ino,

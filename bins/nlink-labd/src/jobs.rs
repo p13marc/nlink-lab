@@ -115,7 +115,7 @@ impl Job {
                 (Err(e), None) if e.code == ErrorCode::Cancelled => OpState::Cancelled,
                 (Err(_), None) => OpState::Failed,
             };
-            info.finished_at = Some(nlink_lab::events::now_iso8601());
+            info.finished_at = Some(nlink_lab::internal::events::now_iso8601());
             info.error = result.as_ref().err().map(|e| e.message.clone());
         }
         *self.result.lock().unwrap() = Some(result);
@@ -154,9 +154,13 @@ impl Jobs {
                 let (topology, options, source) =
                     (topology.clone(), options.clone(), source.clone());
                 tokio::task::spawn_blocking(move || {
-                    nlink_lab::ops::mutate::deploy_target(topology, &options, source.as_ref())
-                        .map(|t| t.lab.name)
-                        .map_err(|e| e.to_api())
+                    nlink_lab::internal::ops::mutate::deploy_target(
+                        topology,
+                        &options,
+                        source.as_ref(),
+                    )
+                    .map(|t| t.lab.name)
+                    .map_err(|e| e.to_api())
                 })
                 .await
                 .map_err(|e| internal(e.to_string()))?
@@ -219,7 +223,7 @@ impl Jobs {
                 lab: lab.to_string(),
                 actor: actor.to_string(),
                 state: OpState::Running,
-                queued_at: nlink_lab::events::now_iso8601(),
+                queued_at: nlink_lab::internal::events::now_iso8601(),
                 finished_at: None,
                 error: None,
             }),
@@ -400,13 +404,14 @@ fn spawn_queue(lab: String, queues: Queues) -> Queue {
                         continue;
                     }
                 };
-                let result = match nlink_lab::ops::mutate::handle(work.request, &work.ctx).await {
-                    Some(result) => result.map_err(|e| e.to_api()),
-                    None => Err(ApiError::new(
-                        ErrorCode::Unsupported,
-                        "this request does not change a lab",
-                    )),
-                };
+                let result =
+                    match nlink_lab::internal::ops::mutate::handle(work.request, &work.ctx).await {
+                        Some(result) => result.map_err(|e| e.to_api()),
+                        None => Err(ApiError::new(
+                            ErrorCode::Unsupported,
+                            "this request does not change a lab",
+                        )),
+                    };
                 left.fetch_sub(1, Ordering::SeqCst);
                 let _ = work.reply.send(result);
             }

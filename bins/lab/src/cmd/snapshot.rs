@@ -47,7 +47,7 @@ pub enum Action {
 #[derive(serde::Serialize, schemars::JsonSchema)]
 pub struct SnapshotList {
     pub lab: String,
-    pub snapshots: Vec<nlink_lab::state::SnapshotInfo>,
+    pub snapshots: Vec<nlink_lab::internal::state::SnapshotInfo>,
 }
 
 impl Report for SnapshotList {
@@ -94,7 +94,7 @@ impl Report for SnapshotList {
 
 fn existing(lab: &LabArg) -> nlink_lab::Result<String> {
     let lab = lab.resolve()?;
-    if !nlink_lab::state::exists(&lab) {
+    if !nlink_lab::internal::state::exists(&lab) {
         return Err(nlink_lab::Error::NotFound { name: lab });
     }
     Ok(lab)
@@ -104,13 +104,13 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     match args.action {
         Action::Ls { lab } => {
             let lab = existing(&lab)?;
-            let snapshots = nlink_lab::state::snapshot_list(&lab)?;
+            let snapshots = nlink_lab::internal::state::snapshot_list(&lab)?;
             emit(ctx, &SnapshotList { lab, snapshots })
         }
         Action::Rm { lab, names } => {
             let lab = existing(&lab)?;
             for name in &names {
-                nlink_lab::state::snapshot_remove(&lab, name)?;
+                nlink_lab::internal::state::snapshot_remove(&lab, name)?;
                 if !ctx.quiet && !ctx.json {
                     println!("Deleted snapshot {name:?} of lab {lab:?}");
                 }
@@ -130,13 +130,13 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         } => {
             let lab = existing(&lab)?;
             // Read-modify-nothing: the snapshot is a copy of the persisted state.
-            let _lock = nlink_lab::state::lock_wait_blocking(
+            let _lock = nlink_lab::internal::state::lock_wait_blocking(
                 &lab,
                 "snapshot",
-                nlink_lab::state::lock_timeout(),
+                nlink_lab::internal::state::lock_timeout(),
             )?;
-            let (state, topology) = nlink_lab::state::load(&lab)?;
-            let meta = nlink_lab::state::snapshot_save(
+            let (state, topology) = nlink_lab::internal::state::load(&lab)?;
+            let meta = nlink_lab::internal::state::snapshot_save(
                 &lab,
                 &name,
                 description.as_deref(),

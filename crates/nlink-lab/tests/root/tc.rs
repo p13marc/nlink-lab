@@ -10,7 +10,7 @@ mod common;
 use common::*;
 use nlink_lab::lab_test;
 use nlink_lab::test_helpers::{feature, privileged};
-use nlink_lab::{Lab, RunningLab};
+use nlink_lab::{RunningLab, TopologyBuilder};
 
 #[lab_test("examples/simple.nll")]
 async fn netem_applied(lab: RunningLab) {
@@ -49,7 +49,7 @@ async fn asymmetric_netem(lab: RunningLab) {
 }
 
 fn asymmetric_topology() -> nlink_lab::Topology {
-    Lab::new("asymmetric-test")
+    TopologyBuilder::new("asymmetric-test")
         .node("a", |n| n)
         .node("b", |n| n)
         .link("a:eth0", "b:eth0", |l| {
@@ -87,7 +87,7 @@ async fn runtime_set_impairment(lab: RunningLab) {
 }
 
 fn runtime_impair_topology() -> nlink_lab::Topology {
-    Lab::new("runtime-impair-test")
+    TopologyBuilder::new("runtime-impair-test")
         .node("a", |n| n)
         .node("b", |n| n)
         .link("a:eth0", "b:eth0", |l| {

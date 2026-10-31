@@ -6,7 +6,7 @@
 #[allow(unused_imports)]
 use nlink_lab::test_helpers::{feature, privileged};
 #[allow(unused_imports)]
-use nlink_lab::{Lab, Op, RunningLab};
+use nlink_lab::{Op, RunningLab, TopologyBuilder};
 
 #[path = "../../../src/schema_check.rs"]
 mod schema_check;

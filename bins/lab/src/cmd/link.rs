@@ -1,7 +1,7 @@
 //! `nlink-lab link`: add, remove or change a link of a running lab.
 
 use crate::ctx::{Ctx, LabArg};
-use nlink_lab::edit::Edit;
+use nlink_lab::internal::edit::Edit;
 
 #[derive(clap::Args)]
 pub struct Args {

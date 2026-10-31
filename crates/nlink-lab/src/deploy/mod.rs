@@ -293,7 +293,7 @@ pub fn plan_for(topology: &Topology) -> Result<Plan> {
     plan::plan(topology, &inputs)
 }
 
-/// Outcome of [`apply`].
+/// Outcome of `apply`.
 #[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct ApplyReport {
     /// Ops executed (removals + additions/changes).
@@ -338,7 +338,7 @@ fn with_running_subnets<'a>(
 /// plan(current))`, with the declarative layers purging undeclared
 /// addresses/routes. Journaled and rolled back on failure like a deploy;
 /// the state file is updated read-modify-write.
-/// The pure half of [`apply`]: the plan `apply` would execute for
+/// The pure half of `apply`: the plan `apply` would execute for
 /// `desired` on top of `running` (removals first, in reverse stage
 /// order). No kernel access; used by `apply --dry-run` / `--check` to
 /// show what the layered diff cannot (e.g. VRF-table route removals).
@@ -532,7 +532,7 @@ pub async fn apply(running: &mut RunningLab, desired: &Topology) -> Result<Apply
     apply_with(running, desired, &ApplyOptions::default()).await
 }
 
-/// [`apply`] with [`ApplyOptions`].
+/// `apply` with [`ApplyOptions`].
 pub async fn apply_with(
     running: &mut RunningLab,
     desired: &Topology,
@@ -946,7 +946,7 @@ async fn reattach_ctx(
     Ok(report)
 }
 
-/// Superseded by [`apply`]; the `TopologyDiff` argument is ignored —
+/// Superseded by `apply`; the `TopologyDiff` argument is ignored —
 /// the kernel-level diff is computed from the plans.
 #[deprecated(since = "0.9.0", note = "use `nlink_lab::apply(running, desired)`")]
 pub async fn apply_diff(

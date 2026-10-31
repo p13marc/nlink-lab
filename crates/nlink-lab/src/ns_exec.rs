@@ -365,12 +365,6 @@ fn spawn_detached_with(
     Ok(u32::from_ne_bytes(buf))
 }
 
-/// Whether the full overlay (mount namespace + sysfs + binds) works on
-/// this host. Probed once, in the first namespace exec'd into.
-pub fn etc_overlay_supported() -> Option<bool> {
-    OVERLAY_SUPPORTED.get().copied()
-}
-
 static OVERLAY_SUPPORTED: OnceLock<bool> = OnceLock::new();
 
 fn note_overlay_support(ns_name: &str, ns_fd: &namespace::NamespaceFd) {
@@ -552,12 +546,5 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
-    }
-
-    #[test]
-    fn probe_unset_until_first_exec() {
-        // No namespace exec happened in this test binary yet (or it did,
-        // in which case the answer is simply cached).
-        let _ = etc_overlay_supported();
     }
 }

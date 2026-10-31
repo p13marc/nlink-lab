@@ -150,7 +150,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let mut running = nlink_lab::RunningLab::load(&lab)?;
 
     if args.show {
-        let endpoints = nlink_lab::impair_parse::collect_show(&running)?;
+        let endpoints = nlink_lab::internal::impair_parse::collect_show(&running)?;
         if ctx.json {
             println!(
                 "{}",
@@ -174,7 +174,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     if let Some(file) = &args.replay {
         let target = match args.pair.as_slice() {
-            [src, dst] => nlink_lab::replay::ReplayTarget::Pair {
+            [src, dst] => nlink_lab::internal::replay::ReplayTarget::Pair {
                 network: match &args.network {
                     Some(n) => n.clone(),
                     None => pair_network(running.topology(), src, dst)?,
@@ -182,14 +182,14 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 src: src.clone(),
                 dst: dst.clone(),
             },
-            _ => nlink_lab::replay::ReplayTarget::Endpoint {
+            _ => nlink_lab::internal::replay::ReplayTarget::Endpoint {
                 endpoint: args.endpoint.clone().ok_or_else(|| {
                     nlink_lab::Error::invalid_argument("--replay plays on an endpoint or --pair")
                 })?,
                 dir: args.dir.into(),
             },
         };
-        let trace = nlink_lab::trace::Trace::load(file)?;
+        let trace = nlink_lab::internal::trace::Trace::load(file)?;
         if !ctx.quiet {
             eprintln!(
                 "replaying {} on {target} every {:?}{}; Ctrl-C ends it",
@@ -199,11 +199,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             );
         }
         let running = tokio::sync::Mutex::new(running);
-        let changes = nlink_lab::replay::replay(
+        let changes = nlink_lab::internal::replay::replay(
             &running,
             &target,
             &trace,
-            nlink_lab::replay::Playback {
+            nlink_lab::internal::replay::Playback {
                 step: args.step,
                 looped: args.looped,
                 hold: false,
@@ -235,7 +235,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         let impairment = (!args.clear && !spec.is_empty())
             .then(|| parse_spec(&spec))
             .transpose()?;
-        let edit = nlink_lab::edit::Edit::SetPairImpairment {
+        let edit = nlink_lab::internal::edit::Edit::SetPairImpairment {
             network,
             src: src.clone(),
             dst: dst.clone(),

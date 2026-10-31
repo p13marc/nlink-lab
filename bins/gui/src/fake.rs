@@ -100,8 +100,8 @@ impl Fake {
         let labs = LABS
             .iter()
             .filter_map(|(name, template)| {
-                let t = nlink_lab::templates::get(template)?;
-                let mut text = nlink_lab::templates::render(t, Some(name));
+                let t = nlink_lab::internal::templates::get(template)?;
+                let mut text = nlink_lab::internal::templates::render(t, Some(name));
                 if *template == "wan" {
                     text.push_str(WAN_RUNS);
                 }

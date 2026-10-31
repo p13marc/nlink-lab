@@ -460,7 +460,7 @@ async fn topology_update(lab: &str) -> Option<TopologyUpdate> {
     Some(TopologyUpdate {
         wire_version: nlink_lab_shared::WIRE_VERSION,
         lab_name: lab.to_string(),
-        timestamp: nlink_lab::metrics::now_unix(),
+        timestamp: nlink_lab::internal::metrics::now_unix(),
         node_count: topology.nodes.len(),
         link_count: topology.links.len(),
         topology_json: serde_json::to_string(&topology).ok()?,
@@ -472,7 +472,7 @@ pub(crate) fn health_of(lab: &LabSummary) -> HealthStatus {
     HealthStatus {
         wire_version: nlink_lab_shared::WIRE_VERSION,
         lab_name: lab.lab.clone(),
-        timestamp: nlink_lab::metrics::now_unix(),
+        timestamp: nlink_lab::internal::metrics::now_unix(),
         node_count: lab.nodes,
         namespace_count: lab.nodes.saturating_sub(lab.containers),
         container_count: lab.containers,

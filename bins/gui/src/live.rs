@@ -1,7 +1,7 @@
 //! A running lab's events as the timeline shows them, and what each one
 //! means for the rest of the tab (impairments, processes to fetch again).
 
-use nlink_lab::events::{LifecycleEvent, LifecycleKind};
+use nlink_lab::internal::events::{LifecycleEvent, LifecycleKind};
 use nlink_lab_shared::messages::{LabEvent, LabEventKind};
 
 /// How an event is coloured.
@@ -184,7 +184,7 @@ pub fn runtime(value: &serde_json::Value) -> EventLine {
 /// lab's back, named and with its fields as `events --source drift`
 /// prints it, a rule as nft prints it (#300).
 pub fn drift(node: &str, detail: &serde_json::Value) -> EventLine {
-    let text = match serde_json::from_value::<nlink_lab::WatchEvent>(detail.clone()) {
+    let text = match serde_json::from_value::<nlink_lab::internal::WatchEvent>(detail.clone()) {
         Ok(ev) => format!("{node}: {} {}", ev.kind.name(), ev.kind.detail())
             .trim_end()
             .to_string(),

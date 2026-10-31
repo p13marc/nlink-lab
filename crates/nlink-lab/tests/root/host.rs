@@ -10,7 +10,7 @@ mod common;
 use common::*;
 use nlink_lab::lab_test;
 use nlink_lab::test_helpers::{feature, privileged};
-use nlink_lab::{Lab, RunningLab};
+use nlink_lab::{RunningLab, TopologyBuilder};
 
 /// Pids of zombie children of *this* process — what issue #30's second
 /// half is about: nlink-lab must never own a child it does not reap.
@@ -274,7 +274,7 @@ async fn dns_hosts_resolve(lab: RunningLab) {
 }
 
 fn dns_topology() -> nlink_lab::Topology {
-    Lab::new("dns-integ-test")
+    TopologyBuilder::new("dns-integ-test")
         .dns(nlink_lab::DnsMode::Hosts)
         .profile("router", |p| p.sysctl("net.ipv4.ip_forward", "1"))
         .node("router", |n| n.profile("router"))

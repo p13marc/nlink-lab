@@ -9,7 +9,7 @@
 mod common;
 use common::*;
 use nlink_lab::test_helpers::{feature, privileged};
-use nlink_lab::{Lab, RunningLab};
+use nlink_lab::{RunningLab, TopologyBuilder};
 
 // ─── Firewall test ────────────────────────────────────────
 
@@ -366,7 +366,7 @@ async fn firewall_blocks_traffic() {
     }
 
     let lab_name = format!("fw-block-{}", std::process::id());
-    let topo = Lab::new(&lab_name)
+    let topo = TopologyBuilder::new(&lab_name)
         .profile("router", |p| p.sysctl("net.ipv4.ip_forward", "1"))
         .node("router", |n| n.profile("router"))
         .node("server", |n| {

@@ -55,7 +55,7 @@ fn prefix_collision_topology() -> nlink_lab::Topology {
     // common prefix get distinct bridge names AND distinct mgmt-side
     // peer interfaces. Lab name length is irrelevant — the
     // `#[lab_test]` macro can rewrite the name to anything.
-    nlink_lab::Lab::new("pcol")
+    nlink_lab::TopologyBuilder::new("pcol")
         .node("host_a", |n| n)
         .node("host_b", |n| n)
         .network("lan_a", |net| {

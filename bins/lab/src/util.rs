@@ -1,9 +1,9 @@
 //! Small helpers shared by several subcommands: flag parsers, BPF filter glue, and the `impair --show` / `status --json`
 //! report builders.
 
-/// [`nlink_lab::logs::follow`] to stdout, until Ctrl-C.
+/// [`nlink_lab::internal::logs::follow`] to stdout, until Ctrl-C.
 pub fn tail_follow(path: &std::path::Path, start_offset: u64) -> nlink_lab::Result<()> {
-    nlink_lab::logs::follow(path, start_offset, &mut std::io::stdout(), || true)
+    nlink_lab::internal::logs::follow(path, start_offset, &mut std::io::stdout(), || true)
 }
 
 /// Parse a CIDR string (`10.0.0.0/24`, `2001:db8::/32`) into the
@@ -17,7 +17,9 @@ pub fn parse_filter_cidr(flag: &str, s: &str) -> nlink_lab::Result<netring::IpNe
 
 /// `impair --show`'s human line for an endpoint: its root qdisc, netem's
 /// values, and whether it is partitioned.
-pub fn impair_show_line(entry: Option<&nlink_lab::impair_parse::ShownImpairment>) -> String {
+pub fn impair_show_line(
+    entry: Option<&nlink_lab::internal::impair_parse::ShownImpairment>,
+) -> String {
     let Some(entry) = entry else {
         return "-".to_string();
     };
@@ -88,7 +90,7 @@ network lan {
 impair c:lo delay 5ms
 "#;
         let topo = nlink_lab::parser::parse(nll).unwrap();
-        let endpoints = nlink_lab::impair_parse::topology_endpoints(&topo);
+        let endpoints = nlink_lab::internal::impair_parse::topology_endpoints(&topo);
 
         // BTreeSet ordering is alphabetical.
         assert_eq!(
@@ -128,7 +130,7 @@ network lan_b {
 }
 "#;
         let topo = nlink_lab::parser::parse(nll).unwrap();
-        let endpoints = nlink_lab::impair_parse::topology_endpoints(&topo);
+        let endpoints = nlink_lab::internal::impair_parse::topology_endpoints(&topo);
         assert!(
             endpoints.contains(&"router:eth0".to_string()),
             "missing router:eth0: {endpoints:?}"

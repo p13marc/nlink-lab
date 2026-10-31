@@ -37,7 +37,7 @@ async fn destroy_one(ctx: &Ctx, name: &str, force: bool) -> nlink_lab::Result<&'
     let quiet = ctx.quiet || ctx.json;
     // before `--force` can sweep with it: `""` or `..` named the state
     // directory itself (#221)
-    nlink_lab::state::validate_lab_name(name)?;
+    nlink_lab::internal::state::validate_lab_name(name)?;
     match nlink_lab::RunningLab::load(name) {
         Ok(lab) => {
             let summary = (
@@ -123,8 +123,8 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 // the caller's current lab is gone: forget it, not leave
                 // every next command failing on it
                 let uid = crate::ctx::caller_uid();
-                if nlink_lab::state::context_get(uid).as_deref() == Some(name.as_str()) {
-                    let _ = nlink_lab::state::context_set(uid, None);
+                if nlink_lab::internal::state::context_get(uid).as_deref() == Some(name.as_str()) {
+                    let _ = nlink_lab::internal::state::context_set(uid, None);
                 }
                 results.push(serde_json::json!({ "lab": name, "result": what }))
             }

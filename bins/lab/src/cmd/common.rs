@@ -36,7 +36,7 @@ pub fn check_topology(topology: &nlink_lab::Topology) -> nlink_lab::Result<()> {
 }
 
 /// One line per `validate` assertion: `PASS` or `FAIL` and why.
-pub fn print_assertions(results: &[nlink_lab::test_runner::AssertionResult]) {
+pub fn print_assertions(results: &[nlink_lab::internal::test_runner::AssertionResult]) {
     for a in results {
         if a.passed {
             println!("  {} {}", green("PASS"), a.description);
@@ -58,12 +58,12 @@ pub fn print_assertions(results: &[nlink_lab::test_runner::AssertionResult]) {
 /// `--strict`, a warning otherwise. `left` says how the lab stays
 /// (`deployed`, `as applied`).
 pub fn assertions_outcome(
-    results: &[nlink_lab::test_runner::AssertionResult],
+    results: &[nlink_lab::internal::test_runner::AssertionResult],
     strict: bool,
     lab: &str,
     left: &str,
 ) -> nlink_lab::Result<()> {
-    if nlink_lab::ops::mutate::assertions_outcome(results, strict, lab, left)? > 0 {
+    if nlink_lab::internal::ops::mutate::assertions_outcome(results, strict, lab, left)? > 0 {
         eprintln!(
             "  {} assertions failed; pass --strict to make this fatal",
             yellow("WARN")
@@ -73,7 +73,7 @@ pub fn assertions_outcome(
 }
 
 /// A plan's ops under their stage headings.
-pub fn print_plan(plan: &nlink_lab::Plan) {
+pub fn print_plan(plan: &nlink_lab::internal::Plan) {
     println!("Plan ({} op(s)):", plan.ops.len());
     let mut last = None;
     for op in &plan.ops {
@@ -86,12 +86,12 @@ pub fn print_plan(plan: &nlink_lab::Plan) {
     }
 }
 
-pub use nlink_lab::ops::view::plan_lists;
+pub use nlink_lab::internal::ops::view::plan_lists;
 
 /// The changes between a lab and its topology: the layered diff, the
 /// removals and the plan's other work. Returns how many there are.
 pub fn print_drift(
-    layered: &nlink_lab::diff::LayeredDiff,
+    layered: &nlink_lab::internal::diff::LayeredDiff,
     removals: &[String],
     work: &[String],
 ) -> usize {
@@ -118,7 +118,7 @@ pub fn archive_topology(
     into: &Path,
     no_reparse: bool,
 ) -> nlink_lab::Result<nlink_lab::Topology> {
-    let report = nlink_lab::portability::import_archive(archive, Some(into), no_reparse)?;
+    let report = nlink_lab::internal::portability::import_archive(archive, Some(into), no_reparse)?;
     report.topology.ok_or_else(|| {
         nlink_lab::Error::invalid_topology(format!(
             "{}: the archive yields no topology",
@@ -164,7 +164,7 @@ pub fn require_node(lab: &nlink_lab::RunningLab, node: &str) -> nlink_lab::Resul
         return Ok(());
     }
     eprintln!("Available nodes: {}", names.join(", "));
-    if nlink_lab::state::exists(node) {
+    if nlink_lab::internal::state::exists(node) {
         eprintln!(
             "  {} '{node}' is a lab: select it with -L {node}",
             crate::ctx::bold("hint:")
@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn failed_assertions_fail_only_when_strict() {
-        let r = |passed| nlink_lab::test_runner::AssertionResult {
+        let r = |passed| nlink_lab::internal::test_runner::AssertionResult {
             description: "reach a b".into(),
             passed,
             detail: None,

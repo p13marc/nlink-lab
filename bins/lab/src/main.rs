@@ -113,7 +113,7 @@ fn usage_error(e: clap::Error, args: &[std::ffi::OsString]) -> ExitCode {
     let lab_hint = (e.kind() == ErrorKind::UnknownArgument)
         .then_some(invalid_arg.clone())
         .flatten()
-        .filter(|arg| !arg.starts_with('-') && nlink_lab::state::exists(arg));
+        .filter(|arg| !arg.starts_with('-') && nlink_lab::internal::state::exists(arg));
     if wants_json {
         let mut api = nlink_lab::api::ApiError::new(
             nlink_lab::api::ErrorCode::InvalidArgument,

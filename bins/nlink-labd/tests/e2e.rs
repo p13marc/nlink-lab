@@ -55,7 +55,7 @@ impl Drop for Cleanup {
                             let _ = running.destroy().await;
                         }
                         Err(_) => {
-                            nlink_lab::host::force_cleanup(lab, lab).await;
+                            nlink_lab::internal::host::force_cleanup(lab, lab).await;
                         }
                     }
                 });
@@ -339,9 +339,9 @@ async fn the_daemon_serves_real_labs() {
         Response::Metrics { .. }
     ));
     // an event the library records comes as a lifecycle notification
-    nlink_lab::events::record(
+    nlink_lab::internal::events::record(
         LAB,
-        nlink_lab::LifecycleKind::SnapshotTaken { name: "e2e".into() },
+        nlink_lab::internal::LifecycleKind::SnapshotTaken { name: "e2e".into() },
     );
     let start = Instant::now();
     loop {
@@ -683,7 +683,7 @@ scenario "slow" {{
         other => panic!("{other:?}"),
     }
     // its source is kept with the lab, the param applied
-    let source = nlink_lab::state::source_of(MADE).expect("a recorded source");
+    let source = nlink_lab::internal::state::source_of(MADE).expect("a recorded source");
     let path = std::path::PathBuf::from(source.path.unwrap());
     assert!(path.starts_with(root.path()), "{path:?}");
     assert!(path.exists());
@@ -1021,7 +1021,7 @@ scenario "slow" {{
         let (_, _, end) = finish(&mut destroy).await;
         assert!(matches!(end.unwrap(), Response::Done { .. }), "{lab}");
     }
-    assert!(!nlink_lab::state::exists(MADE));
+    assert!(!nlink_lab::internal::state::exists(MADE));
     drop(endpoint);
     shutdown.cancel();
     unsafe { std::env::remove_var("NLINK_LAB_STATE_DIR") };

@@ -117,7 +117,7 @@ fn orphans_text(o: &Orphans) -> String {
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let labs = nlink_lab::RunningLab::list()?;
-    let current = nlink_lab::state::context_get(caller_uid());
+    let current = nlink_lab::internal::state::context_get(caller_uid());
     let orphans = if args.scan {
         Some(find_orphans(&labs).await)
     } else {
@@ -129,11 +129,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             lab: l.name.clone(),
             nodes: l.node_count,
             created_at: l.created_at.clone(),
-            source: nlink_lab::state::source_of(&l.name).and_then(|s| s.path),
+            source: nlink_lab::internal::state::source_of(&l.name).and_then(|s| s.path),
             current: current.as_deref() == Some(l.name.as_str()),
         })
         .collect();
-    let legacy = nlink_lab::state::legacy_labs()
+    let legacy = nlink_lab::internal::state::legacy_labs()
         .into_iter()
         .map(|(_, name)| name)
         .collect();

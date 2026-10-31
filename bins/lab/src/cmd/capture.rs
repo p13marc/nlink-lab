@@ -180,7 +180,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     let ns_name = running.namespace_for(&ep.node)?.to_string();
 
-    let config = nlink_lab::capture::CaptureConfig {
+    let config = nlink_lab::internal::capture::CaptureConfig {
         interface: ep.iface.clone(),
         snap_len,
         count,
@@ -215,17 +215,18 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
     let output = match write {
         Some(path) if max_size.is_some() || rotate.is_some() => {
-            nlink_lab::capture::CaptureOutput::RotatingPcap {
+            nlink_lab::internal::capture::CaptureOutput::RotatingPcap {
                 base: path,
                 max_size,
                 rotate_after: rotate,
                 keep,
             }
         }
-        Some(path) => nlink_lab::capture::CaptureOutput::pcap(&path)?,
-        None => nlink_lab::capture::CaptureOutput::Summaries,
+        Some(path) => nlink_lab::internal::capture::CaptureOutput::pcap(&path)?,
+        None => nlink_lab::internal::capture::CaptureOutput::Summaries,
     };
-    let result = nlink_lab::capture::run_capture(&ns_name, &config, output, &CAPTURE_SHUTDOWN)?;
+    let result =
+        nlink_lab::internal::capture::run_capture(&ns_name, &config, output, &CAPTURE_SHUTDOWN)?;
 
     if !ctx.quiet {
         eprintln!(
@@ -298,7 +299,7 @@ fn build_filter(args: &Args) -> nlink_lab::Result<Option<netring::BpfFilter>> {
             parse_filter_cidr(flag, s)?;
         }
     }
-    nlink_lab::capture::build_filter(&nlink_lab::api::CaptureFilter {
+    nlink_lab::internal::capture::build_filter(&nlink_lab::api::CaptureFilter {
         tcp: filter_tcp,
         udp: filter_udp,
         icmp: filter_icmp,

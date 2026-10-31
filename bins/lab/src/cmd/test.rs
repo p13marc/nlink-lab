@@ -77,7 +77,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             .or_else(|| std::env::var_os(nlink_lab::bundle::BUNDLE_DIR_ENV).map(PathBuf::from))
             .unwrap_or_else(|| PathBuf::from("nlink-lab-bundles"))
     });
-    let opts = nlink_lab::test_runner::TestOptions {
+    let opts = nlink_lab::internal::test_runner::TestOptions {
         scenarios,
         benchmarks,
         keep_failed: keep,
@@ -103,7 +103,9 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         // the deploy's stages and waits, then the destroy's, live
         let progress = crate::progress::Progress::new(ctx);
         let op = progress.op("test", "");
-        let ran = nlink_lab::test_runner::run_test_opts(file, &cli_params, opts.clone(), &op).await;
+        let ran =
+            nlink_lab::internal::test_runner::run_test_opts(file, &cli_params, opts.clone(), &op)
+                .await;
         progress.finish();
         match ran {
             Ok(result) => {
@@ -162,7 +164,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 any_failed = true;
                 // in the reports too: a file that did not deploy was
                 // missing from them, which then read as green (#208)
-                all_results.push(nlink_lab::test_runner::TestResult::errored(
+                all_results.push(nlink_lab::internal::test_runner::TestResult::errored(
                     file.display().to_string(),
                     &e,
                     started.elapsed().as_millis() as u64,
@@ -179,13 +181,16 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     // Output formats
     if let Some(junit_path) = &junit {
-        let xml = nlink_lab::test_runner::format_junit(&all_results);
+        let xml = nlink_lab::internal::test_runner::format_junit(&all_results);
         std::fs::write(junit_path, &xml)?;
         eprintln!("JUnit results written to {}", junit_path.display());
     }
 
     if tap {
-        print!("{}", nlink_lab::test_runner::format_tap(&all_results));
+        print!(
+            "{}",
+            nlink_lab::internal::test_runner::format_tap(&all_results)
+        );
     }
 
     if any_failed {

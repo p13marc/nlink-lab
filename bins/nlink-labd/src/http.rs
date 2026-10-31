@@ -63,7 +63,7 @@ async fn read(request: Request) -> Result<Response, String> {
             .enable_all()
             .build()
             .map_err(|e| e.to_string())?;
-        match rt.block_on(nlink_lab::ops::read::handle(&request)) {
+        match rt.block_on(nlink_lab::internal::ops::read::handle(&request)) {
             Some(result) => result.map_err(|e| e.to_string()),
             None => Err("not a read".into()),
         }

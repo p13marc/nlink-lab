@@ -10,7 +10,7 @@ mod common;
 use common::*;
 use nlink_lab::lab_test;
 use nlink_lab::test_helpers::{feature, privileged};
-use nlink_lab::{Lab, RunningLab};
+use nlink_lab::{RunningLab, TopologyBuilder};
 
 #[lab_test("examples/simple.nll")]
 async fn sysctl_forwarding(lab: RunningLab) {
@@ -83,7 +83,7 @@ async fn slice2_dummy_iface_reapply_is_zero_ops() {
     if !privileged("slice2_dummy_iface_reapply_is_zero_ops") {
         return;
     }
-    let topo = nlink_lab::Lab::new(&format!("slice2-dummy-{}", std::process::id()))
+    let topo = nlink_lab::TopologyBuilder::new(&format!("slice2-dummy-{}", std::process::id()))
         .node("host", |n| {
             n.interface("lo0", |i| {
                 i.kind(nlink_lab::types::InterfaceKind::Dummy)
@@ -141,7 +141,7 @@ async fn slice3_vlan_iface_reapply_is_zero_ops() {
     // `host`. Then add a VLAN sub-interface "eth0.42" to `host`.
     // The parent (eth0) already exists by the time step 11c
     // (NetworkConfig::apply) runs.
-    let topo = nlink_lab::Lab::new(&format!("slice3-vlan-{}", std::process::id()))
+    let topo = nlink_lab::TopologyBuilder::new(&format!("slice3-vlan-{}", std::process::id()))
         .node("router", |n| n)
         .node("host", |n| {
             n.interface("eth0.42", |i| {
@@ -462,7 +462,7 @@ async fn multi_hop_ping(lab: RunningLab) {
 }
 
 fn multi_hop_topology() -> nlink_lab::Topology {
-    Lab::new("multi-hop-test")
+    TopologyBuilder::new("multi-hop-test")
         .profile("router", |p| p.sysctl("net.ipv4.ip_forward", "1"))
         .node("router", |n| n.profile("router"))
         .node("client", |n| n.route("default", |r| r.via("10.0.1.1")))
@@ -528,7 +528,7 @@ async fn ipv6_ping(lab: RunningLab) {
 }
 
 fn ipv6_topology() -> nlink_lab::Topology {
-    Lab::new("ipv6-test")
+    TopologyBuilder::new("ipv6-test")
         .node("a", |n| n)
         .node("b", |n| n)
         .link("a:eth0", "b:eth0", |l| {

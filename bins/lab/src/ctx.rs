@@ -63,7 +63,7 @@ pub fn caller_uid() -> u32 {
 /// (`nlink-lab use`), else the only running lab; and where it came from.
 pub fn resolve_lab(flag: Option<&str>) -> nlink_lab::Result<(String, LabFrom)> {
     let checked = |lab: String, from| {
-        nlink_lab::state::validate_lab_name(&lab)?;
+        nlink_lab::internal::state::validate_lab_name(&lab)?;
         Ok((lab, from))
     };
     if let Some(lab) = flag {
@@ -72,8 +72,8 @@ pub fn resolve_lab(flag: Option<&str>) -> nlink_lab::Result<(String, LabFrom)> {
     if let Some(lab) = std::env::var("NLINK_LAB").ok().filter(|l| !l.is_empty()) {
         return checked(lab, LabFrom::Env);
     }
-    if let Some(lab) = nlink_lab::state::context_get(caller_uid()) {
-        if !nlink_lab::state::exists(&lab) {
+    if let Some(lab) = nlink_lab::internal::state::context_get(caller_uid()) {
+        if !nlink_lab::internal::state::exists(&lab) {
             return Err(nlink_lab::Error::invalid_argument(format!(
                 "the current lab '{lab}' (`nlink-lab use`) is not running: \
                  `nlink-lab use LAB` picks another, `nlink-lab use --clear` forgets it"
@@ -81,7 +81,7 @@ pub fn resolve_lab(flag: Option<&str>) -> nlink_lab::Result<(String, LabFrom)> {
         }
         return checked(lab, LabFrom::Context);
     }
-    let labs = nlink_lab::state::list()?;
+    let labs = nlink_lab::internal::state::list()?;
     match labs.as_slice() {
         [only] => checked(only.name.clone(), LabFrom::Only),
         [] => Err(nlink_lab::Error::invalid_argument(
@@ -112,7 +112,7 @@ pub fn parse_topology(
 
 /// Root, or CAP_NET_ADMIN + CAP_SYS_ADMIN in the effective set.
 pub fn has_privileges() -> bool {
-    nlink_lab::privileges::has_privileges()
+    nlink_lab::internal::privileges::has_privileges()
 }
 
 /// A failed call to the daemon as the CLI reports it: the daemon's own
@@ -148,7 +148,7 @@ fn candidates(
 /// Deployed lab names.
 pub fn lab_completer() -> clap_complete::ArgValueCompleter {
     clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {
-        let labs = nlink_lab::state::list().unwrap_or_default();
+        let labs = nlink_lab::internal::state::list().unwrap_or_default();
         candidates(current, labs.into_iter().map(|l| l.name))
     })
 }
@@ -175,7 +175,7 @@ fn completing_lab() -> Option<String> {
 fn completion_labs() -> Vec<String> {
     match completing_lab() {
         Some(lab) => vec![lab],
-        None => nlink_lab::state::list()
+        None => nlink_lab::internal::state::list()
             .unwrap_or_default()
             .into_iter()
             .map(|l| l.name)
@@ -188,7 +188,7 @@ fn completion_labs() -> Vec<String> {
 pub fn node_completer() -> clap_complete::ArgValueCompleter {
     clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {
         let nodes = completion_labs().into_iter().flat_map(|lab| {
-            nlink_lab::state::load(&lab)
+            nlink_lab::internal::state::load(&lab)
                 .map(|(st, _)| {
                     st.namespaces
                         .keys()
@@ -206,8 +206,8 @@ pub fn node_completer() -> clap_complete::ArgValueCompleter {
 pub fn endpoint_completer() -> clap_complete::ArgValueCompleter {
     clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {
         let endpoints = completion_labs().into_iter().flat_map(|lab| {
-            nlink_lab::state::load(&lab)
-                .map(|(_, topo)| nlink_lab::impair_parse::topology_endpoints(&topo))
+            nlink_lab::internal::state::load(&lab)
+                .map(|(_, topo)| nlink_lab::internal::impair_parse::topology_endpoints(&topo))
                 .unwrap_or_default()
         });
         candidates(current, endpoints)
@@ -218,7 +218,7 @@ pub fn endpoint_completer() -> clap_complete::ArgValueCompleter {
 pub fn snapshot_completer() -> clap_complete::ArgValueCompleter {
     clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {
         let names = completion_labs().into_iter().flat_map(|lab| {
-            nlink_lab::state::snapshot_list(&lab)
+            nlink_lab::internal::state::snapshot_list(&lab)
                 .unwrap_or_default()
                 .into_iter()
                 .map(|s| s.name)
@@ -267,7 +267,7 @@ pub fn template_completer() -> clap_complete::ArgValueCompleter {
     clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {
         candidates(
             current,
-            nlink_lab::templates::list()
+            nlink_lab::internal::templates::list()
                 .iter()
                 .map(|t| t.name.to_string()),
         )
@@ -279,7 +279,9 @@ pub fn lint_rule_completer() -> clap_complete::ArgValueCompleter {
     clap_complete::ArgValueCompleter::new(|current: &std::ffi::OsStr| {
         candidates(
             current,
-            nlink_lab::LINT_RULE_IDS.iter().map(|s| s.to_string()),
+            nlink_lab::internal::LINT_RULE_IDS
+                .iter()
+                .map(|s| s.to_string()),
         )
     })
 }

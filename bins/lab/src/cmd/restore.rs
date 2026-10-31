@@ -20,21 +20,21 @@ pub struct Args {
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     let Args { lab, name, dry_run } = args;
     let lab = lab.resolve()?;
-    let snapshot = nlink_lab::state::snapshot_load(&lab, &name)?;
+    let snapshot = nlink_lab::internal::state::snapshot_load(&lab, &name)?;
     let mut running = nlink_lab::RunningLab::load(&lab)?;
 
     if dry_run {
         // What `restore` runs: an apply that resets runtime impairments.
-        let opts = nlink_lab::ApplyOptions {
+        let opts = nlink_lab::internal::ApplyOptions {
             reset_impairments: true,
             ..Default::default()
         };
-        let plan = nlink_lab::apply_plan_with(&running, &snapshot.topology, &opts)?;
+        let plan = nlink_lab::internal::apply_plan_with(&running, &snapshot.topology, &opts)?;
         // What changes, as `apply --dry-run` shows it: the topology diff
         // (which the per-node reconciles carry out), then the plan's
         // removals and other work. Every op was listed, so the reconciles
         // that always run hid "no changes" (#221).
-        let diff = nlink_lab::diff_topologies(running.topology(), &snapshot.topology);
+        let diff = nlink_lab::internal::diff_topologies(running.topology(), &snapshot.topology);
         let ops: Vec<String> = plan
             .ops
             .iter()
@@ -82,7 +82,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     crate::cmd::common::check_topology(&snapshot.topology)?;
     let progress = crate::progress::Progress::new(ctx);
     let op = progress.op("restore", &lab);
-    let restored = nlink_lab::restore_with(&mut running, &snapshot, &op).await;
+    let restored = nlink_lab::internal::restore_with(&mut running, &snapshot, &op).await;
     progress.finish();
     let report = restored?;
     if ctx.json {

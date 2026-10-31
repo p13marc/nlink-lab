@@ -6,9 +6,9 @@
 //! # Example
 //!
 //! ```
-//! use nlink_lab::builder::Lab;
+//! use nlink_lab::builder::TopologyBuilder;
 //!
-//! let topology = Lab::new("my-lab")
+//! let topology = TopologyBuilder::new("my-lab")
 //!     .profile("router", |p| p
 //!         .sysctl("net.ipv4.ip_forward", "1"))
 //!     .node("r1", |n| n
@@ -34,15 +34,15 @@ use crate::types::{
 };
 
 /// Top-level lab builder.
-pub struct Lab {
+pub struct TopologyBuilder {
     topology: Topology,
     /// Names declared twice (`node "a"`, `network "lan"`, `profile "p"`):
     /// the later one replaced the earlier silently, where NLL refuses it
-    /// (#218). [`Lab::build_validated`] reports them.
+    /// (#218). [`TopologyBuilder::build_validated`] reports them.
     duplicates: Vec<String>,
 }
 
-impl Lab {
+impl TopologyBuilder {
     /// Create a new lab with the given name.
     pub fn new(name: &str) -> Self {
         Self {
@@ -1045,7 +1045,7 @@ mod tests {
 
     #[test]
     fn test_basic_lab() {
-        let topo = Lab::new("test")
+        let topo = TopologyBuilder::new("test")
             .description("A test lab")
             .prefix("t")
             .build();
@@ -1057,7 +1057,7 @@ mod tests {
 
     #[test]
     fn test_profiles_nodes_links() {
-        let topo = Lab::new("net")
+        let topo = TopologyBuilder::new("net")
             .profile("router", |p| {
                 p.sysctl("net.ipv4.ip_forward", "1")
                     .sysctl("net.ipv6.conf.all.forwarding", "1")
@@ -1095,7 +1095,7 @@ mod tests {
 
     #[test]
     fn test_impairments_and_rate_limits() {
-        let topo = Lab::new("imp")
+        let topo = TopologyBuilder::new("imp")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| l)
@@ -1128,7 +1128,7 @@ mod tests {
 
     #[test]
     fn test_network_with_vlans() {
-        let topo = Lab::new("vlan")
+        let topo = TopologyBuilder::new("vlan")
             .node("switch", |n| n)
             .node("pc1", |n| n)
             .network("office", |net| {
@@ -1162,7 +1162,7 @@ mod tests {
     /// duplicates refused (#218).
     #[test]
     fn ports_subnets_and_duplicates_behave_as_in_nll() {
-        let topo = Lab::new("b")
+        let topo = TopologyBuilder::new("b")
             .node("a", |n| n)
             .node("b", |n| n)
             .network("lan", |net| {
@@ -1180,7 +1180,7 @@ mod tests {
         assert_eq!(lan.ports["a:eth1"].addresses, vec!["10.0.0.3/24"]);
         assert!(crate::render::try_render(&topo).is_ok());
 
-        let twice = Lab::new("b").node("a", |n| n).node("a", |n| n);
+        let twice = TopologyBuilder::new("b").node("a", |n| n).node("a", |n| n);
         let err = twice.build_validated().unwrap_err().to_string();
         assert!(err.contains("node 'a'"), "{err}");
     }
@@ -1195,7 +1195,7 @@ mod tests {
         // forgetting `.member` silently produced an empty members list
         // — surfaced by `deploy_networks_with_shared_prefix` failing
         // with `ip addr show eth0` returning exit 1.
-        let topo = Lab::new("auto-members")
+        let topo = TopologyBuilder::new("auto-members")
             .node("host_a", |n| n)
             .node("host_b", |n| n)
             .network("lan_a", |net| {
@@ -1223,7 +1223,7 @@ mod tests {
         // If the user calls both `.member("host:eth0")` and
         // `.port("host", |p| p.interface("eth0"))`, the endpoint
         // should appear exactly once in members.
-        let topo = Lab::new("idempotent")
+        let topo = TopologyBuilder::new("idempotent")
             .node("host", |n| n)
             .network("lan", |net| {
                 net.member("host:eth0")
@@ -1242,7 +1242,7 @@ mod tests {
     fn test_port_without_interface_does_not_add_to_members() {
         // VLAN-only port configs (no .interface(...)) shouldn't pollute
         // members — the user hasn't said which iface attaches.
-        let topo = Lab::new("vlan-only")
+        let topo = TopologyBuilder::new("vlan-only")
             .node("sw", |n| n)
             .network("fab", |net| {
                 net.member("sw:eth0").port("sw", |p| p.pvid(10))
@@ -1258,7 +1258,7 @@ mod tests {
 
     #[test]
     fn test_vrf() {
-        let topo = Lab::new("vrf")
+        let topo = TopologyBuilder::new("vrf")
             .node("pe", |n| {
                 n.profile("router").vrf("red", |v| {
                     v.table(100)
@@ -1276,7 +1276,7 @@ mod tests {
 
     #[test]
     fn test_wireguard() {
-        let topo = Lab::new("wg")
+        let topo = TopologyBuilder::new("wg")
             .node("office", |n| {
                 n.wireguard("wg0", |w| {
                     w.private_key("auto")
@@ -1296,7 +1296,7 @@ mod tests {
 
     #[test]
     fn test_dns_hosts() {
-        let topo = Lab::new("dns-test")
+        let topo = TopologyBuilder::new("dns-test")
             .dns(crate::types::DnsMode::Hosts)
             .node("server", |n| n)
             .node("client", |n| n)
@@ -1313,7 +1313,7 @@ mod tests {
 
     #[test]
     fn test_firewall() {
-        let topo = Lab::new("fw")
+        let topo = TopologyBuilder::new("fw")
             .node("server", |n| {
                 n.firewall(|f| {
                     f.policy("drop")
@@ -1331,7 +1331,7 @@ mod tests {
 
     #[test]
     fn test_exec() {
-        let topo = Lab::new("exec")
+        let topo = TopologyBuilder::new("exec")
             .node("server", |n| {
                 n.exec_background(&["iperf3", "-s"])
                     .exec(&["echo", "hello"])
@@ -1347,7 +1347,7 @@ mod tests {
     #[test]
     fn test_builder_matches_nll_parsing() {
         // Build topology via builder
-        let built = Lab::new("simple")
+        let built = TopologyBuilder::new("simple")
             .description("Minimal two-node lab")
             .profile("router", |p| p.sysctl("net.ipv4.ip_forward", "1"))
             .node("router", |n| {
@@ -1400,7 +1400,7 @@ impair router:eth0 delay 10ms jitter 2ms
 
     #[test]
     fn test_build_validated_catches_errors() {
-        let result = Lab::new("bad")
+        let result = TopologyBuilder::new("bad")
             .node("a", |n| n)
             .link("a:eth0", "missing:eth0", |l| l)
             .build_validated();
@@ -1409,7 +1409,7 @@ impair router:eth0 delay 10ms jitter 2ms
 
     #[test]
     fn test_build_validated_ok() {
-        let result = Lab::new("good")
+        let result = TopologyBuilder::new("good")
             .node("a", |n| n)
             .node("b", |n| n)
             .link("a:eth0", "b:eth0", |l| {
@@ -1421,7 +1421,7 @@ impair router:eth0 delay 10ms jitter 2ms
 
     #[test]
     fn test_duplicate_link_endpoints_caught() {
-        let topo = Lab::new("dup")
+        let topo = TopologyBuilder::new("dup")
             .node("a", |n| n)
             .node("b", |n| n)
             .node("c", |n| n)

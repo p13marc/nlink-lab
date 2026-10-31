@@ -1,7 +1,7 @@
 //! `nlink-lab node`: add, remove or restart a node of a running lab.
 
 use crate::ctx::{Ctx, LabArg, require_root};
-use nlink_lab::edit::Edit;
+use nlink_lab::internal::edit::Edit;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -88,13 +88,16 @@ async fn restart(ctx: &Ctx, lab: &str, node: &str) -> nlink_lab::Result<()> {
     }
     // `docker restart` recreates the container's network namespace: what
     // the deployer put in it is put back (#31)
-    let restarted =
-        nlink_lab::ops::mutate::restart_node(&mut running, node, &nlink_lab::OpCtx::default())
-            .await;
+    let restarted = nlink_lab::internal::ops::mutate::restart_node(
+        &mut running,
+        node,
+        &nlink_lab::OpCtx::default(),
+    )
+    .await;
     if restarted.is_err() && !ctx.quiet && !ctx.json {
         eprintln!(" failed");
     }
-    let nlink_lab::ops::mutate::Restarted {
+    let nlink_lab::internal::ops::mutate::Restarted {
         old_pid,
         pid,
         links,

@@ -2,7 +2,7 @@
 //!
 //! Speaks LSP over stdio, so every editor drives it the same way:
 //! `nlink-lab lsp`. The analysis is the library's
-//! ([`nlink_lab::analysis`]: diagnostics, validator locations mapped back
+//! ([`nlink_lab::internal::analysis`]: diagnostics, validator locations mapped back
 //! to source spans, [`symbols`] for the navigation requests off the token
 //! stream); [`analyze`] makes its places LSP positions, which [`position`]
 //! converts from byte offsets to UTF-16.
@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use analyze::Analysis;
-use nlink_lab::analysis::symbols;
+use nlink_lab::internal::analysis::symbols;
 use tower_lsp_server::ls_types::*;
 use tower_lsp_server::{Client, LanguageServer, LspService, Server, jsonrpc};
 
@@ -364,7 +364,7 @@ fn hover_at(a: &Analysis, pos: Position) -> Option<Hover> {
             if let Some(image) = &node.image {
                 md.push_str(&format!(" · image: `{image}`"));
             }
-            let addrs = nlink_lab::ipmap::collect_node_addrs(topo);
+            let addrs = nlink_lab::internal::ipmap::collect_node_addrs(topo);
             if let Some(list) = addrs.get(&word).filter(|l| !l.is_empty()) {
                 md.push_str("\n\n| iface | address |\n|---|---|\n");
                 for a in list {
@@ -465,7 +465,7 @@ fn completions_at(a: &Analysis, pos: Position) -> Vec<CompletionItem> {
                 let mut names: std::collections::BTreeSet<String> =
                     n.interfaces.keys().cloned().collect();
                 names.extend(
-                    nlink_lab::ipmap::collect_node_addrs(topo)
+                    nlink_lab::internal::ipmap::collect_node_addrs(topo)
                         .get(node)
                         .into_iter()
                         .flatten()
@@ -558,7 +558,7 @@ fn completions_at(a: &Analysis, pos: Position) -> Vec<CompletionItem> {
 /// `textDocument/formatting` — the same token-level formatter
 /// `nlink-lab fmt` uses, so the editor and CI cannot disagree.
 fn format_document(a: &Analysis) -> Option<Vec<TextEdit>> {
-    let formatted = nlink_lab::fmt::format(&a.text).ok()?;
+    let formatted = nlink_lab::internal::fmt::format(&a.text).ok()?;
     if formatted == a.text {
         return None;
     }

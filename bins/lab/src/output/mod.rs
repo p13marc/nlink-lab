@@ -87,10 +87,10 @@ pub fn emit<R: Report + schemars::JsonSchema>(ctx: &Ctx, report: &R) -> nlink_la
     Ok(())
 }
 
-pub use nlink_lab::ops::view::DryRunReport;
+pub use nlink_lab::internal::ops::view::DryRunReport;
 
 /// Human rendering of a layered diff plus removal ops.
-pub fn print_layered(layered: &nlink_lab::diff::LayeredDiff, removals: &[String]) {
+pub fn print_layered(layered: &nlink_lab::internal::diff::LayeredDiff, removals: &[String]) {
     let text = layered.to_string();
     print!("{text}");
     if !text.is_empty() && !text.ends_with('\n') {

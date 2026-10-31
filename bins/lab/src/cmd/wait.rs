@@ -4,7 +4,7 @@
 
 use std::time::{Duration, Instant};
 
-use nlink_lab::wait::WaitCondition;
+use nlink_lab::internal::wait::WaitCondition;
 
 use crate::ctx::{Ctx, require_root};
 
@@ -66,7 +66,7 @@ async fn lab_deployed(ctx: &Ctx, name: &str, timeout: Duration) -> nlink_lab::Re
         eprint!("Waiting for lab '{name}'...");
     }
     loop {
-        if nlink_lab::state::exists(name) {
+        if nlink_lab::internal::state::exists(name) {
             if !ctx.quiet {
                 eprintln!(" ready ({:.1}s)", start.elapsed().as_secs_f64());
             }

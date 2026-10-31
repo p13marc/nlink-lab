@@ -269,7 +269,7 @@ async fn run_tty(
 ) -> Result<Response, ApiError> {
     let io = |e: std::io::Error| ApiError::new(ErrorCode::Io, e.to_string());
     let mut prepared = prepare(&req).await?;
-    let pty = nlink_lab::pty::Pty::open(rows, cols).map_err(io)?;
+    let pty = nlink_lab::internal::pty::Pty::open(rows, cols).map_err(io)?;
     pty.attach(prepared.command()).map_err(io)?;
     let started = Instant::now();
     let mut child = prepared.spawn().map_err(|e| e.to_api())?;
@@ -332,7 +332,7 @@ async fn run_tty(
                     let _ = keys.send(vec![4]);
                 }
                 Some(Input::Resize { rows, cols }) => {
-                    if let Err(e) = nlink_lab::pty::resize(&master, rows, cols) {
+                    if let Err(e) = nlink_lab::internal::pty::resize(&master, rows, cols) {
                         tracing::debug!("resize {pid}: {e}");
                     }
                 }

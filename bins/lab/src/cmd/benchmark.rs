@@ -48,7 +48,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             ))
         })?;
     require_root()?;
-    let result = nlink_lab::benchmark::run_benchmark(&running, &benchmark)?;
+    let result = nlink_lab::internal::benchmark::run_benchmark(&running, &benchmark)?;
     if ctx.json {
         println!("{}", serde_json::to_string_pretty(&result)?);
     } else {

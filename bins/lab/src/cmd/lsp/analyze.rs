@@ -1,9 +1,9 @@
-//! One analysis pass over a document — [`nlink_lab::analysis`] — with
+//! One analysis pass over a document — [`nlink_lab::internal::analysis`] — with
 //! its places as LSP positions.
 
 use std::path::Path;
 
-use nlink_lab::analysis::{self, Severity};
+use nlink_lab::internal::analysis::{self, Severity};
 use nlink_lab::parser::nll::lexer::Spanned;
 use tower_lsp_server::ls_types::{Diagnostic, DiagnosticSeverity, NumberOrString};
 

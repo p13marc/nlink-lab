@@ -76,12 +76,12 @@ pub enum Family {
     Both,
 }
 
-impl From<Family> for nlink_lab::WatchFamily {
+impl From<Family> for nlink_lab::internal::WatchFamily {
     fn from(v: Family) -> Self {
         match v {
-            Family::Route => nlink_lab::WatchFamily::Route,
-            Family::Nftables => nlink_lab::WatchFamily::Nftables,
-            Family::Both => nlink_lab::WatchFamily::Both,
+            Family::Route => nlink_lab::internal::WatchFamily::Route,
+            Family::Nftables => nlink_lab::internal::WatchFamily::Nftables,
+            Family::Both => nlink_lab::internal::WatchFamily::Both,
         }
     }
 }
@@ -91,7 +91,7 @@ impl From<Family> for nlink_lab::WatchFamily {
 #[serde(tag = "source", rename_all = "snake_case")]
 pub enum Event {
     /// Recorded by a CLI operation (`events.ndjson`).
-    Lifecycle(nlink_lab::LifecycleEvent),
+    Lifecycle(nlink_lab::internal::LifecycleEvent),
     /// RTNETLINK / nftables change inside a node (`--source drift`).
     Drift {
         ts: String,
@@ -106,7 +106,7 @@ pub enum Event {
     },
 }
 
-/// `nlink_lab::WatchEvent` without the schemars dependency on the lib
+/// `nlink_lab::internal::WatchEvent` without the schemars dependency on the lib
 /// type (flattened as JSON).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 pub struct DriftEvent {
@@ -117,7 +117,7 @@ pub struct DriftEvent {
 
 /// A watch event as a drift record: its JSON without `node`, which
 /// [`DriftEvent`] carries itself.
-fn drift_record(ts: String, w: &nlink_lab::WatchEvent) -> Option<Event> {
+fn drift_record(ts: String, w: &nlink_lab::internal::WatchEvent) -> Option<Event> {
     let mut detail = serde_json::to_value(w).ok()?;
     let node = detail
         .as_object_mut()
@@ -133,7 +133,7 @@ fn drift_record(ts: String, w: &nlink_lab::WatchEvent) -> Option<Event> {
 impl DriftEvent {
     /// The watch event the record carries: its `kind` and, for a kernel
     /// object, nlink's view under `event` (#195).
-    fn kind(&self) -> Option<nlink_lab::watch::WatchEventKind> {
+    fn kind(&self) -> Option<nlink_lab::internal::watch::WatchEventKind> {
         serde_json::from_value(self.detail.clone()).ok()
     }
 }
@@ -197,13 +197,13 @@ fn compact(v: &serde_json::Value) -> String {
 }
 
 fn now_iso8601() -> String {
-    nlink_lab::events::now_iso8601()
+    nlink_lab::internal::events::now_iso8601()
 }
 
 /// `--since` cut-off as an RFC 3339 timestamp (events are compared as
 /// strings; both are UTC RFC 3339, so lexical order is time order).
 fn since_cutoff(since: Duration) -> String {
-    nlink_lab::events::since_iso8601(since)
+    nlink_lab::internal::events::since_iso8601(since)
 }
 
 struct Filter {
@@ -252,7 +252,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         socket,
     } = args;
     let lab = lab.resolve()?;
-    if !nlink_lab::state::exists(&lab) {
+    if !nlink_lab::internal::state::exists(&lab) {
         return Err(nlink_lab::Error::NotFound { name: lab });
     }
     let asked = |s: Source| source.contains(&s);
@@ -269,7 +269,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
 
     // History first.
     if want(Source::Lifecycle) {
-        for e in nlink_lab::events::read(&lab)? {
+        for e in nlink_lab::internal::events::read(&lab)? {
             let ev = Event::Lifecycle(e);
             if filter.keep(&ev) {
                 println!("{}", emit(ctx, &ev));
@@ -294,7 +294,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     //    first lines (#210).
     if want(Source::Lifecycle) {
         let tx = tx.clone();
-        let path = nlink_lab::events::events_path(&lab);
+        let path = nlink_lab::internal::events::events_path(&lab);
         let start = std::fs::File::open(&path).ok().map(|f| {
             let len = f.metadata().map(|m| m.len()).unwrap_or(0);
             (f, len)
@@ -320,8 +320,11 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
                 *offset += end as u64;
                 let text = String::from_utf8_lossy(&new[..end]).into_owned();
                 let mut destroyed = false;
-                for e in nlink_lab::events::parse_lines(&text) {
-                    destroyed |= matches!(e.kind, nlink_lab::events::LifecycleKind::Destroyed);
+                for e in nlink_lab::internal::events::parse_lines(&text) {
+                    destroyed |= matches!(
+                        e.kind,
+                        nlink_lab::internal::events::LifecycleKind::Destroyed
+                    );
                     if tx.send(Event::Lifecycle(e)).await.is_err() {
                         return;
                     }
@@ -353,13 +356,13 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
     if is_root && want(Source::Drift) {
         // 2. drift: RTNETLINK + nftables subscriptions per node
-        let opts = nlink_lab::WatchOpts {
+        let opts = nlink_lab::internal::WatchOpts {
             family: family.into(),
             json: ctx.json,
             node,
             include_snapshot,
         };
-        if let Some((mut drift_rx, subs)) = nlink_lab::watch_stream(&running, &opts)? {
+        if let Some((mut drift_rx, subs)) = nlink_lab::internal::watch_stream(&running, &opts)? {
             tasks.extend(subs);
             let tx = tx.clone();
             tasks.push(tokio::spawn(async move {
@@ -378,7 +381,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         // 3. runtime: the metrics collector (process exits, link state)
         let tx = tx.clone();
         tasks.push(tokio::spawn(async move {
-            let mut collector = nlink_lab::metrics::MetricsCollector::new(&running);
+            let mut collector = nlink_lab::internal::metrics::MetricsCollector::new(&running);
             let mut ticker = tokio::time::interval(interval);
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {
@@ -447,7 +450,7 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
             // the lab is gone: nothing more will come for it
             let last = matches!(
                 &ev,
-                Event::Lifecycle(e) if matches!(e.kind, nlink_lab::events::LifecycleKind::Destroyed)
+                Event::Lifecycle(e) if matches!(e.kind, nlink_lab::internal::events::LifecycleKind::Destroyed)
             );
             if !filter.keep(&ev) {
                 if last {
@@ -494,10 +497,10 @@ mod tests {
 
     #[test]
     fn filter_by_kind_and_source() {
-        let ev = Event::Lifecycle(nlink_lab::LifecycleEvent {
+        let ev = Event::Lifecycle(nlink_lab::internal::LifecycleEvent {
             ts: "2026-09-13T10:00:00Z".into(),
             lab: "t".into(),
-            kind: nlink_lab::LifecycleKind::Deployed { nodes: 1, links: 0 },
+            kind: nlink_lab::internal::LifecycleKind::Deployed { nodes: 1, links: 0 },
         });
         let f = Filter {
             kinds: vec!["deployed".into()],
@@ -523,20 +526,20 @@ mod tests {
 
     #[test]
     fn json_shape_has_source_tag() {
-        let ev = Event::Lifecycle(nlink_lab::LifecycleEvent {
+        let ev = Event::Lifecycle(nlink_lab::internal::LifecycleEvent {
             ts: "t".into(),
             lab: "l".into(),
-            kind: nlink_lab::LifecycleKind::Destroyed,
+            kind: nlink_lab::internal::LifecycleKind::Destroyed,
         });
         let json = serde_json::to_string(&ev).unwrap();
         assert!(json.contains("\"source\":\"lifecycle\""), "{json}");
         assert!(json.contains("\"event\":\"destroyed\""), "{json}");
         // The record `run` makes of a watch event (#195): named and
         // rendered from nlink's view, which `--kind` filters on.
-        let watch = nlink_lab::WatchEvent {
+        let watch = nlink_lab::internal::WatchEvent {
             node: "a".into(),
-            family: nlink_lab::WatchFamily::Route,
-            kind: nlink_lab::watch::WatchEventKind::Event {
+            family: nlink_lab::internal::WatchFamily::Route,
+            kind: nlink_lab::internal::watch::WatchEventKind::Event {
                 nft: None,
                 event: nlink::netlink::events::view::EventView::Address {
                     action: nlink::netlink::events::view::Action::New,
@@ -554,8 +557,8 @@ mod tests {
             drift.render_line(),
             "t drift a:new_address cidr=10.0.0.9/32 ifindex=2 scope=global"
         );
-        let gone = nlink_lab::WatchEvent {
-            kind: nlink_lab::watch::WatchEventKind::Gone,
+        let gone = nlink_lab::internal::WatchEvent {
+            kind: nlink_lab::internal::watch::WatchEventKind::Gone,
             ..watch
         };
         let gone = drift_record("t".into(), &gone).unwrap();

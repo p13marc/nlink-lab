@@ -70,27 +70,27 @@ pub fn view(app: &App) -> Element<'_, Message> {
             .into()
     };
 
-    let templates =
-        nlink_lab::templates::list()
-            .chunks(3)
-            .fold(column![].spacing(10), |col, chunk| {
-                col.push(chunk.iter().fold(row![].spacing(10), |r, t| {
-                    r.push(
-                        button(
-                            column![
-                                text(t.name).size(14),
-                                muted(t.description),
-                                muted(format!("{} nodes · {} links", t.node_count, t.link_count)),
-                            ]
-                            .spacing(4),
-                        )
-                        .style(card)
-                        .padding(12)
-                        .width(Length::FillPortion(1))
-                        .on_press(Message::OpenTemplate(t.name)),
+    let templates = nlink_lab::internal::templates::list().chunks(3).fold(
+        column![].spacing(10),
+        |col, chunk| {
+            col.push(chunk.iter().fold(row![].spacing(10), |r, t| {
+                r.push(
+                    button(
+                        column![
+                            text(t.name).size(14),
+                            muted(t.description),
+                            muted(format!("{} nodes · {} links", t.node_count, t.link_count)),
+                        ]
+                        .spacing(4),
                     )
-                }))
-            });
+                    .style(card)
+                    .padding(12)
+                    .width(Length::FillPortion(1))
+                    .on_press(Message::OpenTemplate(t.name)),
+                )
+            }))
+        },
+    );
 
     let appearance = row![
         text("Theme").size(13),

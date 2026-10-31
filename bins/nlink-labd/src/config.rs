@@ -92,8 +92,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             socket: nlink_lab_shared::api::DEFAULT_SOCKET.into(),
-            operator_group: nlink_lab::state::GROUP.into(),
-            viewer_group: format!("{}-viewer", nlink_lab::state::GROUP),
+            operator_group: nlink_lab::internal::state::GROUP.into(),
+            viewer_group: format!("{}-viewer", nlink_lab::internal::state::GROUP),
             rescan_ms: 1000,
             metrics_interval_ms: 2000,
             audit_log: None,
@@ -176,7 +176,7 @@ impl Config {
     pub fn audit_path(&self) -> PathBuf {
         self.audit_log
             .clone()
-            .unwrap_or_else(|| nlink_lab::state::root_dir().join("audit.ndjson"))
+            .unwrap_or_else(|| nlink_lab::internal::state::root_dir().join("audit.ndjson"))
     }
 }
 

@@ -9,7 +9,7 @@
 mod common;
 use common::*;
 use nlink_lab::test_helpers::privileged;
-use nlink_lab::{Lab, RunningLab};
+use nlink_lab::{RunningLab, TopologyBuilder};
 
 // ─── a recreated link keeps nlink-lab's Tc and VRF routes (#158) ───
 
@@ -779,7 +779,7 @@ async fn apply_add_node_and_link() {
     let lab_name = format!("apply-add-{}", std::process::id());
 
     // Initial topology: two nodes, one link
-    let initial = Lab::new(&lab_name)
+    let initial = TopologyBuilder::new(&lab_name)
         .node("a", |n| n)
         .node("b", |n| n)
         .link("a:eth0", "b:eth0", |l| {
@@ -793,7 +793,7 @@ async fn apply_add_node_and_link() {
     };
 
     // Desired topology: add node c and link b--c
-    let desired = Lab::new(&lab_name)
+    let desired = TopologyBuilder::new(&lab_name)
         .node("a", |n| n)
         .node("b", |n| n)
         .node("c", |n| n)
@@ -844,7 +844,7 @@ async fn apply_remove_node() {
     let lab_name = format!("apply-rm-{}", std::process::id());
 
     // Initial: three nodes
-    let initial = Lab::new(&lab_name)
+    let initial = TopologyBuilder::new(&lab_name)
         .node("a", |n| n)
         .node("b", |n| n)
         .node("c", |n| n)
@@ -862,7 +862,7 @@ async fn apply_remove_node() {
     };
 
     // Desired: remove node c and its link
-    let desired = Lab::new(&lab_name)
+    let desired = TopologyBuilder::new(&lab_name)
         .node("a", |n| n)
         .node("b", |n| n)
         .link("a:eth0", "b:eth0", |l| {
@@ -901,7 +901,7 @@ async fn apply_impairment_change() {
     let lab_name = format!("apply-imp-{}", std::process::id());
 
     // Initial: link with 10ms delay
-    let initial = Lab::new(&lab_name)
+    let initial = TopologyBuilder::new(&lab_name)
         .node("a", |n| n)
         .node("b", |n| n)
         .link("a:eth0", "b:eth0", |l| {
@@ -916,7 +916,7 @@ async fn apply_impairment_change() {
     };
 
     // Desired: change delay to 50ms
-    let desired = Lab::new(&lab_name)
+    let desired = TopologyBuilder::new(&lab_name)
         .node("a", |n| n)
         .node("b", |n| n)
         .link("a:eth0", "b:eth0", |l| {

@@ -12,7 +12,7 @@ pub fn duration(s: &str) -> Result<Duration, String> {
     if t.parse::<f64>().is_ok() {
         return Err(format!("`{t}` has no unit: write `{t}s` or `{t}ms`"));
     }
-    nlink_lab::helpers::parse_duration(t)
+    nlink_lab::internal::helpers::parse_duration(t)
         .map_err(|_| format!("`{t}` is not a duration (a number and a unit: 500ms, 30s, 2m, 1h)"))
 }
 
@@ -36,7 +36,7 @@ pub fn u32_dec_or_hex(s: &str) -> Result<u32, String> {
 
 /// A netem seed: an integer in `0..=i64::MAX` (#337).
 pub fn seed(s: &str) -> Result<u64, String> {
-    nlink_lab::seed::parse(s)
+    nlink_lab::internal::seed::parse(s)
 }
 
 /// `KEY=VALUE` (`--env`, `--set`). The key is not empty; the value may be.
@@ -61,7 +61,7 @@ pub fn signal(s: &str) -> Result<nlink_lab::Signal, String> {
 
 /// A TCP target: `PORT` (on 127.0.0.1), `IP:PORT` or `[IPv6]:PORT`.
 pub fn tcp_target(s: &str) -> Result<(String, u16), String> {
-    nlink_lab::wait::parse_tcp_target(s).map_err(|e| e.to_string())
+    nlink_lab::internal::wait::parse_tcp_target(s).map_err(|e| e.to_string())
 }
 
 /// A byte size: `65536`, `64K`, `16M`, `1G` (powers of 1000).
@@ -86,7 +86,7 @@ pub fn byte_size(s: &str) -> Result<u64, String> {
 
 /// A regular expression (`--wait-log`).
 pub fn regex(s: &str) -> Result<regex::Regex, String> {
-    nlink_lab::wait::log_pattern(s).map_err(|e| e.to_string())
+    nlink_lab::internal::wait::log_pattern(s).map_err(|e| e.to_string())
 }
 
 /// A root qdisc: `tbf,rate=10mbit,burst=32kb,limit=100kb`, `fq_codel`, ….

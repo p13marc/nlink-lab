@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use crate::ctx::{Ctx, require_root};
-use nlink_lab::wait::WaitCondition;
+use nlink_lab::internal::wait::WaitCondition;
 
 /// Stream selector for `nlink-lab spawn --wait-log-stream`.
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]

@@ -34,7 +34,7 @@ pub struct Args {
 #[schemars(title = "nlink-lab lint --json")]
 pub struct LintReport<'a> {
     pub lab: &'a str,
-    pub findings: &'a [nlink_lab::LintFinding],
+    pub findings: &'a [nlink_lab::internal::LintFinding],
 }
 
 pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
@@ -49,10 +49,10 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         if ctx.json {
             crate::output::emit_json(
                 ctx,
-                &serde_json::json!({ "rules": nlink_lab::LINT_RULE_IDS }),
+                &serde_json::json!({ "rules": nlink_lab::internal::LINT_RULE_IDS }),
             )?;
         } else {
-            for id in nlink_lab::LINT_RULE_IDS {
+            for id in nlink_lab::internal::LINT_RULE_IDS {
                 println!("{id}");
             }
         }
@@ -60,7 +60,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
     if let Some(bad) = allow
         .iter()
-        .find(|a| !nlink_lab::LINT_RULE_IDS.contains(&a.as_str()))
+        .find(|a| !nlink_lab::internal::LINT_RULE_IDS.contains(&a.as_str()))
     {
         return Err(nlink_lab::Error::invalid_argument(format!(
             "unknown lint rule '{bad}' (see `lint --list-rules`)"
@@ -68,7 +68,7 @@ pub fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
     }
     let topology = topology.expect("clap: topology is required unless --list-rules");
     let topo = parse_topology(&topology, &params)?;
-    let findings = nlink_lab::lint(&topo, &allow);
+    let findings = nlink_lab::internal::lint(&topo, &allow);
     if ctx.json {
         crate::output::emit_json(
             ctx,

@@ -167,7 +167,7 @@ pub fn entries(app: &App) -> Vec<Entry> {
             Message::Open(path.clone()),
         ));
     }
-    for t in nlink_lab::templates::list() {
+    for t in nlink_lab::internal::templates::list() {
         out.push(entry(
             format!("New from template: {}", t.name),
             None,

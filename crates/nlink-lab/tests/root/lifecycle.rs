@@ -536,3 +536,190 @@ async fn deploy_reports_progress_in_order() {
     assert_eq!(steps.first(), Some(&(1, 6)), "{events:?}");
     assert_eq!(steps.last(), Some(&(6, 6)), "{events:?}");
 }
+
+/// A lab's failure bundle has every file #338 lists (#338): the summary
+/// with the seed, the rendered topology, status, events, and per node its
+/// addresses, routes, rules, nftables, qdiscs, conntrack and process logs.
+#[lab_test("examples/simple.nll", seed = 7)]
+async fn a_bundle_has_every_file(mut lab: RunningLab) {
+    let pid = lab
+        .spawn_with_logs("host", &["sh", "-c", "echo hello-bundle; sleep 30"], None)
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let dir = tempfile::tempdir().unwrap();
+    let opts = nlink_lab::bundle::BundleOptions {
+        reason: Some("asked by the test".into()),
+        ..Default::default()
+    };
+    let report = nlink_lab::bundle::collect(&lab, &dir.path().join("b"), &opts)
+        .await
+        .unwrap();
+    let b = dir.path().join("b");
+    let summary = std::fs::read_to_string(b.join("summary.txt")).unwrap();
+    assert!(summary.contains("seed: 7"), "{summary}");
+    assert!(summary.contains("asked by the test"), "{summary}");
+    for f in ["topology.nll", "status.json", "events.ndjson"] {
+        assert!(b.join(f).is_file(), "{f}: {report:?}");
+    }
+    let status: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(b.join("status.json")).unwrap()).unwrap();
+    assert_eq!(status["seed"], 7);
+    for node in ["router", "host"] {
+        for f in [
+            "addr.json",
+            "route.json",
+            "route6.json",
+            "rule.json",
+            "nft.json",
+            "qdisc.json",
+            "conntrack.json",
+        ] {
+            let path = b.join("nodes").join(node).join(f);
+            assert!(path.is_file(), "{node}/{f} (errors: {:?})", report.errors);
+        }
+        let addr: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(b.join("nodes").join(node).join("addr.json")).unwrap(),
+        )
+        .unwrap();
+        assert!(addr.as_array().is_some_and(|a| !a.is_empty()), "{addr}");
+    }
+    let logs: Vec<String> = std::fs::read_dir(b.join("nodes/host"))
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.ends_with(".stdout"))
+        .collect();
+    assert_eq!(logs.len(), 1, "{logs:?}");
+    let out = std::fs::read_to_string(b.join("nodes/host").join(&logs[0])).unwrap();
+    assert!(out.contains("hello-bundle"), "{out}");
+    lab.kill_process(pid).unwrap();
+}
+
+/// What the fixture tests below run as a child: one failing and one
+/// passing `#[lab_test]`, each only when asked for by `--ignored`.
+#[lab_test("examples/simple.nll", capture = true)]
+#[ignore = "a fixture: run by a_failing_lab_test_leaves_a_bundle"]
+async fn bundle_fixture_fails(lab: RunningLab) {
+    // fails on purpose (an assert, so the macro's code after it stays
+    // reachable)
+    assert!(lab.name().is_empty(), "this fixture fails on purpose");
+}
+
+#[lab_test("examples/simple.nll")]
+#[ignore = "a fixture: run by a_failing_lab_test_leaves_a_bundle"]
+async fn bundle_fixture_passes(lab: RunningLab) {
+    let _ = &lab;
+}
+
+/// Run one fixture in a child of this test binary, with bundles in `dir`.
+fn run_fixture(name: &str, dir: &std::path::Path) -> std::process::Output {
+    std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--ignored", "--exact", name, "--test-threads=1"])
+        .env(nlink_lab::bundle::BUNDLE_DIR_ENV, dir)
+        .env_remove("NLINK_LAB_SKIP_ROOT_TESTS")
+        .output()
+        .unwrap()
+}
+
+/// A failing `#[lab_test]` leaves a complete bundle, with its pcaps and the
+/// command that replays it; a passing one leaves nothing (#338).
+#[tokio::test]
+async fn a_failing_lab_test_leaves_a_bundle() {
+    if !privileged("a_failing_lab_test_leaves_a_bundle") {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let out = run_fixture("bundle_fixture_fails", dir.path());
+    // libtest prints a failed test's captured output on stdout
+    let stderr = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(!out.status.success(), "the fixture fails: {stderr}");
+    assert!(stderr.contains("failure bundle in"), "{stderr}");
+    let bundles: Vec<std::path::PathBuf> = std::fs::read_dir(dir.path())
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .collect();
+    assert_eq!(bundles.len(), 1, "{bundles:?}\n{stderr}");
+    let b = &bundles[0];
+    let summary = std::fs::read_to_string(b.join("summary.txt")).unwrap();
+    assert!(summary.contains("the test panicked"), "{summary}");
+    assert!(
+        summary.contains("replay: NLINK_LAB_SEED="),
+        "the replay command: {summary}"
+    );
+    for f in [
+        "topology.nll",
+        "status.json",
+        "events.ndjson",
+        "nodes/host/addr.json",
+    ] {
+        assert!(b.join(f).is_file(), "{f}");
+    }
+    let pcaps = std::fs::read_dir(b.join("pcaps"))
+        .map(|d| d.count())
+        .unwrap_or(0);
+    assert!(pcaps > 0, "capture = true's pcaps are in it");
+    // the lab itself is gone
+    let lab = b.file_name().unwrap().to_string_lossy().into_owned();
+    assert!(!nlink_lab::state::exists(&lab), "{lab}");
+
+    let clean = tempfile::tempdir().unwrap();
+    let out = run_fixture("bundle_fixture_passes", clean.path());
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        std::fs::read_dir(clean.path()).unwrap().count(),
+        0,
+        "a passing test leaves nothing"
+    );
+}
+
+/// `nlink-lab test` keeps a failed case's bundle and names it in the JUnit
+/// and TAP reports (#338).
+#[tokio::test]
+async fn a_failed_test_run_names_its_bundle() {
+    if !privileged("a_failed_test_run_names_its_bundle") {
+        return;
+    }
+    let name = format!("tbun-{}", std::process::id());
+    let src = tempfile::Builder::new().suffix(".nll").tempfile().unwrap();
+    std::fs::write(
+        src.path(),
+        format!(
+            "lab \"{name}\"\nnode a\nnode b\nlink a:eth0 -- b:eth0 {{ 10.0.0.1/24 -- 10.0.0.2/24 }}\n\
+             validate {{ no-reach a b }}\n"
+        ),
+    )
+    .unwrap();
+    let _guard = LabCleanup { name: name.clone() };
+    let bundles = tempfile::tempdir().unwrap();
+    let opts = nlink_lab::test_runner::TestOptions {
+        bundle_dir: Some(bundles.path().to_path_buf()),
+        ..Default::default()
+    };
+    let r =
+        nlink_lab::test_runner::run_test_opts(src.path(), &[], opts, &nlink_lab::OpCtx::default())
+            .await
+            .expect("test ran");
+    assert!(!r.passed);
+    let bundle = r.bundle.clone().expect("a bundle");
+    assert!(
+        std::path::Path::new(&bundle).join("summary.txt").is_file(),
+        "{bundle}"
+    );
+    let junit = nlink_lab::test_runner::format_junit(std::slice::from_ref(&r));
+    assert!(
+        junit.contains(&format!("<system-out>failure bundle: {bundle}")),
+        "{junit}"
+    );
+    let tap = nlink_lab::test_runner::format_tap(std::slice::from_ref(&r));
+    assert!(tap.contains("failure bundle"), "{tap}");
+    assert!(!nlink_lab::state::exists(&name), "the lab is destroyed");
+}

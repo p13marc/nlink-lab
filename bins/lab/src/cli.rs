@@ -269,6 +269,16 @@ pub enum Commands {
     /// issues}], issues}`, each issue `{severity, message}`.
     Diagnose(cmd::diagnose::Args),
 
+    /// Keep a lab's failure bundle: everything needed to debug it.
+    ///
+    /// `DIR/<lab>/` gets `summary.txt` (the seed and how to replay it),
+    /// `topology.nll`, `status.json`, `events.ndjson`, and per node its
+    /// addresses, routes, rules, nftables ruleset, qdiscs, conntrack table
+    /// and process logs, as JSON from the host's `ip`, `nft` and `tc` run in
+    /// the node's namespace. A failing `nlink-lab test` and `#[lab_test]`
+    /// keep one by themselves.
+    Bundle(cmd::bundle::Args),
+
     /// Capture packets on an interface using netring.
     Capture(cmd::capture::Args),
 
@@ -397,7 +407,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
         &["impair", "node", "link", "ip", "conntrack", "capture"],
     ),
     ("Observe", &["events", "top", "diagnose"]),
-    ("Test", &["test", "scenario", "benchmark"]),
+    ("Test", &["test", "scenario", "benchmark", "bundle"]),
     (
         "Author",
         &["validate", "lint", "fmt", "render", "diff", "init", "pull"],

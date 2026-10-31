@@ -13,10 +13,15 @@ pub struct Args {
     /// (`benchmark "name" { … }`). Omit to list the benchmarks the lab
     /// defines.
     pub name: Option<String>,
+
+    /// When it fails, keep the lab's failure bundle in `DIR/<lab>/`
+    /// (see `nlink-lab bundle`).
+    #[arg(long, value_name = "DIR")]
+    pub bundle: Option<std::path::PathBuf>,
 }
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
-    let Args { lab, name } = args;
+    let Args { lab, name, bundle } = args;
     let lab = lab.resolve()?;
     let running = nlink_lab::RunningLab::load(&lab)?;
     let benchmarks = &running.topology().benchmarks;
@@ -85,6 +90,14 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         }
     }
     if !result.passed {
+        if let Some(root) = bundle {
+            crate::cmd::common::failure_bundle(
+                &running,
+                &root,
+                &format!("benchmark {name} failed"),
+            )
+            .await;
+        }
         set_exit_code(EXIT_VALIDATION);
     }
     Ok(())

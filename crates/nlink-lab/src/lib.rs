@@ -63,6 +63,7 @@
 pub mod analysis;
 pub mod benchmark;
 pub mod builder;
+pub mod bundle;
 pub mod capture;
 pub mod cgroup;
 pub(crate) mod conntrack;

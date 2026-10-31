@@ -175,6 +175,23 @@ pub fn require_node(lab: &nlink_lab::RunningLab, node: &str) -> nlink_lab::Resul
     })
 }
 
+/// Keep `lab`'s failure bundle in `root/<lab>/`, and say where (#338).
+pub async fn failure_bundle(lab: &nlink_lab::RunningLab, root: &std::path::Path, reason: &str) {
+    let opts = nlink_lab::bundle::BundleOptions {
+        reason: Some(reason.to_string()),
+        replay: lab
+            .topology()
+            .lab
+            .seed
+            .map(|s| format!("nlink-lab deploy --seed {s} <topology>")),
+        ..Default::default()
+    };
+    match nlink_lab::bundle::collect(lab, &root.join(lab.name()), &opts).await {
+        Ok(r) => eprintln!("failure bundle: {} ({} files)", r.dir.display(), r.files),
+        Err(e) => eprintln!("no failure bundle: {e}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

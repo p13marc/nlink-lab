@@ -12,10 +12,15 @@ pub struct Args {
     /// Scenario name as declared in the topology (`scenario "name" { … }`).
     /// Omit to list the scenarios the lab defines.
     pub name: Option<String>,
+
+    /// When it fails, keep the lab's failure bundle in `DIR/<lab>/`
+    /// (see `nlink-lab bundle`).
+    #[arg(long, value_name = "DIR")]
+    pub bundle: Option<std::path::PathBuf>,
 }
 
 pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
-    let Args { lab, name } = args;
+    let Args { lab, name, bundle } = args;
     let lab = lab.resolve()?;
     let mut running = nlink_lab::RunningLab::load(&lab)?;
     let scenarios = &running.topology().scenarios;
@@ -78,6 +83,10 @@ pub async fn run(ctx: &Ctx, args: Args) -> nlink_lab::Result<()> {
         }
     }
     if !result.passed {
+        if let Some(root) = bundle {
+            crate::cmd::common::failure_bundle(&running, &root, &format!("scenario {name} failed"))
+                .await;
+        }
         set_exit_code(EXIT_VALIDATION);
     }
     Ok(())

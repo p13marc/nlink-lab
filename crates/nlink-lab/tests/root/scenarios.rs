@@ -278,6 +278,7 @@ async fn a_test_runs_scenarios_and_keeps_a_failed_lab() {
         benchmarks: false,
         keep_failed: true,
         seed: None,
+        bundle_dir: None,
     };
     let r = nlink_lab::test_runner::run_test_opts(&file, &[], opts, &nlink_lab::OpCtx::default())
         .await

@@ -970,7 +970,10 @@ fn acquire_now(name: &str) -> Result<LabLock> {
 }
 
 fn busy(name: &str, op: &str, waited: std::time::Duration) -> Error {
+    // a record whose writer is gone (killed before its guard dropped)
+    // names no one: the lock is someone else's now
     let holder = lock_holder(name)
+        .filter(|h| std::path::Path::new(&format!("/proc/{}", h.pid)).exists())
         .map(|h| format!("held for {h}"))
         .unwrap_or_else(|| "held by another operation".into());
     Error::Busy(format!(
